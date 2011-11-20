@@ -17,7 +17,18 @@ newtype Duration = Duration (Min Time, Max Time)
 mkDuration :: Time -> Time -> Duration
 mkDuration begin end = Duration (Min begin, Max end)
 
-data Dynamic a = Dynamic Duration (Time -> a)
+getStart :: Duration -> Time
+getStart (Duration (Min t, _)) = t
+
+getEnd :: Duration -> Time
+getEnd (Duration (_, Max t)) = t
+
+elapsed :: Duration -> Time
+elapsed = (-) <$> getEnd <*> getStart
+
+data Dynamic a = Dynamic { getDuration :: Duration
+                         , runDynamic  :: Time -> a
+                         }
   deriving (Functor)
 
 instance Apply Dynamic where
@@ -32,3 +43,18 @@ mkActive begin end f
 
 ui :: Active UI
 ui = mkActive 0 1 fromRational
+
+onActive :: (a -> b) -> (Dynamic a -> b) -> Active a -> b
+onActive f g (Active (MaybeApply (Right a))) = f a
+onActive f g (Active (MaybeApply (Left d)))  = g d
+
+simulate :: Rational -> Active a -> [a]
+simulate rate act =
+  onActive (:[])
+           (\d -> map (runDynamic d)
+                      (let s = getStart (getDuration d)
+                           e = getEnd   (getDuration d)
+                       in  [s, s + 1/rate .. e]
+                      )
+           )
+           act
