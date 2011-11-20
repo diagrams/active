@@ -45,8 +45,8 @@ ui :: Active UI
 ui = mkActive 0 1 fromRational
 
 onActive :: (a -> b) -> (Dynamic a -> b) -> Active a -> b
-onActive f g (Active (MaybeApply (Right a))) = f a
-onActive f g (Active (MaybeApply (Left d)))  = g d
+onActive f _ (Active (MaybeApply (Right a))) = f a
+onActive _ f (Active (MaybeApply (Left d)))  = f d
 
 simulate :: Rational -> Active a -> [a]
 simulate rate act =
