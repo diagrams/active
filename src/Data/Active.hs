@@ -44,7 +44,7 @@ newtype Era = Era (Min Time, Max Time)
   deriving (Semigroup)
 
 mkEra :: Time -> Time -> Era
-mkEra begin end = Era (Min begin, Max end)
+mkEra s e = Era (Min s, Max e)
 
 start :: Era -> Time
 start (Era (Min t, _)) = t
@@ -88,8 +88,8 @@ instance (Monoid a, Semigroup a) => Monoid (Active a) where
   mappend = (<>)
 
 mkActive :: Time -> Time -> (Time -> a) -> Active a
-mkActive begin end f
-  = Active (MaybeApply (Left (Dynamic (mkEra begin end) f)))
+mkActive s e f
+  = Active (MaybeApply (Left (Dynamic (mkEra s e) f)))
 
 ui :: Active Double
 ui = mkActive 0 1 (fromRational . unTime)
