@@ -3,6 +3,7 @@
            , TypeSynonymInstances
            , MultiParamTypeClasses
            , TypeFamilies
+           , FlexibleInstances
   #-}
 module Data.Active where
 
