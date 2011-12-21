@@ -21,6 +21,6 @@ library
   build-depends:       base >= 4.0 && < 4.6,
                        semigroups >= 0.1 && < 0.9,
                        semigroupoids >= 1.2 && < 1.3,
-                       vector-space >= 0.7.7 && < 0.9,
+                       vector-space >= 0.8 && < 0.9,
                        newtype >= 0.2 && < 0.3
   hs-source-dirs:      src
