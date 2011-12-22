@@ -7,6 +7,8 @@
   #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
+-- XXX make test suite!
+
 module Data.Active where -- XXX export list
 
 import Data.Array
@@ -38,7 +40,7 @@ instance VectorSpace Time where
   s *^ (Time t) = Time (s * t)
 
 -- | An abstract type representing /elapsed time/ between two points
---   in time.
+--   in time.  Note that durations can be negative.
 newtype Duration = Duration { unDuration :: Rational }
   deriving ( Eq, Ord, Show, Read, Enum, Num, Fractional, Real, RealFrac
            , AdditiveGroup)
@@ -46,6 +48,10 @@ newtype Duration = Duration { unDuration :: Rational }
 instance Newtype Duration Rational where
   pack   = Duration
   unpack = unDuration
+
+instance VectorSpace Duration where
+  type Scalar Duration = Rational
+  s *^ (Duration d) = Duration (s * d)
 
 instance AffineSpace Time where
   type Diff Time = Duration
@@ -75,7 +81,7 @@ duration :: Era -> Duration
 duration = (.-.) <$> end <*> start
 
 ------------------------------------------------------------
--- Dynamic and Active
+-- Dynamic
 ------------------------------------------------------------
 
 -- | A @Dynamic a@ can be thought of as an @a@ value that changes over
@@ -101,6 +107,10 @@ instance Apply Dynamic where
 --   not an instance of 'Applicative'.
 instance Semigroup a => Semigroup (Dynamic a) where
   Dynamic d1 f1 <> Dynamic d2 f2 = Dynamic (d1 <> d2) (f1 <> f2)
+
+------------------------------------------------------------
+--  Active
+------------------------------------------------------------
 
 -- | @Active@ is like 'Dynamic', with the addition of special
 --   \"constant\" values, which do not vary over time.  These constant
@@ -152,6 +162,10 @@ onActive :: (a -> b) -> (Dynamic a -> b) -> Active a -> b
 onActive f _ (Active (MaybeApply (Right a))) = f a
 onActive _ f (Active (MaybeApply (Left d)))  = f d
 
+-- | Interpret an 'Active' value as a function from time.
+runActive :: Active a -> (Time -> a)
+runActive = onActive const runDynamic
+
 ------------------------------------------------------------
 --  Combinators
 ------------------------------------------------------------
@@ -161,6 +175,31 @@ onActive _ f (Active (MaybeApply (Left d)))  = f d
 --   manipulate
 ui :: Active Double
 ui = mkActive 0 1 (fromRational . unTime)
+
+-- | @stretch s act@ \"stretches\" the active @act@ so that it takes
+--   @s@ times as long (retaining the same start time).
+stretch :: Rational -> Active a -> Active a
+stretch s =
+  onActive pure $ \d ->
+    let er = era d
+    in  mkActive
+          (start er)
+          (start er .+^ (s *^ duration er))
+          (\t -> runDynamic d (start er .+^ ((t .-. start er) ^/ s)))
+
+-- | @shift d act@ shifts the start time of @act@ by duration @d@.
+shift :: Duration -> Active a -> Active a
+shift sh =
+  onActive pure $ \d ->
+    let er = era d
+    in  mkActive
+          (start er .+^ sh)
+          (end er   .+^ sh)
+          (\t -> runDynamic d (t .-^ sh))
+
+------------------------------------------------------------
+--  Simulation
+------------------------------------------------------------
 
 -- | Create an @Active@ which takes on each value in the given list in
 --   turn during the time @[0,1]@, with each value getting an equal
