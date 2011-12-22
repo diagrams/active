@@ -173,7 +173,7 @@ runActive = onActive const runDynamic
 -- | @ui@ represents the /unit interval/, which takes on the value @t@
 --   at time @t@, and has as its era @[0,1]@. XXX explain how to
 --   manipulate
-ui :: Active Double
+ui :: Fractional a => Active a
 ui = mkActive 0 1 (fromRational . unTime)
 
 -- | @stretch s act@ \"stretches\" the active @act@ so that it takes
@@ -211,7 +211,7 @@ shift sh =
 --   It is an error to call 'discrete' on the empty list.
 discrete :: [a] -> Active a
 discrete [] = error "Data.Active.discrete must be called with a non-empty list."
-discrete xs = f <$> ui
+discrete xs = f <$> (ui :: Active Rational)
   where f t | t <= 0    = arr ! 0
             | t >= 1    = arr ! (n-1)
             | otherwise = arr ! floor (t * fromIntegral n)
