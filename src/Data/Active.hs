@@ -171,8 +171,13 @@ runActive = onActive const runDynamic
 ------------------------------------------------------------
 
 -- | @ui@ represents the /unit interval/, which takes on the value @t@
---   at time @t@, and has as its era @[0,1]@. XXX explain how to
---   manipulate
+--   at time @t@, and has as its era @[0,1]@. It is equivalent to
+--   @interval 0 1@.
+--
+--   To alter the /values/ that @ui@ takes on without altering its
+--   era, use its 'Functor' and 'Applicative' instances.  For example,
+--   @(*2) <$> ui@ varies from @0@ to @2@ over the era @[0,1]@.  To
+--   alter the era, you can use 'stretch' or 'shift'.
 ui :: Fractional a => Active a
 ui = interval 0 1
 
