@@ -174,7 +174,12 @@ runActive = onActive const runDynamic
 --   at time @t@, and has as its era @[0,1]@. XXX explain how to
 --   manipulate
 ui :: Fractional a => Active a
-ui = mkActive 0 1 (fromRational . unTime)
+ui = interval 0 1
+
+-- | @interval a b@ is an active value starting at time @a@, ending at
+--   time @b@, and taking the value @t@ at time @t@.
+interval :: Fractional a => Time -> Time -> Active a
+interval a b = mkActive a b (fromRational . unTime)
 
 -- | @stretch s act@ \"stretches\" the active @act@ so that it takes
 --   @s@ times as long (retaining the same start time).
