@@ -5,7 +5,9 @@
            , TypeFamilies
            , FlexibleInstances
   #-}
-module Data.Active where
+{-# OPTIONS_GHC -fno-warn-orphans #-}
+
+module Data.Active where -- XXX export list
 
 import Data.Array
 
@@ -17,6 +19,11 @@ import Control.Newtype
 import Data.VectorSpace hiding ((<.>))
 import Data.AffineSpace
 
+------------------------------------------------------------
+-- Time
+------------------------------------------------------------
+
+-- | An abstract type for representing /points in time/.
 newtype Time = Time { unTime :: Rational }
   deriving ( Eq, Ord, Show, Read, Enum, Num, Fractional, Real, RealFrac
            , AdditiveGroup, InnerSpace
@@ -25,15 +32,17 @@ newtype Time = Time { unTime :: Rational }
 instance Newtype Time Rational where
   pack   = Time
   unpack = unTime
-  
+
 instance VectorSpace Time where
   type Scalar Time = Rational
   s *^ (Time t) = Time (s * t)
-  
+
+-- | An abstract type representing /elapsed time/ between two points
+--   in time.
 newtype Duration = Duration { unDuration :: Rational }
   deriving ( Eq, Ord, Show, Read, Enum, Num, Fractional, Real, RealFrac
            , AdditiveGroup)
-           
+
 instance Newtype Duration Rational where
   pack   = Duration
   unpack = unDuration
@@ -43,32 +52,59 @@ instance AffineSpace Time where
   (Time t1) .-. (Time t2) = Duration (t1 - t2)
   (Time t) .+^ (Duration d) = Time (t + d)
 
+-- | An @Era@ is a span of time with a definite start and end
+--   time. @Era@s form a semigroup: the combination of two @Era@s is the
+--   smallest @Era@ which contains both.
 newtype Era = Era (Min Time, Max Time)
   deriving (Semigroup)
 
+-- | Create an 'Era' by specifying start and end 'Time's.
 mkEra :: Time -> Time -> Era
 mkEra s e = Era (Min s, Max e)
 
+-- | Get the start 'Time' of an 'Era'.
 start :: Era -> Time
 start (Era (Min t, _)) = t
 
+-- | Get the end 'Time' of an 'Era'.
 end :: Era -> Time
 end (Era (_, Max t)) = t
 
+-- | Compute the 'Duration' of an 'Era'.
 duration :: Era -> Duration
 duration = (.-.) <$> end <*> start
 
+------------------------------------------------------------
+-- Dynamic and Active
+------------------------------------------------------------
+
+-- | A @Dynamic a@ can be thought of as an @a@ value that changes over
+--   the course of a particular 'Era'.
 data Dynamic a = Dynamic { era        :: Era
                          , runDynamic :: Time -> a
                          }
   deriving (Functor)
 
+-- | 'Dynamic' is an instance of 'Apply': a time-varying function is
+--   applied to a time-varying value pointwise; the era of the result
+--   is the combination of the function and value eras.  Note,
+--   however, that 'Dynamic' is /not/ an instance of 'Applicative'
+--   since there is no way to implement 'pure': the era would have to
+--   be empty, but there is no such thing as an empty era.
 instance Apply Dynamic where
   (Dynamic d1 f1) <.> (Dynamic d2 f2) = Dynamic (d1 <> d2) (f1 <.> f2)
-  
+
+-- | 'Dynamic a' is a 'Semigroup' whenever @a@ is: the eras are
+--   combined according to their semigroup structure, and the values
+--   of type @a@ are combined pointwise.  Note that 'Dynamic a' cannot
+--   be an instance of 'Monoid', for the same reason that 'Dynamic' is
+--   not an instance of 'Applicative'.
 instance Semigroup a => Semigroup (Dynamic a) where
   Dynamic d1 f1 <> Dynamic d2 f2 = Dynamic (d1 <> d2) (f1 <> f2)
-  
+
+-- | @Active@ is like 'Dynamic', with the addition of special
+--   \"constant\" values, which do not vary over time.  These constant
+--   values enable implementations of 'pure' and 'mempty'.
 newtype Active a = Active (MaybeApply Dynamic a)
   deriving (Functor, Apply, Applicative)
 
@@ -100,20 +136,40 @@ instance Semigroup a => Semigroup (Active a) where
       = Left (d1 <> d2)
 
 instance (Monoid a, Semigroup a) => Monoid (Active a) where
-  mempty = Active (MaybeApply (Right mempty))
+  mempty  = Active (MaybeApply (Right mempty))
   mappend = (<>)
 
+-- | Create an 'Active' from a start time, an end time, and a
+--   time-varying value.
 mkActive :: Time -> Time -> (Time -> a) -> Active a
 mkActive s e f
   = Active (MaybeApply (Left (Dynamic (mkEra s e) f)))
 
-ui :: Active Double
-ui = mkActive 0 1 (fromRational . unTime)
-
+-- | Fold for 'Active's.  Process an 'Active a', given a function to
+--   apply if it is a pure (constant) value, and a function to apply if
+--   it is a 'Dynamic'.
 onActive :: (a -> b) -> (Dynamic a -> b) -> Active a -> b
 onActive f _ (Active (MaybeApply (Right a))) = f a
 onActive _ f (Active (MaybeApply (Left d)))  = f d
 
+------------------------------------------------------------
+--  Combinators
+------------------------------------------------------------
+
+-- | @ui@ represents the /unit interval/, which takes on the value @t@
+--   at time @t@, and has as its era @[0,1]@. XXX explain how to
+--   manipulate
+ui :: Active Double
+ui = mkActive 0 1 (fromRational . unTime)
+
+-- | Create an @Active@ which takes on each value in the given list in
+--   turn during the time @[0,1]@, with each value getting an equal
+--   amount of time.  In other words, @discrete@ creates a "slide
+--   show" that starts at time 0 and ends at time 1.  The first
+--   element is used prior to time 0, and the last element is used
+--   after time 1.
+--
+--   It is an error to call 'discrete' on the empty list.
 discrete :: [a] -> Active a
 discrete [] = error "Data.Active.discrete must be called with a non-empty list."
 discrete xs = f <$> ui
@@ -123,6 +179,15 @@ discrete xs = f <$> ui
         n   = length xs
         arr = listArray (0, n-1) xs
 
+-- | @simulate r act@ simulates the 'Active' value @act@, returning a
+--   list of \"snapshots\" taken at regular intervals from the start
+--   time to the end time.  The interval used is determined by the
+--   rate @r@, which denotes the \"frame rate\", that is, the number
+--   of snapshots per unit time.
+--
+--   If the 'Active' value is constant (and thus has no start or end
+--   times), a list of length 1 is returned, containing the constant
+--   value.
 simulate :: Rational -> Active a -> [a]
 simulate rate act =
   onActive (:[])
