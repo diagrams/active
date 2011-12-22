@@ -7,6 +7,8 @@
   #-}
 module Data.Active where
 
+import Data.Array
+
 import Data.Semigroup
 import Data.Functor.Apply
 import Control.Applicative
@@ -100,12 +102,13 @@ onActive f _ (Active (MaybeApply (Right a))) = f a
 onActive _ f (Active (MaybeApply (Left d)))  = f d
 
 discrete :: [a] -> Active a
-discrete [] = error "discrete must be called with a non-empty list"
+discrete [] = error "Data.Active.discrete must be called with a non-empty list."
 discrete xs = f <$> ui
-  where f t | t <= 0 = head xs
-            | t >= 1 = last xs
-            | otherwise = xs !! floor (t * fromIntegral n)
-        n = length xs
+  where f t | t <= 0    = arr ! 0
+            | t >= 1    = arr ! (n-1)
+            | otherwise = arr ! floor (t * fromIntegral n)
+        n   = length xs
+        arr = listArray (0, n-1) xs
 
 simulate :: Rational -> Active a -> [a]
 simulate rate act =
