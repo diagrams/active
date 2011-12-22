@@ -72,19 +72,32 @@ instance Semigroup a => Semigroup (Dynamic a) where
 newtype Active a = Active (MaybeApply Dynamic a)
   deriving (Functor, Apply, Applicative)
 
--- XXX think about this more carefully, probably a better way to code it!
-instance Semigroup a => Semigroup (Active a) where
-  (Active (MaybeApply (Right m1))) <> (Active (MaybeApply (Right m2)))
-    = Active (MaybeApply (Right (m1 <> m2)))
-      
-  (Active (MaybeApply (Left (Dynamic dur f)))) <> (Active (MaybeApply (Right m)))
-    = Active (MaybeApply (Left (Dynamic dur (f <> const m))))
-      
-  (Active (MaybeApply (Right m))) <> (Active (MaybeApply (Left (Dynamic dur f))))
-    = Active (MaybeApply (Left (Dynamic dur (const m <> f))))
+instance Newtype (Active a) (MaybeApply Dynamic a) where
+  pack              = Active
+  unpack (Active m) = m
 
-  (Active (MaybeApply (Left d1))) <> (Active (MaybeApply (Left d2)))
-    = Active (MaybeApply (Left (d1 <> d2)))
+instance Newtype (MaybeApply f a) (Either (f a) a) where
+  pack   = MaybeApply
+  unpack = runMaybeApply
+
+over2 :: (Newtype n o, Newtype n' o', Newtype n'' o'')
+      => (o -> n) -> (o -> o' -> o'') -> (n -> n' -> n'')
+over2 _ f n1 n2 = pack (f (unpack n1) (unpack n2))
+
+instance Semigroup a => Semigroup (Active a) where
+  (<>) = (over2 Active . over2 MaybeApply) combine
+   where
+    combine (Right m1) (Right m2)
+      = Right (m1 <> m2)
+
+    combine (Left (Dynamic dur f)) (Right m)
+      = Left (Dynamic dur (f <> const m))
+
+    combine (Right m) (Left (Dynamic dur f))
+      = Left (Dynamic dur (const m <> f))
+
+    combine (Left d1) (Left d2)
+      = Left (d1 <> d2)
 
 instance (Monoid a, Semigroup a) => Monoid (Active a) where
   mempty = Active (MaybeApply (Right mempty))
