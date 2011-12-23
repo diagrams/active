@@ -9,7 +9,32 @@
 
 -- XXX make test suite!
 
-module Data.Active where -- XXX export list
+-----------------------------------------------------------------------------
+-- |
+-- Module      :  Data.Active
+-- Copyright   :  (c) 2011 Brent Yorgey
+-- License     :  BSD-style (see LICENSE)
+-- Maintainer  :  byorgey@cis.upenn.edu
+--
+-- Inspired by the work of Kevin Matlage and Andy Gill (/Every/
+-- /Animation Should Have a Beginning, a Middle, and an End/, Trends
+-- in Functional Programming,
+-- 2010. <http://ittc.ku.edu/csdl/fpg/node/46>), this module defines a
+-- simple abstraction for working with time-varying values.  A value
+-- of type @Active a@ is either a constant value of type @a@, or a
+-- time-varying value of type @a@ (/i.e./ a function from time to
+-- @a@) with specific start and end times.  Since active values
+-- have start and end times, they can be aligned, sequenced,
+-- stretched, or reversed.
+--
+-- In a sense, this is sort of like a stripped-down version of
+-- functional reactive programming (FRP), without the reactivity.
+--
+-- The original motivating use for this library is to support making
+-- animations with the diagrams framework
+-- (<http://projects.haskell.org/diagrams>), but the hope is that it
+-- may find more general utility.
+-----------------------------------------------------------------------------
 
 import Data.Array
 
