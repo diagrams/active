@@ -36,12 +36,50 @@
 -- may find more general utility.
 -----------------------------------------------------------------------------
 
-import Data.Array
+module Data.Active
+       ( -- * Representing time
 
-import Data.Semigroup
-import Data.Functor.Apply
+         -- ** Time and duration
+
+         Time
+       , Duration
+
+         -- ** Eras
+
+       , Era, mkEra
+       , start, end, duration
+
+         -- * Active values
+
+       , Dynamic(..)
+       , Active, mkActive, onActive, runActive
+
+         -- * Combinators
+
+         -- ** Special active values
+
+       , ui, interval
+
+         -- ** Transforming active values
+
+       , stretch, shift, backwards
+
+         -- ** Composing active values
+
+         -- * Simulation
+
+       , discrete
+       , simulate
+
+       ) where
+
 import Control.Applicative
 import Control.Newtype
+
+import Data.Array
+
+import Data.Functor.Apply
+import Data.Semigroup
 
 import Data.VectorSpace hiding ((<.>))
 import Data.AffineSpace
@@ -50,7 +88,9 @@ import Data.AffineSpace
 -- Time
 ------------------------------------------------------------
 
--- | An abstract type for representing /points in time/.
+-- | An abstract type for representing /points in time/.  Note that
+--   @Time@ values can be converted to/from other numeric types using
+--   the 'Num', 'Fractional', 'Real', and 'RealFrac' instances.
 newtype Time = Time { unTime :: Rational }
   deriving ( Eq, Ord, Show, Read, Enum, Num, Fractional, Real, RealFrac
            , AdditiveGroup, InnerSpace
@@ -65,7 +105,9 @@ instance VectorSpace Time where
   s *^ (Time t) = Time (s * t)
 
 -- | An abstract type representing /elapsed time/ between two points
---   in time.  Note that durations can be negative.
+--   in time.  Note that durations can be negative. @Duration@ values
+--   can be converted to/from other numeric types using the 'Num',
+--   'Fractional', 'Real', and 'RealFrac' instances.
 newtype Duration = Duration { unDuration :: Rational }
   deriving ( Eq, Ord, Show, Read, Enum, Num, Fractional, Real, RealFrac
            , AdditiveGroup)
@@ -83,9 +125,15 @@ instance AffineSpace Time where
   (Time t1) .-. (Time t2) = Duration (t1 - t2)
   (Time t) .+^ (Duration d) = Time (t + d)
 
--- | An @Era@ is a span of time with a definite start and end
---   time. @Era@s form a semigroup: the combination of two @Era@s is the
---   smallest @Era@ which contains both.
+-- | An @Era@ is a concrete span of time, that is, a pair of times
+--   representing the start and end of the era. @Era@s form a
+--   semigroup: the combination of two @Era@s is the smallest @Era@
+--   which contains both.  They do not form a 'Monoid', since there is
+--   no @Era@ which acts as the identity with respect to this
+--   combining operation.
+--
+--   @Era@ is abstract. To construct @Era@ values, use 'mkEra'; to
+--   deconstruct, use 'start' and 'end'.
 newtype Era = Era (Min Time, Max Time)
   deriving (Semigroup)
 
@@ -201,7 +249,7 @@ runActive = onActive const runDynamic
 --
 --   To alter the /values/ that @ui@ takes on without altering its
 --   era, use its 'Functor' and 'Applicative' instances.  For example,
---   @(*2) <$> ui@ varies from @0@ to @2@ over the era @[0,1]@.  To
+--   @(*2) \<$\> ui@ varies from @0@ to @2@ over the era @[0,1]@.  To
 --   alter the era, you can use 'stretch' or 'shift'.
 ui :: Fractional a => Active a
 ui = interval 0 1
@@ -231,6 +279,16 @@ shift sh =
           (start er .+^ sh)
           (end er   .+^ sh)
           (\t -> runDynamic d (t .-^ sh))
+
+-- | Reverse an active value on its era.
+backwards :: Active a -> Active a
+backwards =
+  onActive pure $ \d ->
+    let er = era d
+        s  = start er
+        e  = end er
+    in  mkActive s e
+          (\t -> runDynamic d (e - t + s))
 
 ------------------------------------------------------------
 --  Simulation
