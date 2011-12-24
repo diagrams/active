@@ -54,6 +54,8 @@ module Data.Active
        , Dynamic(..)
        , Active, mkActive, onActive, runActive
 
+       , activeEra
+
          -- * Combinators
 
          -- ** Special active values
@@ -63,6 +65,7 @@ module Data.Active
          -- ** Transforming active values
 
        , stretch, shift, backwards
+       , clamp
 
          -- ** Composing active values
 
@@ -239,6 +242,11 @@ onActive _ f (Active (MaybeApply (Left d)))  = f d
 runActive :: Active a -> (Time -> a)
 runActive = onActive const runDynamic
 
+-- | Get the 'Era' of an 'Active' value (or 'Nothing' if it is
+--   a constant/pure value).
+activeEra :: Active a -> Maybe Era
+activeEra = onActive (const Nothing) (Just . era)
+
 ------------------------------------------------------------
 --  Combinators
 ------------------------------------------------------------
@@ -280,7 +288,8 @@ shift sh =
           (end er   .+^ sh)
           (\t -> runDynamic d (t .-^ sh))
 
--- | Reverse an active value on its era.
+-- | Reverse an active value so the start of its era gets mapped to
+--   the end and vice versa.
 backwards :: Active a -> Active a
 backwards =
   onActive pure $ \d ->
@@ -289,6 +298,25 @@ backwards =
         e  = end er
     in  mkActive s e
           (\t -> runDynamic d (e - t + s))
+
+-- | \"Clamp\" an active value so that it is constant outside its era.
+--   Before the era, @clamp a@ takes on the value of @a@ at the start
+--   of the era.  Likewise, after the era, @clamp a@ takes on the
+--   value of @a@ at the end of the era.
+--
+--   For example XXX.
+clamp :: Active a -> Active a
+clamp =
+  onActive pure $ \d ->
+    let er = era d
+        s  = start er
+        e  = end er
+    in  mkActive s e
+          (\t -> case () of _ | t < s     -> runDynamic d s
+                              | t > e     -> runDynamic d e
+                              | otherwise -> runDynamic d t)
+
+-- setEra :: Era -> Active a -> Active a
 
 ------------------------------------------------------------
 --  Simulation
