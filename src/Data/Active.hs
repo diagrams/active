@@ -69,6 +69,8 @@ module Data.Active
 
          -- ** Composing active values
 
+       , andThen, (->>)
+
          -- * Simulation
 
        , discrete
@@ -324,6 +326,14 @@ clamp =
                               | otherwise -> runDynamic d t)
 
 -- setEra :: Era -> Active a -> Active a
+
+-- | XXX
+andThen :: Active a -> Active a -> Active a
+andThen a1 a2 = undefined  -- XXX
+
+-- | Convenient infix operator synonym of 'andThen'.
+(->>) :: Active a -> Active a -> Active a
+(->>) = andThen
 
 ------------------------------------------------------------
 --  Simulation
