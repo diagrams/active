@@ -109,6 +109,8 @@ instance VectorSpace Time where
   type Scalar Time = Rational
   s *^ (Time t) = Time (s * t)
 
+-- | Convert any value of a 'Real' type (including @Int@, @Integer@,
+--   @Rational@, @Float@, and @Double@) to a 'Time'.
 toTime :: Real a => a -> Time
 toTime = fromRational . toRational
 
