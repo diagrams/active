@@ -34,6 +34,9 @@
 -- animations with the diagrams framework
 -- (<http://projects.haskell.org/diagrams>), but the hope is that it
 -- may find more general utility.
+--
+-- XXX general overview here. Basic combinators.  Applicative
+-- instance.  Note SHE can make things nicer.
 -----------------------------------------------------------------------------
 
 module Data.Active
@@ -49,12 +52,17 @@ module Data.Active
        , Era, mkEra
        , start, end, duration
 
+         -- * Dynamic values
+       , Dynamic(..), mkDynamic, onDynamic
+
+       , shiftDynamic
+
          -- * Active values
+       , Active, mkActive, fromDynamic
 
-       , Dynamic(..)
-       , Active, mkActive, onActive, runActive
+       , onActive, modActive, runActive
 
-       , activeEra
+       , activeEra, setEra, atTime
 
          -- * Combinators
 
@@ -64,14 +72,16 @@ module Data.Active
 
          -- ** Transforming active values
 
-       , stretch, shift, backwards
-       , clamp
+       , stretch, stretchTo, during
+       , shift, backwards
+       , clamp, trim
 
          -- ** Composing active values
 
-       , andThen, (->>)
+       , after
+       , (->>)
 
-         -- * Simulation
+         -- * Discretization
 
        , discrete
        , simulate
@@ -79,6 +89,7 @@ module Data.Active
        ) where
 
 import Control.Applicative
+import Control.Arrow ((&&&))
 import Control.Newtype
 
 import Data.Array
@@ -170,36 +181,69 @@ duration = (.-.) <$> end <*> start
 ------------------------------------------------------------
 
 -- | A @Dynamic a@ can be thought of as an @a@ value that changes over
---   the course of a particular 'Era'.
+--   the course of a particular 'Era'.  It's envisioned that @Dynamic@
+--   will be mostly an internal implementation detail and that
+--   'Active' will be most commonly used.  But you never know what
+--   uses people might find for things.
 data Dynamic a = Dynamic { era        :: Era
                          , runDynamic :: Time -> a
                          }
   deriving (Functor)
 
--- | 'Dynamic' is an instance of 'Apply': a time-varying function is
---   applied to a time-varying value pointwise; the era of the result
---   is the combination of the function and value eras.  Note,
---   however, that 'Dynamic' is /not/ an instance of 'Applicative'
---   since there is no way to implement 'pure': the era would have to
---   be empty, but there is no such thing as an empty era.
+-- | 'Dynamic' is an instance of 'Apply' (/i.e./ 'Applicative' without
+--   'pure'): a time-varying function is applied to a time-varying
+--   value pointwise; the era of the result is the combination of the
+--   function and value eras.  Note, however, that 'Dynamic' is /not/
+--   an instance of 'Applicative' since there is no way to implement
+--   'pure': the era would have to be empty, but there is no such
+--   thing as an empty era (that is, 'Era' is not an instance of
+--   'Monoid').
 instance Apply Dynamic where
   (Dynamic d1 f1) <.> (Dynamic d2 f2) = Dynamic (d1 <> d2) (f1 <.> f2)
 
 -- | 'Dynamic a' is a 'Semigroup' whenever @a@ is: the eras are
 --   combined according to their semigroup structure, and the values
 --   of type @a@ are combined pointwise.  Note that 'Dynamic a' cannot
---   be an instance of 'Monoid', for the same reason that 'Dynamic' is
---   not an instance of 'Applicative'.
+--   be an instance of 'Monoid' since 'Era' is not.
 instance Semigroup a => Semigroup (Dynamic a) where
   Dynamic d1 f1 <> Dynamic d2 f2 = Dynamic (d1 <> d2) (f1 <> f2)
+
+-- | Create a 'Dynamic' from a start time, an end time, and a
+--   time-varying value.
+mkDynamic :: Time -> Time -> (Time -> a) -> Dynamic a
+mkDynamic s e f = Dynamic (mkEra s e) f
+
+-- | Fold for 'Dynamic'.
+onDynamic :: (Time -> Time -> (Time -> a) -> b) -> Dynamic a -> b
+onDynamic f (Dynamic e d) = f (start e) (end e) d
+
+-- | Shift a 'Dynamic' value by a certain duration.
+shiftDynamic :: Duration -> Dynamic a -> Dynamic a
+shiftDynamic sh =
+  onDynamic $ \s e d ->
+    mkDynamic
+      (s .+^ sh)
+      (e .+^ sh)
+      (\t -> d (t .-^ sh))
 
 ------------------------------------------------------------
 --  Active
 ------------------------------------------------------------
 
--- | @Active@ is like 'Dynamic', with the addition of special
---   \"constant\" values, which do not vary over time.  These constant
---   values enable implementations of 'pure' and 'mempty'.
+-- $active
+-- XXX explain why we want Applicative instance for time-varying values
+-- solution: add special pure values
+
+-- | There are two types of @Active@ values:
+--
+--   * An 'Active' can simply be a 'Dynamic', that is, a time-varying value with
+--     start and end times.
+--
+--   * An 'Active' value can also be a constant: a single value,
+--     constant across time, with no start and end times.
+--
+--   The addition of constant values enable 'Monoid' and 'Applicative'
+--   instances for 'Active'.
 newtype Active a = Active (MaybeApply Dynamic a)
   deriving (Functor, Apply, Applicative)
 
@@ -211,10 +255,13 @@ instance Newtype (MaybeApply f a) (Either (f a) a) where
   pack   = MaybeApply
   unpack = runMaybeApply
 
+-- | Ideally this would be defined in the @newtype@ package.  If it is
+--   ever added we can remove it from here.
 over2 :: (Newtype n o, Newtype n' o', Newtype n'' o'')
       => (o -> n) -> (o -> o' -> o'') -> (n -> n' -> n'')
 over2 _ f n1 n2 = pack (f (unpack n1) (unpack n2))
 
+-- | XXX explain semantics
 instance Semigroup a => Semigroup (Active a) where
   (<>) = (over2 Active . over2 MaybeApply) combine
    where
@@ -234,11 +281,14 @@ instance (Monoid a, Semigroup a) => Monoid (Active a) where
   mempty  = Active (MaybeApply (Right mempty))
   mappend = (<>)
 
--- | Create an 'Active' from a start time, an end time, and a
+-- | Create an 'Active' value from a 'Dynamic'.
+fromDynamic :: Dynamic a -> Active a
+fromDynamic = Active . MaybeApply . Left
+
+-- | Create a dynamic 'Active' from a start time, an end time, and a
 --   time-varying value.
 mkActive :: Time -> Time -> (Time -> a) -> Active a
-mkActive s e f
-  = Active (MaybeApply (Left (Dynamic (mkEra s e) f)))
+mkActive s e f = fromDynamic (mkDynamic s e f)
 
 -- | Fold for 'Active's.  Process an 'Active a', given a function to
 --   apply if it is a pure (constant) value, and a function to apply if
@@ -246,6 +296,11 @@ mkActive s e f
 onActive :: (a -> b) -> (Dynamic a -> b) -> Active a -> b
 onActive f _ (Active (MaybeApply (Right a))) = f a
 onActive _ f (Active (MaybeApply (Left d)))  = f d
+
+-- | Modify an 'Active' value using a case analysis to see whether it
+--   is constant or dynamic.
+modActive :: (a -> b) -> (Dynamic a -> Dynamic b) -> Active a -> Active b
+modActive f g = onActive (pure . f) (fromDynamic . g)
 
 -- | Interpret an 'Active' value as a function from time.
 runActive :: Active a -> (Time -> a)
@@ -279,74 +334,105 @@ interval a b = mkActive a b (fromRational . unTime)
 -- | @stretch s act@ \"stretches\" the active @act@ so that it takes
 --   @s@ times as long (retaining the same start time).
 stretch :: Rational -> Active a -> Active a
-stretch s =
-  onActive pure $ \d ->
-    let er = era d
-    in  mkActive
-          (start er)
-          (start er .+^ (s *^ duration er))
-          (\t -> runDynamic d (start er .+^ ((t .-. start er) ^/ s)))
+stretch str =
+  modActive id . onDynamic $ \s e d ->
+    mkDynamic s (e .+^ (str *^ (e .-. s)))
+      (\t -> d (s .+^ ((t .-. s) ^/ str)))
+
+-- | @stretchTo d@ 'stretch'es an 'Active' so it has duration @d@.
+--   Has no effect if @d@ is non-positive or if the 'Active' value is
+--   constant.
+stretchTo :: Duration -> Active a -> Active a
+stretchTo d a
+  | d < 0     = a
+  | otherwise = maybe a (flip stretch a) ((toRational . (d /) . duration) <$> activeEra a)
+
+-- | @a1 \`during\` a2@ 'stretch'es and 'shift's @a1@ so that it has the
+--   same era as @a2@.  Has no effect if @a1@ or @a2@ are constant.
+during :: Active a -> Active a -> Active a
+during a1 a2 = maybe a1 (\(d,s) -> stretchTo d . atTime s $ a1)
+                 ((duration &&& start) <$> activeEra a2)
 
 -- | @shift d act@ shifts the start time of @act@ by duration @d@.
 shift :: Duration -> Active a -> Active a
-shift sh =
-  onActive pure $ \d ->
-    let er = era d
-    in  mkActive
-          (start er .+^ sh)
-          (end er   .+^ sh)
-          (\t -> runDynamic d (t .-^ sh))
+shift sh = modActive id (shiftDynamic sh)
 
 -- | Reverse an active value so the start of its era gets mapped to
 --   the end and vice versa.
 backwards :: Active a -> Active a
 backwards =
-  onActive pure $ \d ->
-    let er = era d
-        s  = start er
-        e  = end er
-    in  mkActive s e
-          (\t -> runDynamic d (e - t + s))
+  modActive id . onDynamic $ \s e d ->
+    mkDynamic s e
+      (\t -> d (e - t + s))
 
 -- | \"Clamp\" an active value so that it is constant outside its era.
 --   Before the era, @clamp a@ takes on the value of @a@ at the start
 --   of the era.  Likewise, after the era, @clamp a@ takes on the
 --   value of @a@ at the end of the era.
 --
---   For example XXX.
+--   For example, XXX
 clamp :: Active a -> Active a
 clamp =
-  onActive pure $ \d ->
-    let er = era d
-        s  = start er
-        e  = end er
-    in  mkActive s e
-          (\t -> case () of _ | t < s     -> runDynamic d s
-                              | t > e     -> runDynamic d e
-                              | otherwise -> runDynamic d t)
+  modActive id . onDynamic $ \s e d ->
+    mkDynamic s e
+      (\t -> case () of _ | t < s     -> d s
+                          | t > e     -> d e
+                          | otherwise -> d t
+      )
 
--- setEra :: Era -> Active a -> Active a
+-- | \"Trim\" an active value so that it is empty outside its era.
+--
+--   For example, XXX
+trim :: Monoid a => Active a -> Active a
+trim =
+  modActive id . onDynamic $ \s e d ->
+    mkDynamic s e
+      (\t -> case () of _ | t < s     -> mempty
+                          | t > e     -> mempty
+                          | otherwise -> d t
+      )
 
--- | XXX
-andThen :: Active a -> Active a -> Active a
-andThen a1 a2 = undefined  -- XXX
+-- | Set the era of an 'Active' value.  Note that this will change a
+--   constant 'Active' into a dynamic one which happens to be
+--   constant.
+setEra :: Era -> Active a -> Active a
+setEra er =
+  onActive
+    (mkActive (start er) (end er) . const)
+    (fromDynamic . (onDynamic $ \_ _ -> mkDynamic (start er) (end er)))
 
--- | Convenient infix operator synonym of 'andThen'.
-(->>) :: Active a -> Active a -> Active a
-(->>) = andThen
+-- | @atTime t a@ is an active value with the same behavior as @a@,
+--   shifted so that it starts at time @t@.  If @a@ is constant it is
+--   returned unchanged.
+atTime :: Time -> Active a -> Active a
+atTime t a = maybe a (\e -> shift (t .-. start e) a) (activeEra a)
+
+-- | @a1 \`after\` a2@ produces an active that behaves like @a1@ but is
+--   shifted to start at the end time of @a2@.  If either @a1@ or @a2@
+--   are constant, @a1@ is returned.
+after :: Active a -> Active a -> Active a
+after a1 a2 = maybe a1 ((`atTime` a1) . end) (activeEra a2)
+
+infixr 5 ->>
+
+-- | Sequence two 'Active' values: shift the second to start
+--   immediately after the first (using 'after'), then compose them
+--   (using '(<>)').
+(->>) :: Semigroup a => Active a -> Active a -> Active a
+a1 ->> a2 = a1 <> (a2 `after` a1)
 
 ------------------------------------------------------------
---  Simulation
+--  Discretization
 ------------------------------------------------------------
 
 -- | Create an @Active@ which takes on each value in the given list in
 --   turn during the time @[0,1]@, with each value getting an equal
---   amount of time.  In other words, @discrete@ creates a "slide
---   show" that starts at time 0 and ends at time 1.  The first
+--   amount of time.  In other words, @discrete@ creates a \"slide
+--   show\" that starts at time 0 and ends at time 1.  The first
 --   element is used prior to time 0, and the last element is used
 --   after time 1.
 --
---   It is an error to call 'discrete' on the empty list.
+--   It is an error to call @discrete@ on the empty list.
 discrete :: [a] -> Active a
 discrete [] = error "Data.Active.discrete must be called with a non-empty list."
 discrete xs = f <$> (ui :: Active Rational)
