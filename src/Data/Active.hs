@@ -41,7 +41,7 @@ module Data.Active
 
          -- ** Time and duration
 
-         Time
+         Time, toTime
        , Duration
 
          -- ** Eras
@@ -94,6 +94,8 @@ import Data.AffineSpace
 -- | An abstract type for representing /points in time/.  Note that
 --   @Time@ values can be converted to/from other numeric types using
 --   the 'Num', 'Fractional', 'Real', and 'RealFrac' instances.
+--   'toTime' is also provided for convenience in converting from
+--   other types (notably @Float@ and @Double@) to @Time@.
 newtype Time = Time { unTime :: Rational }
   deriving ( Eq, Ord, Show, Read, Enum, Num, Fractional, Real, RealFrac
            , AdditiveGroup, InnerSpace
@@ -106,6 +108,9 @@ instance Newtype Time Rational where
 instance VectorSpace Time where
   type Scalar Time = Rational
   s *^ (Time t) = Time (s * t)
+
+toTime :: Real a => a -> Time
+toTime = fromRational . toRational
 
 -- | An abstract type representing /elapsed time/ between two points
 --   in time.  Note that durations can be negative. @Duration@ values
