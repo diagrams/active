@@ -79,7 +79,7 @@ module Data.Active
          -- ** Composing active values
 
        , after
-       , (->>)
+       , (->>), progression
 
          -- * Discretization
 
@@ -442,6 +442,12 @@ infixr 5 ->>
 --   (using @(\<\>)@).
 (->>) :: Semigroup a => Active a -> Active a -> Active a
 a1 ->> a2 = a1 <> (a2 `after` a1)
+
+-- | Sequence a list of 'Active' values.
+progression :: (Semigroup a, Monoid a) => [Active a] -> Active a
+progression = foldr (->>) (pure mempty)
+
+-- XXX do above with a balanced fold?
 
 ------------------------------------------------------------
 --  Discretization
