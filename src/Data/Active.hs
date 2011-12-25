@@ -317,7 +317,16 @@ activeEra = onActive (const Nothing) (Just . era)
 
 -- | @ui@ represents the /unit interval/, which takes on the value @t@
 --   at time @t@, and has as its era @[0,1]@. It is equivalent to
---   @interval 0 1@.
+--   @interval 0 1@, and can be visualized as follows:
+--
+--   <<http://www.cis.upenn.edu/~byorgey/hosted/ui.png>>
+--
+--   On the x-axis is time, and the value that @ui@ takes on is on the
+--   y-axis.  The shaded portion represents the era.  Note that the
+--   value of @ui@ (as with any active) is still defined outside its
+--   era, and this can make a difference when it is combined with
+--   other active values with different eras.  To manipulate the
+--   values outside the era, see 'clamp' and 'trim'.
 --
 --   To alter the /values/ that @ui@ takes on without altering its
 --   era, use its 'Functor' and 'Applicative' instances.  For example,
@@ -358,19 +367,25 @@ shift :: Duration -> Active a -> Active a
 shift sh = modActive id (shiftDynamic sh)
 
 -- | Reverse an active value so the start of its era gets mapped to
---   the end and vice versa.
+--   the end and vice versa.  For example, @backwards 'ui'@ can be
+--   visualized as
+--
+--   <<http://www.cis.upenn.edu/~byorgey/hosted/backwards.png>>
 backwards :: Active a -> Active a
 backwards =
   modActive id . onDynamic $ \s e d ->
     mkDynamic s e
       (\t -> d (e - t + s))
 
--- | \"Clamp\" an active value so that it is constant outside its era.
---   Before the era, @clamp a@ takes on the value of @a@ at the start
---   of the era.  Likewise, after the era, @clamp a@ takes on the
---   value of @a@ at the end of the era.
+-- | \"Clamp\" an active value so that it is constant before and after
+--   its era.  Before the era, @clamp a@ takes on the value of @a@ at
+--   the start of the era.  Likewise, after the era, @clamp a@ takes
+--   on the value of @a@ at the end of the era.
 --
---   For example, XXX
+--   For example, @clamp 'ui'@ can be visualized as
+--
+--   <<http://www.cis.upenn.edu/~byorgey/hosted/clamp.png>>
+--
 clamp :: Active a -> Active a
 clamp =
   modActive id . onDynamic $ \s e d ->
@@ -382,7 +397,14 @@ clamp =
 
 -- | \"Trim\" an active value so that it is empty outside its era.
 --
---   For example, XXX
+--   For example, @trim 'ui'@ can be visualized as
+--
+--   <<http://www.cis.upenn.edu/~byorgey/hosted/trim.png>>
+--
+--   Actually, @trim ui@ is not well-typed, since it is not guaranteed
+--   that @ui@'s values will be monoidal (and usually they won't be)!
+--   But the above image still provides a good intuitive idea of what
+--   @trim@ is doing.
 trim :: Monoid a => Active a -> Active a
 trim =
   modActive id . onDynamic $ \s e d ->
@@ -409,7 +431,7 @@ atTime t a = maybe a (\e -> shift (t .-. start e) a) (activeEra a)
 
 -- | @a1 \`after\` a2@ produces an active that behaves like @a1@ but is
 --   shifted to start at the end time of @a2@.  If either @a1@ or @a2@
---   are constant, @a1@ is returned.
+--   are constant, @a1@ is returned unchanged.
 after :: Active a -> Active a -> Active a
 after a1 a2 = maybe a1 ((`atTime` a1) . end) (activeEra a2)
 
@@ -417,7 +439,7 @@ infixr 5 ->>
 
 -- | Sequence two 'Active' values: shift the second to start
 --   immediately after the first (using 'after'), then compose them
---   (using '(<>)').
+--   (using @(\<\>)@).
 (->>) :: Semigroup a => Active a -> Active a -> Active a
 a1 ->> a2 = a1 <> (a2 `after` a1)
 
