@@ -357,11 +357,12 @@ stretch str =
       (\t -> d (s .+^ ((t .-. s) ^/ str)))
 
 -- | @stretchTo d@ 'stretch'es an 'Active' so it has duration @d@.
---   Has no effect if @d@ is non-positive or if the 'Active' value is
---   constant.
+--   Has no effect if (1) @d@ is non-positive, or (2) the 'Active'
+--   value is constant, or (3) the 'Active' value has zero duration.
 stretchTo :: Duration -> Active a -> Active a
 stretchTo d a
-  | d < 0     = a
+  | d < 0                                = a
+  | (duration <$> activeEra a) == Just 0 = a
   | otherwise = maybe a (flip stretch a) ((toRational . (d /) . duration) <$> activeEra a)
 
 -- | @a1 \`during\` a2@ 'stretch'es and 'shift's @a1@ so that it has the
