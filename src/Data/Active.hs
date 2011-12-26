@@ -345,7 +345,7 @@ interval a b = mkActive a b (fromRational . unTime)
 stretch :: Rational -> Active a -> Active a
 stretch str =
   modActive id . onDynamic $ \s e d ->
-    mkDynamic s (e .+^ (str *^ (e .-. s)))
+    mkDynamic s (s .+^ (str *^ (e .-. s)))
       (\t -> d (s .+^ ((t .-. s) ^/ str)))
 
 -- | @stretchTo d@ 'stretch'es an 'Active' so it has duration @d@.

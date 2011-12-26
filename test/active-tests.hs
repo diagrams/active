@@ -10,6 +10,7 @@ import Test.QuickCheck
 import Text.Printf     (printf)
 
 import Data.Active
+import Data.VectorSpace
 import Data.AffineSpace
 
 main :: IO ()
@@ -20,13 +21,16 @@ main = do
     isSuccess (Success{}) = True
     isSuccess _ = False
     qc x = quickCheckWithResult (stdArgs { maxSuccess = 200 }) x
-    tests = [ ("era/start",                   qc prop_era_start    )
-            , ("era/end",                     qc prop_era_end      )
-            , ("duration",                    qc prop_duration     )
+    tests = [ ("era/start",                   qc prop_era_start          )
+            , ("era/end",                     qc prop_era_end            )
+            , ("duration",                    qc prop_duration           )
             , ("shiftDyn/start",              qc prop_shiftDynamic_start )
-            , ("shiftDyn/end",                qc prop_shiftDynamic_end )
-            , ("shiftDyn/fun",                qc prop_shiftDynamic_fun )
-            , ("active/semi-hom",             qc prop_active_semi_hom )
+            , ("shiftDyn/end",                qc prop_shiftDynamic_end   )
+            , ("shiftDyn/fun",                qc prop_shiftDynamic_fun   )
+            , ("active/semi-hom",             qc prop_active_semi_hom    )
+            , ("ui/id",                       qc prop_ui_id              )
+            , ("stretch/start",               qc prop_stretch_start      )
+            , ("stretch/dur",                 qc prop_stretch_dur        )
             ]
 
 instance Arbitrary Any where
@@ -73,3 +77,15 @@ prop_shiftDynamic_fun dur (Blind dyn) t
 prop_active_semi_hom :: Blind (Active Any) -> Blind (Active Any) -> Time -> Bool
 prop_active_semi_hom (Blind a1) (Blind a2) t =
   runActive a1 t <> runActive a2 t == runActive (a1 <> a2) t
+
+prop_ui_id :: Time -> Bool
+prop_ui_id t = runActive (ui :: Active Time) t == t
+
+prop_stretch_start :: Rational -> Blind (Active Bool) -> Bool
+prop_stretch_start r (Blind a)
+  = (start <$> activeEra a) == (start <$> activeEra (stretch r a))
+
+prop_stretch_dur :: Rational -> Blind (Active Bool) -> Bool
+prop_stretch_dur r (Blind a)
+  = (((r *^) . duration) <$> activeEra a) == (duration <$> activeEra (stretch r a))
+
