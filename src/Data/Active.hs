@@ -58,7 +58,7 @@ module Data.Active
        , shiftDynamic
 
          -- * Active values
-       , Active, mkActive, fromDynamic
+       , Active, mkActive, fromDynamic, isConstant, isDynamic
 
        , onActive, modActive, runActive
 
@@ -310,6 +310,14 @@ runActive = onActive const runDynamic
 --   a constant/pure value).
 activeEra :: Active a -> Maybe Era
 activeEra = onActive (const Nothing) (Just . era)
+
+-- | Test whether an 'Active' value is constant.
+isConstant :: Active a -> Bool
+isConstant = onActive (const True) (const False)
+
+-- | Test whether an 'Active' value is 'Dynamic'.
+isDynamic :: Active a -> Bool
+isDynamic = onActive (const False) (const True)
 
 ------------------------------------------------------------
 --  Combinators
