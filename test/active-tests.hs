@@ -31,6 +31,7 @@ main = do
             , ("ui/id",                       qc prop_ui_id              )
             , ("stretch/start",               qc prop_stretch_start      )
             , ("stretch/dur",                 qc prop_stretch_dur        )
+            , ("stretchTo/dur",               qc prop_stretchTo_dur      )
             ]
 
 instance Arbitrary Any where
@@ -89,3 +90,7 @@ prop_stretch_dur :: Rational -> Blind (Active Bool) -> Bool
 prop_stretch_dur r (Blind a)
   = (((r *^) . duration) <$> activeEra a) == (duration <$> activeEra (stretch r a))
 
+
+prop_stretchTo_dur :: Positive Duration -> Blind (Active Bool) -> Property
+prop_stretchTo_dur (Positive dur) (Blind a)
+  = isDynamic a ==> (duration <$> activeEra (stretchTo dur a)) == Just dur
