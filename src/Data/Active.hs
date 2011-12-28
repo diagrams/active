@@ -361,7 +361,7 @@ stretch str =
 --   value is constant, or (3) the 'Active' value has zero duration.
 stretchTo :: Duration -> Active a -> Active a
 stretchTo d a
-  | d < 0                                = a
+  | d <= 0                               = a
   | (duration <$> activeEra a) == Just 0 = a
   | otherwise = maybe a (flip stretch a) ((toRational . (d /) . duration) <$> activeEra a)
 
