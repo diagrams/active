@@ -37,7 +37,9 @@ main = do
             , ("during/end",                  qc prop_during_end         )
             , ("shift/start",                 qc prop_shift_start        )
             , ("shift/end",                   qc prop_shift_end          )
-            , ("backwards",                   qc prop_backwards          )
+--            , ("backwards",                   qc prop_backwards          )
+            , ("atTime/start",                qc prop_atTime_start       )
+            , ("atTime/fun",                  qc prop_atTime_fun         )
             ]
 
 instance Arbitrary Any where
@@ -140,3 +142,14 @@ prop_shift_start d a =
 prop_shift_end :: Duration -> Active Bool -> Bool
 prop_shift_end d a =
   ((.+^ d) . end <$> activeEra a) == (end <$> activeEra (shift d a))
+
+prop_atTime_start :: Time -> Dynamic Bool -> Bool
+prop_atTime_start t dyn =
+    (start <$> activeEra (atTime t a)) == Just t
+  where a = fromDynamic dyn
+
+prop_atTime_fun :: Time -> Dynamic Bool -> Duration -> Bool
+prop_atTime_fun t dyn d =
+    runActive (atTime t a) (t .+^ d) == runActive a (s .+^ d)
+  where a = fromDynamic dyn
+        s = start (era dyn)
