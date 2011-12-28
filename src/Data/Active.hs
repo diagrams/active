@@ -372,6 +372,7 @@ during a1 a2 = maybe a1 (\(d,s) -> stretchTo d . atTime s $ a1)
                  ((duration &&& start) <$> activeEra a2)
 
 -- | @shift d act@ shifts the start time of @act@ by duration @d@.
+--   Has no effect on constant values.
 shift :: Duration -> Active a -> Active a
 shift sh = modActive id (shiftDynamic sh)
 
