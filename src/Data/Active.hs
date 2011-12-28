@@ -158,7 +158,7 @@ instance AffineSpace Time where
 --   @Era@ is abstract. To construct @Era@ values, use 'mkEra'; to
 --   deconstruct, use 'start' and 'end'.
 newtype Era = Era (Min Time, Max Time)
-  deriving (Semigroup)
+  deriving (Semigroup, Show)
 
 -- | Create an 'Era' by specifying start and end 'Time's.
 mkEra :: Time -> Time -> Era
