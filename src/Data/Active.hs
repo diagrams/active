@@ -42,8 +42,8 @@ module Data.Active
 
          -- ** Time and duration
 
-         Time, toTime
-       , Duration, toDuration
+         Time, toTime, fromTime
+       , Duration, toDuration, fromDuration
 
          -- ** Eras
 
@@ -112,12 +112,10 @@ import Data.AffineSpace
 ------------------------------------------------------------
 
 -- | An abstract type for representing /points in time/.  Note that
---   @Time@ values can be converted to/from other numeric types using
---   the 'Num', 'Fractional', 'Real', and 'RealFrac' instances.  For
---   example, numeric literals may be used as @Time@s due to the 'Num'
---   and 'Fractional' instances.  'toTime' is also provided for
---   convenience in converting from other types (notably @Float@ and
---   @Double@) to @Time@.
+--   literal numeric values may be used as @Time@s, thanks to the the
+--   'Num' and 'Fractional' instances.  'toTime' and 'fromTime' are
+--   also provided for convenience in converting between @Time@ and
+--   other numeric types.
 newtype Time = Time { unTime :: Rational }
   deriving ( Eq, Ord, Show, Read, Enum, Num, Fractional, Real, RealFrac
            , AdditiveGroup, InnerSpace
@@ -136,12 +134,17 @@ instance VectorSpace Time where
 toTime :: Real a => a -> Time
 toTime = fromRational . toRational
 
+-- | Convert a 'Time' to a value of any 'Fractional' type (such as
+--   @Rational@, @Float@, or @Double@).
+fromTime :: Fractional a => Time -> a
+fromTime = fromRational . unTime
+
 -- | An abstract type representing /elapsed time/ between two points
---   in time.  Note that durations can be negative. @Duration@ values
---   can be converted to/from other numeric types using the 'Num',
---   'Fractional', 'Real', and 'RealFrac' instances. 'toDuration' is
---   also provided for convenience in converting from other types
---   (notably @Float@ and @Double@) to @Duration@.
+--   in time.  Note that durations can be negative. Literal numeric
+--   values may be used as @Duration@s thanks to the 'Num' and
+--   'Fractional' instances. 'toDuration' and 'fromDuration' are also
+--   provided for convenience in converting between @Duration@s and
+--   other numeric types.
 newtype Duration = Duration { unDuration :: Rational }
   deriving ( Eq, Ord, Show, Read, Enum, Num, Fractional, Real, RealFrac
            , AdditiveGroup)
@@ -163,6 +166,11 @@ instance AffineSpace Time where
 --   @Rational@, @Float@, and @Double@) to a 'Duration'.
 toDuration :: Real a => a -> Duration
 toDuration = fromRational . toRational
+
+-- | Convert a 'Duration' to any other 'Fractional' type (such as
+--   @Rational@, @Float@, or @Double@).
+fromDuration :: Fractional a => Duration -> a
+fromDuration = fromRational . unDuration
 
 -- | An @Era@ is a concrete span of time, that is, a pair of times
 --   representing the start and end of the era. @Era@s form a
