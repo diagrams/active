@@ -84,7 +84,7 @@ module Data.Active
        , after
        , (->>), progression
 
-       , (<||>)
+       , (|>>)
 
          -- * Discretization
 
@@ -564,8 +564,8 @@ progression = foldr (->>) (pure mempty)
 --   the value which acts like the first up to the common end/start
 --   point, then like the second after that.  If both are constant,
 --   return the first.
-(<||>) :: Active a -> Active a -> Active a
-a1 <||> a2 = (fromJust . getFirst) <$>
+(|>>) :: Active a -> Active a -> Active a
+a1 |>> a2 = (fromJust . getFirst) <$>
              (trimAfter (First . Just <$> a1) ->> trimBefore (First . Just <$> a2))
 
 ------------------------------------------------------------
