@@ -217,9 +217,9 @@ data Dynamic a = Dynamic { era        :: Era
 instance Apply Dynamic where
   (Dynamic d1 f1) <.> (Dynamic d2 f2) = Dynamic (d1 <> d2) (f1 <.> f2)
 
--- | 'Dynamic a' is a 'Semigroup' whenever @a@ is: the eras are
+-- | @'Dynamic' a@ is a 'Semigroup' whenever @a@ is: the eras are
 --   combined according to their semigroup structure, and the values
---   of type @a@ are combined pointwise.  Note that 'Dynamic a' cannot
+--   of type @a@ are combined pointwise.  Note that @'Dynamic' a@ cannot
 --   be an instance of 'Monoid' since 'Era' is not.
 instance Semigroup a => Semigroup (Dynamic a) where
   Dynamic d1 f1 <> Dynamic d2 f2 = Dynamic (d1 <> d2) (f1 <> f2)
@@ -247,13 +247,20 @@ shiftDynamic sh =
 ------------------------------------------------------------
 
 -- $active
--- XXX explain why we want Applicative instance for time-varying values
--- solution: add special pure values
+-- For working with time-varying values, it is convenient to have an
+-- 'Applicative' instance: '<*>' lets us apply time-varying
+-- functions to time-varying values; 'pure' allows treating constants
+-- as time-varying values which do not vary.  However, as explained in
+-- its documentation, 'Dynamic' cannot be made an instance of
+-- 'Applicative' since there is no way to implement 'pure'.  The
+-- problem is that all 'Dynamic' values must have a finite start and
+-- end time.  The solution is to adjoin a special constructor for
+-- pure/constant values with no start or end time, giving us 'Active'.
 
 -- | There are two types of @Active@ values:
 --
---   * An 'Active' can simply be a 'Dynamic', that is, a time-varying value with
---     start and end times.
+--   * An 'Active' can simply be a 'Dynamic', that is, a time-varying
+--     value with start and end times.
 --
 --   * An 'Active' value can also be a constant: a single value,
 --     constant across time, with no start and end times.
@@ -531,12 +538,12 @@ infixr 5 ->>
 
 -- | Sequence/overlay two 'Active' values: shift the second to start
 --   immediately after the first (using 'after'), then compose them
---   (using @(\<\>)@).
+--   (using '<>').
 (->>) :: Semigroup a => Active a -> Active a -> Active a
 a1 ->> a2 = a1 <> (a2 `after` a1)
 
 -- | Sequence/overlay a list of 'Active' values. Equivalent to
---   repeated application of @(->>)@.
+--   repeated application of '->>'.
 progression :: (Semigroup a, Monoid a) => [Active a] -> Active a
 progression = foldr (->>) (pure mempty)
 
