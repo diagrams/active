@@ -7,8 +7,6 @@
   #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
--- XXX make test suite!
-
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Data.Active
