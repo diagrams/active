@@ -518,10 +518,9 @@ trimAfter =
                           | otherwise -> d t
       )
 
-
 -- | Set the era of an 'Active' value.  Note that this will change a
---   constant 'Active' into a dynamic one which happens to be
---   constant.
+--   constant 'Active' into a dynamic one which happens to have the
+--   same value at all times.
 setEra :: Era -> Active a -> Active a
 setEra er =
   onActive
