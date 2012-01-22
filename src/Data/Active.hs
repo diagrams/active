@@ -72,12 +72,16 @@ module Data.Active
 
        , stretch, stretchTo, during
        , shift, backwards
-       , clamp, trim
+
+         -- ** Working with values outside the era
+       , clamp, clampBefore, clampAfter
+       , trim, trimBefore, trimAfter
 
          -- ** Composing active values
-
        , after
        , (->>), progression
+
+       , (<||>)
 
          -- * Discretization
 
@@ -91,9 +95,11 @@ import Control.Arrow ((&&&))
 import Control.Newtype
 
 import Data.Array
+import Data.Maybe
 
 import Data.Functor.Apply
-import Data.Semigroup
+import Data.Semigroup hiding (First(..))
+import Data.Monoid (First(..))
 
 import Data.VectorSpace hiding ((<.>))
 import Data.AffineSpace
@@ -397,6 +403,8 @@ backwards =
 --
 --   <<http://www.cis.upenn.edu/~byorgey/hosted/clamp.png>>
 --
+--   See also 'clampBefore' and 'clampAfter', which clamp only before
+--   or after the era, respectively.
 clamp :: Active a -> Active a
 clamp =
   modActive id . onDynamic $ \s e d ->
@@ -406,7 +414,26 @@ clamp =
                           | otherwise -> d t
       )
 
+-- | \"Clamp\" an active value so that it is constant before the start
+--   of its era. For example, @clampBefore 'ui'@ can be visualized as
+--
+--   <<http://www.cis.upenn.edu/~byorgey/hosted/clampBefore.png>>
+--
+--   See the documentation of 'clamp' for more information.
+clampBefore :: Active a -> Active a
+clampBefore = undefined
+
+-- | \"Clamp\" an active value so that it is constant after the end
+--   of its era.  For example, @clampBefore 'ui'@ can be visualized as
+--
+--   <<http://www.cis.upenn.edu/~byorgey/hosted/clampAfter.png>>
+--
+--   See the documentation of 'clamp' for more information.
+clampAfter :: Active a -> Active a
+clampAfter = undefined
+
 -- | \"Trim\" an active value so that it is empty outside its era.
+--   @trim@ has no effect on constant values.
 --
 --   For example, @trim 'ui'@ can be visualized as
 --
@@ -415,7 +442,11 @@ clamp =
 --   Actually, @trim ui@ is not well-typed, since it is not guaranteed
 --   that @ui@'s values will be monoidal (and usually they won't be)!
 --   But the above image still provides a good intuitive idea of what
---   @trim@ is doing.
+--   @trim@ is doing. To make this precise we could consider something
+--   like @trim (First . Just <$> ui)@.
+--
+--   See also 'trimBefore' and 'trimActive', which trim only before or
+--   after the era, respectively.
 trim :: Monoid a => Active a -> Active a
 trim =
   modActive id . onDynamic $ \s e d ->
@@ -424,6 +455,35 @@ trim =
                           | t > e     -> mempty
                           | otherwise -> d t
       )
+
+-- | \"Trim\" an active value so that it is empty /before/ the start
+--   of its era. For example, @trimBefore 'ui'@ can be visualized as
+--
+--   <<http://www.cis.upenn.edu/~byorgey/hosted/trimBefore.png>>
+--
+--   See the documentation of 'trim' for more details.
+trimBefore :: Monoid a => Active a -> Active a
+trimBefore =
+  modActive id . onDynamic $ \s e d ->
+    mkDynamic s e
+      (\t -> case () of _ | t < s     -> mempty
+                          | otherwise -> d t
+      )
+
+-- | \"Trim\" an active value so that it is empty /after/ the end
+--   of its era.  For example, @trimAfter 'ui'@ can be visualized as
+--
+--   <<http://www.cis.upenn.edu/~byorgey/hosted/trimAfter.png>>
+--
+--   See the documentation of 'trim' for more details.
+trimAfter :: Monoid a => Active a -> Active a
+trimAfter =
+  modActive id . onDynamic $ \s e d ->
+    mkDynamic s e
+      (\t -> case () of _ | t > e     -> mempty
+                          | otherwise -> d t
+      )
+
 
 -- | Set the era of an 'Active' value.  Note that this will change a
 --   constant 'Active' into a dynamic one which happens to be
@@ -462,6 +522,17 @@ progression :: (Semigroup a, Monoid a) => [Active a] -> Active a
 progression = foldr (->>) (pure mempty)
 
 -- XXX do above with a balanced fold?
+
+-- XXX illustrate below
+
+-- | \"Splice\" two 'Active' values together: shift the second to
+--   start immediately after the first (using 'after'), and produce
+--   the value which acts like the first up to the common end/start
+--   point, then like the second after that.  If both are constant,
+--   return the first.
+(<||>) :: Active a -> Active a -> Active a
+a1 <||> a2 = (fromJust . getFirst) <$>
+             (trimAfter (First . Just <$> a1) ->> trimBefore (First . Just <$> a2))
 
 ------------------------------------------------------------
 --  Discretization

@@ -1,4 +1,4 @@
-all : ui.png clamp.png trim.png backwards.png
+all : ui.png clamp.png clampBefore.png clampAfter.png trim.png trimBefore.png trimAfter.png backwards.png
 
 .SECONDARY :
 
