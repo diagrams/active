@@ -73,6 +73,8 @@ module Data.Active
        , stretch, stretchTo, during
        , shift, backwards
 
+       , snapshot
+
          -- ** Working with values outside the era
        , clamp, clampBefore, clampAfter
        , trim, trimBefore, trimAfter
@@ -392,6 +394,11 @@ backwards =
   modActive id . onDynamic $ \s e d ->
     mkDynamic s e
       (\t -> d (e - t + s))
+
+-- | Take a \"snapshot\" of an active value at a particular time,
+--   resulting in a constant value.
+snapshot :: Time -> Active a -> Active a
+snapshot t a = pure (runActive a t)
 
 -- | \"Clamp\" an active value so that it is constant before and after
 --   its era.  Before the era, @clamp a@ takes on the value of @a@ at
