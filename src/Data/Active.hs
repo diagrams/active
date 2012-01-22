@@ -43,7 +43,7 @@ module Data.Active
          -- ** Time and duration
 
          Time, toTime
-       , Duration
+       , Duration, toDuration
 
          -- ** Eras
 
@@ -136,7 +136,9 @@ toTime = fromRational . toRational
 -- | An abstract type representing /elapsed time/ between two points
 --   in time.  Note that durations can be negative. @Duration@ values
 --   can be converted to/from other numeric types using the 'Num',
---   'Fractional', 'Real', and 'RealFrac' instances.
+--   'Fractional', 'Real', and 'RealFrac' instances. 'toDuration' is
+--   also provided for convenience in converting from other types
+--   (notably @Float@ and @Double@) to @Duration@.
 newtype Duration = Duration { unDuration :: Rational }
   deriving ( Eq, Ord, Show, Read, Enum, Num, Fractional, Real, RealFrac
            , AdditiveGroup)
@@ -153,6 +155,11 @@ instance AffineSpace Time where
   type Diff Time = Duration
   (Time t1) .-. (Time t2) = Duration (t1 - t2)
   (Time t) .+^ (Duration d) = Time (t + d)
+
+-- | Convert any value of a 'Real' type (including @Int@, @Integer@,
+--   @Rational@, @Float@, and @Double@) to a 'Duration'.
+toDuration :: Real a => a -> Duration
+toDuration = fromRational . toRational
 
 -- | An @Era@ is a concrete span of time, that is, a pair of times
 --   representing the start and end of the era. @Era@s form a
