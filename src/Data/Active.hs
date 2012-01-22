@@ -56,6 +56,7 @@ module Data.Active
        , shiftDynamic
 
          -- * Active values
+         -- $active
        , Active, mkActive, fromDynamic, isConstant, isDynamic
 
        , onActive, modActive, runActive
@@ -112,9 +113,11 @@ import Data.AffineSpace
 
 -- | An abstract type for representing /points in time/.  Note that
 --   @Time@ values can be converted to/from other numeric types using
---   the 'Num', 'Fractional', 'Real', and 'RealFrac' instances.
---   'toTime' is also provided for convenience in converting from
---   other types (notably @Float@ and @Double@) to @Time@.
+--   the 'Num', 'Fractional', 'Real', and 'RealFrac' instances.  For
+--   example, numeric literals may be used as @Time@s due to the 'Num'
+--   and 'Fractional' instances.  'toTime' is also provided for
+--   convenience in converting from other types (notably @Float@ and
+--   @Double@) to @Time@.
 newtype Time = Time { unTime :: Rational }
   deriving ( Eq, Ord, Show, Read, Enum, Num, Fractional, Real, RealFrac
            , AdditiveGroup, InnerSpace
@@ -274,7 +277,9 @@ over2 :: (Newtype n o, Newtype n' o', Newtype n'' o'')
       => (o -> n) -> (o -> o' -> o'') -> (n -> n' -> n'')
 over2 _ f n1 n2 = pack (f (unpack n1) (unpack n2))
 
--- | XXX explain semantics
+-- | Active values over a type with a 'Semigroup' instance are also an
+--   instance of 'Semigroup'.  Two active values are combined
+--   pointwise; the resulting value is constant iff both inputs are.
 instance Semigroup a => Semigroup (Active a) where
   (<>) = (over2 Active . over2 MaybeApply) combine
    where
