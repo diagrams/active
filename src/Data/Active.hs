@@ -209,7 +209,7 @@ instance Semigroup a => Semigroup (Dynamic a) where
 -- | Create a 'Dynamic' from a start time, an end time, and a
 --   time-varying value.
 mkDynamic :: Time -> Time -> (Time -> a) -> Dynamic a
-mkDynamic s e f = Dynamic (mkEra s e) f
+mkDynamic s e = Dynamic (mkEra s e)
 
 -- | Fold for 'Dynamic'.
 onDynamic :: (Time -> Time -> (Time -> a) -> b) -> Dynamic a -> b
@@ -323,7 +323,7 @@ isDynamic = onActive (const False) (const True)
 
 -- | @ui@ represents the /unit interval/, which takes on the value @t@
 --   at time @t@, and has as its era @[0,1]@. It is equivalent to
---   @interval 0 1@, and can be visualized as follows:
+--   @'interval' 0 1@, and can be visualized as follows:
 --
 --   <<http://www.cis.upenn.edu/~byorgey/hosted/ui.png>>
 --
@@ -331,8 +331,10 @@ isDynamic = onActive (const False) (const True)
 --   y-axis.  The shaded portion represents the era.  Note that the
 --   value of @ui@ (as with any active) is still defined outside its
 --   era, and this can make a difference when it is combined with
---   other active values with different eras.  To manipulate the
---   values outside the era, see 'clamp' and 'trim'.
+--   other active values with different eras.  Applying a function
+--   with 'fmap' affects all values, both inside and outside the era.
+--   To manipulate values outside the era specifically, see 'clamp'
+--   and 'trim'.
 --
 --   To alter the /values/ that @ui@ takes on without altering its
 --   era, use its 'Functor' and 'Applicative' instances.  For example,
@@ -361,10 +363,10 @@ stretchTo :: Duration -> Active a -> Active a
 stretchTo d a
   | d <= 0                               = a
   | (duration <$> activeEra a) == Just 0 = a
-  | otherwise = maybe a (flip stretch a) ((toRational . (d /) . duration) <$> activeEra a)
+  | otherwise = maybe a (`stretch` a) ((toRational . (d /) . duration) <$> activeEra a)
 
 -- | @a1 \`during\` a2@ 'stretch'es and 'shift's @a1@ so that it has the
---   same era as @a2@.  Has no effect if @a1@ or @a2@ are constant.
+--   same era as @a2@.  Has no effect if either of @a1@ or @a2@ are constant.
 during :: Active a -> Active a -> Active a
 during a1 a2 = maybe a1 (\(d,s) -> stretchTo d . atTime s $ a1)
                  ((duration &&& start) <$> activeEra a2)
@@ -388,7 +390,8 @@ backwards =
 -- | \"Clamp\" an active value so that it is constant before and after
 --   its era.  Before the era, @clamp a@ takes on the value of @a@ at
 --   the start of the era.  Likewise, after the era, @clamp a@ takes
---   on the value of @a@ at the end of the era.
+--   on the value of @a@ at the end of the era. @clamp@ has no effect
+--   on constant values.
 --
 --   For example, @clamp 'ui'@ can be visualized as
 --
@@ -429,7 +432,7 @@ setEra :: Era -> Active a -> Active a
 setEra er =
   onActive
     (mkActive (start er) (end er) . const)
-    (fromDynamic . (onDynamic $ \_ _ -> mkDynamic (start er) (end er)))
+    (fromDynamic . onDynamic (\_ _ -> mkDynamic (start er) (end er)))
 
 -- | @atTime t a@ is an active value with the same behavior as @a@,
 --   shifted so that it starts at time @t@.  If @a@ is constant it is
@@ -445,13 +448,16 @@ after a1 a2 = maybe a1 ((`atTime` a1) . end) (activeEra a2)
 
 infixr 5 ->>
 
--- | Sequence two 'Active' values: shift the second to start
+-- XXX illustrate this
+
+-- | Sequence/overlay two 'Active' values: shift the second to start
 --   immediately after the first (using 'after'), then compose them
 --   (using @(\<\>)@).
 (->>) :: Semigroup a => Active a -> Active a -> Active a
 a1 ->> a2 = a1 <> (a2 `after` a1)
 
--- | Sequence a list of 'Active' values.
+-- | Sequence/overlay a list of 'Active' values. Equivalent to
+--   repeated application of @(->>)@.
 progression :: (Semigroup a, Monoid a) => [Active a] -> Active a
 progression = foldr (->>) (pure mempty)
 
@@ -488,7 +494,7 @@ discrete xs = f <$> (ui :: Active Rational)
 --   times), a list of length 1 is returned, containing the constant
 --   value.
 simulate :: Rational -> Active a -> [a]
-simulate rate act =
+simulate rate =
   onActive (:[])
            (\d -> map (runDynamic d)
                       (let s = start (era d)
@@ -496,4 +502,3 @@ simulate rate act =
                        in  [s, s + 1^/rate .. e]
                       )
            )
-           act
