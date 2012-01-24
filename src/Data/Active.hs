@@ -98,6 +98,8 @@ module Data.Active
 
        , activeEra, setEra, atTime
 
+       , activeStart, activeEnd
+
          -- * Combinators
 
          -- ** Special active values
@@ -375,6 +377,14 @@ modActive f g = onActive (pure . f) (fromDynamic . g)
 -- | Interpret an 'Active' value as a function from time.
 runActive :: Active a -> (Time -> a)
 runActive = onActive const runDynamic
+
+-- | Get the value of an @Active a@ at the beginning of its era.
+activeStart :: Active a -> a
+activeStart = onActive id (onDynamic $ \s _ d -> d s)
+
+-- | Get the value of an @Active a@ at the end of its era.
+activeEnd :: Active a -> a
+activeEnd = onActive id (onDynamic $ \_ e d -> d e)
 
 -- | Get the 'Era' of an 'Active' value (or 'Nothing' if it is
 --   a constant/pure value).
