@@ -33,8 +33,43 @@
 -- (<http://projects.haskell.org/diagrams>), but the hope is that it
 -- may find more general utility.
 --
--- XXX general overview here. Basic combinators.  Applicative
--- instance.  Note SHE can make things nicer.
+-- There are two basic ways to create an @Active@ value.  The first is
+-- to use 'mkActive' to create one directly, by specifying a start and
+-- end time and a function of time.  More indirectly, one can use the
+-- 'Applicative' instance together with the unit interval 'ui', which
+-- takes on values from the unit interval from time 0 to time 1, or
+-- 'interval', which creates an active over an arbitrary interval.
+--
+-- For example, to create a value of type @Active Double@ which
+-- represents one period of a sine wave starting at time 0 and ending
+-- at time 1, we could write
+--
+-- > mkActive 0 1 (\t -> sin (fromTime t * tau))
+--
+-- or
+--
+-- > (sin . (*tau)) <$> interval 0 1
+--
+-- 'pure' can also be used to create @Active@ values which are
+-- constant and have no start or end time.  For example,
+--
+-- > mod <$> (floor <$> interval 0 100) <*> pure 7
+--
+-- cycles repeatedly through the numbers 0-6.
+--
+-- Note that the \"idiom bracket\" notation supported by the SHE
+-- preprocessor (<http://personal.cis.strath.ac.uk/~conor/pub/she/>,
+-- <http://hackage.haskell.org/package/she>) can make for somewhat
+-- more readable 'Applicative' code.  For example, the above example
+-- can be rewritten using SHE as
+--
+-- > {-# OPTIONS_GHC -F -pgmF she #-}
+-- >
+-- > ... (| mod (| floor (interval 0 100) |) ~7 |)
+--
+-- There are many functions for transforming and composing active
+-- values; see the documentation below for more details.
+--
 -----------------------------------------------------------------------------
 
 module Data.Active
