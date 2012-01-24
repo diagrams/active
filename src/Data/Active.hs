@@ -116,10 +116,12 @@ module Data.Active
        , trim, trimBefore, trimAfter
 
          -- ** Composing active values
-       , after
-       , (->>), progression
 
-       , (|>>)
+       , after
+
+       , (->>)
+
+       , (|>>), movie
 
          -- * Discretization
 
@@ -576,7 +578,8 @@ after a1 a2 = maybe a1 ((`atTime` a1) . end) (activeEra a2)
 
 infixr 5 ->>
 
--- XXX illustrate this
+
+-- XXX illustrate
 
 -- | Sequence/overlay two 'Active' values: shift the second to start
 --   immediately after the first (using 'after'), then compose them
@@ -584,14 +587,8 @@ infixr 5 ->>
 (->>) :: Semigroup a => Active a -> Active a -> Active a
 a1 ->> a2 = a1 <> (a2 `after` a1)
 
--- | Sequence/overlay a list of 'Active' values. Equivalent to
---   repeated application of '->>'.
-progression :: (Semigroup a, Monoid a) => [Active a] -> Active a
-progression = foldr (->>) (pure mempty)
 
--- XXX do above with a balanced fold?
-
--- XXX illustrate below
+-- XXX illustrate
 
 -- | \"Splice\" two 'Active' values together: shift the second to
 --   start immediately after the first (using 'after'), and produce
@@ -601,6 +598,13 @@ progression = foldr (->>) (pure mempty)
 (|>>) :: Active a -> Active a -> Active a
 a1 |>> a2 = (fromJust . getFirst) <$>
              (trimAfter (First . Just <$> a1) ->> trimBefore (First . Just <$> a2))
+
+-- XXX implement 'movie' with a balanced fold
+
+-- | Splice together a list of active values using '|>>'.  The list
+--   must be nonempty.
+movie :: [Active a] -> Active a
+movie = foldr1 (|>>)
 
 ------------------------------------------------------------
 --  Discretization
