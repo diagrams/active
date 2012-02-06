@@ -48,7 +48,7 @@
 --
 -- or
 --
--- > (sin . (*tau)) <$> interval 0 1
+-- > (sin . (*tau)) <$> ui
 --
 -- 'pure' can also be used to create @Active@ values which are
 -- constant and have no start or end time.  For example,
