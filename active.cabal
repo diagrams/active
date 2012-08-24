@@ -1,5 +1,5 @@
 name:                active
-version:             0.1.0.1
+version:             0.1.0.2
 synopsis:            Abstractions for animation
 description:         "Active" abstraction for animated things with finite start and end times.
 license:             BSD3
@@ -9,32 +9,35 @@ maintainer:          byorgey@cis.upenn.edu
 copyright:           (c) 2011 Brent Yorgey
 category:            Data
 build-type:          Simple
-cabal-version:       >=1.8
+cabal-version:       >=1.10
 extra-source-files:  CHANGES
-tested-with:         GHC == 6.12.3, GHC == 7.0.4, GHC == 7.2.1, GHC == 7.4.1
+tested-with:         GHC == 6.12.3, GHC == 7.0.4, GHC == 7.2.1, GHC == 7.4.1, GHC == 7.6.1
+bug-reports:         https://github.com/diagrams/active/issues
 source-repository head
-  type:     darcs
-  location: http://patch-tag.com/r/byorgey/active
+  type:     git
+  location: https://github.com/diagrams/active.git
 
 library
   exposed-modules:     Data.Active
-  build-depends:       base >= 4.0 && < 4.6,
+  build-depends:       base >= 4.0 && < 4.7,
                        array >= 0.3 && < 0.5,
                        semigroups >= 0.1 && < 0.9,
                        semigroupoids >= 1.2 && < 3.1,
                        vector-space >= 0.8 && < 0.9,
                        newtype >= 0.2 && < 0.3
   hs-source-dirs:      src
+  default-language:    Haskell2010
 
 test-suite active-tests
     type:              exitcode-stdio-1.0
     main-is:           active-tests.hs
-    build-depends:     base >= 4.0 && < 4.6,
+    build-depends:     base >= 4.0 && < 4.7,
                        array >= 0.3 && < 0.5,
                        semigroups >= 0.1 && < 0.9,
                        semigroupoids >= 1.2 && < 3.1,
                        vector-space >= 0.8 && < 0.9,
                        newtype >= 0.2 && < 0.3,
 
-                       QuickCheck >= 2.4.2 && < 2.5
+                       QuickCheck >= 2.4.2 && < 2.6
     hs-source-dirs:    src, test
+    default-language:  Haskell2010
