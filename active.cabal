@@ -1,5 +1,5 @@
 name:                active
-version:             0.1.0.2
+version:             0.1.0.3
 synopsis:            Abstractions for animation
 description:         "Active" abstraction for animated things with finite start and end times.
 license:             BSD3
@@ -21,7 +21,7 @@ library
   exposed-modules:     Data.Active
   build-depends:       base >= 4.0 && < 4.7,
                        array >= 0.3 && < 0.5,
-                       semigroups >= 0.1 && < 0.9,
+                       semigroups >= 0.1 && < 0.10,
                        semigroupoids >= 1.2 && < 3.1,
                        vector-space >= 0.8 && < 0.9,
                        newtype >= 0.2 && < 0.3
@@ -33,7 +33,7 @@ test-suite active-tests
     main-is:           active-tests.hs
     build-depends:     base >= 4.0 && < 4.7,
                        array >= 0.3 && < 0.5,
-                       semigroups >= 0.1 && < 0.9,
+                       semigroups >= 0.1 && < 0.10,
                        semigroupoids >= 1.2 && < 3.1,
                        vector-space >= 0.8 && < 0.9,
                        newtype >= 0.2 && < 0.3,
