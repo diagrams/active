@@ -489,7 +489,8 @@ backwards :: (Clock t) => Active t a -> Active t a
 backwards =
   modActive id . onDynamic $ \s e d ->
     mkDynamic s e
-      (\t -> d (e - t + s))
+      (\t -> d (s .+^ (e .-. t)))
+
 
 -- | Take a \"snapshot\" of an active value at a particular time,
 --   resulting in a constant value.
