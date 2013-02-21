@@ -155,8 +155,11 @@ import Data.AffineSpace
 ------------------------------------------------------------
 -- | A class that abstracts over time.
 
-class (Ord t, AffineSpace t, VectorSpace (Diff t))
-   => Clock t where
+class ( Ord t
+      , AffineSpace t
+      , VectorSpace (Diff t)
+      , Fractional (Scalar (Diff t))
+      ) => Clock t where
   -- | Convert any value of a 'Real' type (including @Int@, @Integer@,
   --   @Rational@, @Float@, and @Double@) to a 'Time'.
   toTime :: Real a => a -> t
@@ -451,7 +454,7 @@ interval a b = mkActive a b fromTime
 
 -- | @stretch s act@ \"stretches\" the active @act@ so that it takes
 --   @s@ times as long (retaining the same start time).
-stretch :: (Clock t, d ~ Diff t, Scalar d ~ Rational) => Rational -> Active t a -> Active t a
+stretch :: (Clock t) => Scalar (Diff t) -> Active t a -> Active t a
 stretch str =
   modActive id . onDynamic $ \s e d ->
     mkDynamic s (s .+^ (str *^ (e .-. s)))
