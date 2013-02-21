@@ -444,8 +444,8 @@ isDynamic = onActive (const False) (const True)
 --   @(*2) \<$\> ui@ varies from @0@ to @2@ over the era @[0,1]@.  To
 --   alter the era, you can use 'stretch' or 'shift'.
 -- TODO: Num=>Clock
-ui :: (Num t, Clock t, Fractional a) => Active t a
-ui = interval 0 1
+ui :: (Clock t, Fractional a) => Active t a
+ui = interval (toTime 0) (toTime 1)
 
 -- | @interval a b@ is an active value starting at time @a@, ending at
 --   time @b@, and taking the value @t@ at time @t@.
