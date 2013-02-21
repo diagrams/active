@@ -174,17 +174,16 @@ class (Ord t, Num t, AffineSpace t) => Clock t where
 --   also provided for convenience in converting between @Time@ and
 --   other numeric types.
 newtype Time = Time { unTime :: Rational }
-  deriving ( Eq, Ord, Show, Read, Enum, Num, Fractional, Real, RealFrac
-           , AdditiveGroup, InnerSpace
-           )
+  deriving ( Eq, Ord, Show, Read, Enum, Num, Fractional, Real, RealFrac )
 
 instance Newtype Time Rational where
   pack   = Time
   unpack = unTime
 
-instance VectorSpace Time where
-  type Scalar Time = Rational
-  s *^ (Time t) = Time (s * t)
+-- Time should not be in VectorSpace or AdditiveGroup
+--instance VectorSpace Time where
+--  type Scalar Time = Rational
+--  s *^ (Time t) = Time (s * t)
 
 instance Clock Time where
   toTime = fromRational . toRational
