@@ -155,8 +155,8 @@ import Data.AffineSpace
 ------------------------------------------------------------
 -- | A class that abstracts over time.
 
--- AJG: Not sure about Num
-class (Ord t, Num t, AffineSpace t) => Clock t where
+class (Ord t, AffineSpace t, VectorSpace (Diff t))
+   => Clock t where
   -- | Convert any value of a 'Real' type (including @Int@, @Integer@,
   --   @Rational@, @Float@, and @Double@) to a 'Time'.
   toTime :: Real a => a -> t
@@ -651,7 +651,7 @@ movie = foldr1 (|>>)
 --   after time 1.
 --
 --   It is an error to call @discrete@ on the empty list.
-discrete :: Clock t => [a] -> Active t a
+discrete :: (Num t,Clock t) => [a] -> Active t a
 discrete [] = error "Data.Active.discrete must be called with a non-empty list."
 discrete xs = f <$> ui
   where f (t :: Rational)
@@ -670,7 +670,7 @@ discrete xs = f <$> ui
 --   If the 'Active' value is constant (and thus has no start or end
 --   times), a list of length 1 is returned, containing the constant
 --   value.
-simulate :: (Scalar t ~ Rational, Clock t, VectorSpace t, Enum t) => Rational -> Active t a -> [a]
+simulate :: (Num t, Scalar t ~ Rational, Clock t, VectorSpace t, Enum t) => Rational -> Active t a -> [a]
 simulate rate =
   onActive (:[])
            (\d -> map (runDynamic d)
