@@ -645,9 +645,9 @@ a1 ->> a2 = a1 <> (a2 `after` a1)
 --   return the first.
 (|>>) :: (Deadline t a) => Active t a -> Active t a -> Active t a
 a1 |>> a2 = onActive pure (\ d1 ->
-                activeDeadline (start (era d1))
+                activeDeadline (end (era d1))
                         <.> a1
-                        <.> a2
+                        <.> (a2 `after` a1)
           ) a1
 
 -- XXX implement 'movie' with a balanced fold
