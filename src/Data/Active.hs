@@ -689,12 +689,14 @@ discrete xs = f <$> ui
 --   If the 'Active' value is constant (and thus has no start or end
 --   times), a list of length 1 is returned, containing the constant
 --   value.
-simulate :: (Num t, Scalar t ~ Rational, Clock t, VectorSpace t, Enum t) => Rational -> Active t a -> [a]
+--simulate :: (Num t, Scalar t ~ Rational, Clock t, VectorSpace t, Enum t) => Rational -> Active t a -> [a]
+simulate :: (Clock t) => Rational -> Active t a -> [a]
 simulate rate =
   onActive (:[])
-           (\d -> map (runDynamic d)
-                      (let s = start (era d)
-                           e = end   (era d)
+           (\d -> map (runDynamic d . toTime)
+                      (let s, e :: Rational
+                           s = fromTime $ start $ era d
+                           e = fromTime $ end   $ era d
                        in  [s, s + 1^/rate .. e]
                       )
            )
