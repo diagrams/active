@@ -482,25 +482,27 @@ interval a b = mkActive a b fromTime
 
 -- | @stretch s act@ \"stretches\" the active @act@ so that it takes
 --   @s@ times as long (retaining the same start time).
-stretch :: (Clock t) => Scalar (Diff t) -> Active t a -> Active t a
-stretch str =
-  modActive id . onDynamic $ \s e d ->
-    mkDynamic s (s .+^ (str *^ (e .-. s)))
-      (\t -> d (s .+^ ((t .-. s) ^/ str)))
-
+stretch :: (Clock t) => Rational -> Active t a -> Active t a
+stretch 0 = modActive id . onDynamic $ \s e d -> mkDynamic s s d
+stretch str = modActive id . onDynamic $ \s e d ->
+    mkDynamic s (s .+^ (fromRational str *^ (e .-. s)))
+      (\t -> d (s .+^ ((t .-. s) ^/ fromRational str)))
 
 -- | @stretchTo d@ 'stretch'es an 'Active' so it has duration @d@.
 --   Has no effect if (1) @d@ is non-positive, or (2) the 'Active'
 --   value is constant, or (3) the 'Active' value has zero duration.
--- [AJG: conditions (1) and (3) no longer true: to consider changing, or
---  changing stretch]
+-- [AJG: conditions (1) and (3) no longer true: to consider changing]
 
-stretchTo :: (Clock t) => Diff t -> Active t a -> Active t a
-stretchTo d a = maybe a (`stretch` a) (((fromDuration d /) . fromDuration . duration) <$> activeEra a)
+stretchTo :: (Deadline t a) => Diff t -> Active t a -> Active t a
+stretchTo diff = modActive id . onDynamic $ \s e d ->
+    mkDynamic s (s .+^ diff)
+        (\ t -> choose (s .+^ diff) s
+                     (d s)      -- avoiding dividing by zero
+                     (d (s .+^ (((t .-. s) ^/ (fromDuration diff / fromDuration (e .-. s)))))))
 
 -- | @a1 \`during\` a2@ 'stretch'es and 'shift's @a1@ so that it has the
 --   same era as @a2@.  Has no effect if either of @a1@ or @a2@ are constant.
-during :: (Scalar (Diff t) ~ Rational, Real (Diff t), Fractional (Diff t), Clock t) => Active t a -> Active t a -> Active t a
+during :: (Deadline t a) => Active t a -> Active t a -> Active t a
 during a1 a2 = maybe a1 (\(d,s) -> stretchTo d . atTime s $ a1)
                  ((duration &&& start) <$> activeEra a2)
 
