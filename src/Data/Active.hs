@@ -157,15 +157,24 @@ import Data.AffineSpace
 
 class ( Ord t
       , AffineSpace t
-      , VectorSpace (Diff t)
-      , Fractional (Scalar (Diff t))
+      , Waiting (Diff t)
       ) => Clock t where
+
   -- | Convert any value of a 'Real' type (including @Int@, @Integer@,
   --   @Rational@, @Float@, and @Double@) to a 'Time'.
   toTime :: Real a => a -> t
   -- | Convert a 'Time' to a value of any 'Fractional' type (such as
   --   @Rational@, @Float@, or @Double@).
   fromTime :: Fractional a => t -> a
+
+class (Fractional (Scalar w), VectorSpace w) => Waiting w where
+  -- | Convert any value of a 'Real' type (including @Int@, @Integer@,
+  --   @Rational@, @Float@, and @Double@) to a 'Duration'.
+  toDuration :: Real a => a -> w
+
+  -- | Convert a 'Duration' to any other 'Fractional' type (such as
+  --   @Rational@, @Float@, or @Double@).
+  fromDuration :: w -> Scalar w
 
 ------------------------------------------------------------
 -- Time
@@ -183,14 +192,18 @@ instance Newtype Time Rational where
   pack   = Time
   unpack = unTime
 
--- Time should not be in VectorSpace or AdditiveGroup
---instance VectorSpace Time where
---  type Scalar Time = Rational
---  s *^ (Time t) = Time (s * t)
+instance AffineSpace Time where
+  type Diff Time = Duration
+  (Time t1) .-. (Time t2) = Duration (t1 - t2)
+  (Time t) .+^ (Duration d) = Time (t + d)
 
 instance Clock Time where
   toTime = fromRational . toRational
   fromTime = fromRational . unTime
+
+instance Waiting Duration where
+  toDuration = fromRational . toRational
+  fromDuration = fromRational . unDuration
 
 -- | An abstract type representing /elapsed time/ between two points
 --   in time.  Note that durations can be negative. Literal numeric
@@ -209,21 +222,6 @@ instance Newtype Duration Rational where
 instance VectorSpace Duration where
   type Scalar Duration = Rational
   s *^ (Duration d) = Duration (s * d)
-
-instance AffineSpace Time where
-  type Diff Time = Duration
-  (Time t1) .-. (Time t2) = Duration (t1 - t2)
-  (Time t) .+^ (Duration d) = Time (t + d)
-
--- | Convert any value of a 'Real' type (including @Int@, @Integer@,
---   @Rational@, @Float@, and @Double@) to a 'Duration'.
-toDuration :: Real a => a -> Duration
-toDuration = fromRational . toRational
-
--- | Convert a 'Duration' to any other 'Fractional' type (such as
---   @Rational@, @Float@, or @Double@).
-fromDuration :: Fractional a => Duration -> a
-fromDuration = fromRational . unDuration
 
 -- | An @Era@ is a concrete span of time, that is, a pair of times
 --   representing the start and end of the era. @Era@s form a
@@ -268,6 +266,9 @@ duration = (.-.) <$> end <*> start
 --   will be mostly an internal implementation detail and that
 --   'Active' will be most commonly used.  But you never know what
 --   uses people might find for things.
+
+type Transition t a = Dynamic t a       -- proposed name for Dynamic
+
 data Dynamic t a = Dynamic { era        :: Era t
                            , runDynamic :: t -> a
                            }
@@ -464,12 +465,11 @@ stretch str =
 -- | @stretchTo d@ 'stretch'es an 'Active' so it has duration @d@.
 --   Has no effect if (1) @d@ is non-positive, or (2) the 'Active'
 --   value is constant, or (3) the 'Active' value has zero duration.
-stretchTo :: (Clock t, d ~ Diff t, Scalar d ~ Rational, Fractional d, Real d) => Diff t -> Active t a -> Active t a
-stretchTo d a
-  | d <= 0                               = a
-  | (duration <$> activeEra a) == Just 0 = a
-  | otherwise = maybe a (`stretch` a) ((toRational . (d /) . duration) <$> activeEra a)
+-- [AJG: conditions (1) and (3) no longer true: to consider changing, or
+--  changing stretch]
 
+stretchTo :: (Clock t) => Diff t -> Active t a -> Active t a
+stretchTo d a = maybe a (`stretch` a) (((fromDuration d /) . fromDuration . duration) <$> activeEra a)
 
 -- | @a1 \`during\` a2@ 'stretch'es and 'shift's @a1@ so that it has the
 --   same era as @a2@.  Has no effect if either of @a1@ or @a2@ are constant.
@@ -511,15 +511,12 @@ snapshot t a = pure (runActive a t)
 --
 --   See also 'clampBefore' and 'clampAfter', which clamp only before
 --   or after the era, respectively.
--- AJG: This will not reify, because of the case
+
 clamp :: Clock t => Active t a -> Active t a
 clamp =
   modActive id . onDynamic $ \s e d ->
     mkDynamic s e
-      (\t -> case () of _ | t < s     -> d s
-                          | t > e     -> d e
-                          | otherwise -> d t
-      )
+      (\t -> d (min (max t s) e))
 
 -- | \"Clamp\" an active value so that it is constant before the start
 --   of its era. For example, @clampBefore 'ui'@ can be visualized as
@@ -554,6 +551,8 @@ clampAfter = undefined
 --
 --   See also 'trimBefore' and 'trimActive', which trim only before or
 --   after the era, respectively.
+
+--   AJG: trim is DE-unsafe.
 trim :: (Clock t, Monoid a) => Active t a -> Active t a
 trim =
   modActive id . onDynamic $ \s e d ->
