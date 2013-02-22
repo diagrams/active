@@ -670,7 +670,7 @@ movie = foldr1 (|>>)
 --   after time 1.
 --
 --   It is an error to call @discrete@ on the empty list.
-discrete :: (Num t,Clock t) => [a] -> Active t a
+discrete :: (Clock t) => [a] -> Active t a
 discrete [] = error "Data.Active.discrete must be called with a non-empty list."
 discrete xs = f <$> ui
   where f (t :: Rational)
