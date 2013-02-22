@@ -178,8 +178,8 @@ class (Fractional (Scalar w), VectorSpace w) => Waiting w where
   --   @Rational@, @Float@, or @Double@).
   fromDuration :: w -> Scalar w
 
-class Deadline t a where
-        -- choose tm deadline (if before / at deadline) (if after deadline)
+class Clock t => Deadline t a where
+        -- choose time-now deadline-time (if before / at deadline) (if after deadline)
         choose :: t -> t -> a -> a -> a
 
 ------------------------------------------------------------
