@@ -643,16 +643,20 @@ a1 ->> a2 = a1 <> (a2 `after` a1)
 --   the value which acts like the first up to the common end/start
 --   point, then like the second after that.  If both are constant,
 --   return the first.
-(|>>) :: (Clock t, Deadline t (First a)) => Active t a -> Active t a -> Active t a
-a1 |>> a2 = (fromJust . getFirst) <$>
-             (trimAfter (First . Just <$> a1) ->> trimBefore (First . Just <$> a2))
+(|>>) :: (Deadline t a) => Active t a -> Active t a -> Active t a
+a1 |>> a2 = onActive pure (\ d1 ->
+                activeDeadline (start (era d1))
+                        <.> a1
+                        <.> a2
+          ) a1
 
 -- XXX implement 'movie' with a balanced fold
 
 -- | Splice together a list of active values using '|>>'.  The list
 --   must be nonempty.
-movie :: (Clock t, Deadline t (First a)) => [Active t a] -> Active t a
+movie :: (Deadline t a) => [Active t a] -> Active t a
 movie = foldr1 (|>>)
+
 
 ------------------------------------------------------------
 --  Discretization
@@ -694,3 +698,10 @@ simulate rate =
                        in  [s, s + 1^/rate .. e]
                       )
            )
+
+-- examples
+
+ex1 :: Active Time Float
+ex1 = fmap (*10) ui
+
+test1 e = map (runActive e) ([-1,-0.9..2] :: [Time])
