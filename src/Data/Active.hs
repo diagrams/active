@@ -88,7 +88,7 @@ module Data.Active
 
          -- ** Eras
 
---       , Era, mkEra
+       , Era, mkEra
        , start, end, duration
 
          -- * Deadlines
