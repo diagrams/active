@@ -166,8 +166,7 @@ import Data.AffineSpace
 ------------------------------------------------------------
 -- | A class that abstracts over time.
 
-class ( Ord t
-      , AffineSpace t
+class ( AffineSpace t
       , Waiting (Diff t)
       ) => Clock t where
 
@@ -177,6 +176,9 @@ class ( Ord t
   -- | Convert a 'Time' to a value of any 'Fractional' type (such as
   --   @Rational@, @Float@, or @Double@).
   fromTime :: Fractional a => t -> a
+
+  firstTime :: t -> t -> t
+  lastTime  :: t -> t -> t
 
 class (Fractional (Scalar w), VectorSpace w) => Waiting w where
   -- | Convert any value of a 'Real' type (including @Int@, @Integer@,
@@ -215,10 +217,8 @@ instance AffineSpace Time where
 instance Clock Time where
   toTime = fromRational . toRational
   fromTime = fromRational . unTime
-
-instance Waiting Duration where
-  toDuration = fromRational . toRational
-  fromDuration = fromRational . unDuration
+  firstTime = min
+  lastTime = max
 
 instance Deadline Time a where
         -- choose tm deadline (if before / at deadline) (if after deadline)
@@ -242,6 +242,10 @@ instance VectorSpace Duration where
   type Scalar Duration = Rational
   s *^ (Duration d) = Duration (s * d)
 
+instance Waiting Duration where
+  toDuration = fromRational . toRational
+  fromDuration = fromRational . unDuration
+
 -- | An @Era@ is a concrete span of time, that is, a pair of times
 --   representing the start and end of the era. @Era@s form a
 --   semigroup: the combination of two @Era@s is the smallest @Era@
@@ -256,9 +260,9 @@ newtype Era t = Era (Min t, Max t)
 
 -- AJG: I explicitly implement this to make sure we use min and max,
 -- and not compare (which does not reify into a deep embedded structure).
-instance Ord t => Semigroup (Era t) where
+instance Clock t => Semigroup (Era t) where
   Era (Min min1,Max max1) <> Era (Min min2,Max max2)
-    = Era (Min (min min1 min2),Max (max max1 max2))
+    = Era (Min (firstTime min1 min2),Max (lastTime max1 max2))
 
 -- | Create an 'Era' by specifying start and end 'Time's.
 mkEra :: t -> t -> Era t
@@ -302,14 +306,14 @@ data Dynamic t a = Dynamic { era        :: Era t
 --   thing as an empty era (that is, 'Era' is not an instance of
 --   'Monoid').
 
-instance (Ord t) => Apply (Dynamic t) where
+instance (Clock t) => Apply (Dynamic t) where
   (Dynamic d1 f1) <.> (Dynamic d2 f2) = Dynamic (d1 <> d2) (f1 <.> f2)
 
 -- | @'Dynamic' a@ is a 'Semigroup' whenever @a@ is: the eras are
 --   combined according to their semigroup structure, and the values
 --   of type @a@ are combined pointwise.  Note that @'Dynamic' a@ cannot
 --   be an instance of 'Monoid' since 'Era' is not.
-instance (Ord t, Semigroup a) => Semigroup (Dynamic t a) where
+instance (Clock t, Semigroup a) => Semigroup (Dynamic t a) where
   Dynamic d1 f1 <> Dynamic d2 f2 = Dynamic (d1 <> d2) (f1 <> f2)
 
 -- | Create a 'Dynamic' from a start time, an end time, and a
@@ -379,7 +383,7 @@ over2 _ f n1 n2 = pack (f (unpack n1) (unpack n2))
 -- | Active values over a type with a 'Semigroup' instance are also an
 --   instance of 'Semigroup'.  Two active values are combined
 --   pointwise; the resulting value is constant iff both inputs are.
-instance (Ord t, Semigroup a) => Semigroup (Active t a) where
+instance (Clock t, Semigroup a) => Semigroup (Active t a) where
   (<>) = (over2 Active . over2 MaybeApply) combine
    where
     combine (Right m1) (Right m2)
@@ -394,7 +398,7 @@ instance (Ord t, Semigroup a) => Semigroup (Active t a) where
     combine (Left d1) (Left d2)
       = Left (d1 <> d2)
 
-instance (Ord t, Monoid a, Semigroup a) => Monoid (Active t a) where
+instance (Clock t, Monoid a, Semigroup a) => Monoid (Active t a) where
   mempty  = Active (MaybeApply (Right mempty))
   mappend = (<>)
 
@@ -416,7 +420,7 @@ onActive _ f (Active (MaybeApply (Left d)))  = f d
 
 -- | Modify an 'Active' value using a case analysis to see whether it
 --   is constant or dynamic.
-modActive :: (Ord t) => (a -> b) -> (Dynamic t a -> Dynamic t b) -> Active t a -> Active t b
+modActive :: (Clock t) => (a -> b) -> (Dynamic t a -> Dynamic t b) -> Active t a -> Active t b
 modActive f g = onActive (pure . f) (fromDynamic . g)
 
 -- | Interpret an 'Active' value as a function from time.
@@ -545,7 +549,7 @@ clamp :: Clock t => Active t a -> Active t a
 clamp =
   modActive id . onDynamic $ \s e d ->
     mkDynamic s e
-      (\t -> d (min (max t s) e))
+      (\t -> d (firstTime (lastTime t s) e))
 
 -- | \"Clamp\" an active value so that it is constant before the start
 --   of its era. For example, @clampBefore 'ui'@ can be visualized as
