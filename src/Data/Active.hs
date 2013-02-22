@@ -161,8 +161,6 @@ import Data.Monoid (First(..))
 import Data.VectorSpace hiding ((<.>))
 import Data.AffineSpace
 
-import Data.Boolean
-
 ------------------------------------------------------------
 -- Clock
 ------------------------------------------------------------
@@ -221,8 +219,6 @@ instance Clock Time where
 instance Waiting Duration where
   toDuration = fromRational . toRational
   fromDuration = fromRational . unDuration
-
-type instance BooleanOf Time = Bool
 
 instance Deadline Time a where
         -- choose tm deadline (if before / at deadline) (if after deadline)
