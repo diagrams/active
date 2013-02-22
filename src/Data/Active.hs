@@ -8,7 +8,6 @@
            , ScopedTypeVariables
   #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
--- AJG: remove FlexibleContexts if possible
 
 -----------------------------------------------------------------------------
 -- |
@@ -73,26 +72,34 @@
 -- There are many functions for transforming and composing active
 -- values; see the documentation below for more details.
 --
+--
+-- With careful handling, this module should be suitable to generating
+-- deep embeddings if 'Active' values.
+--
 -----------------------------------------------------------------------------
 
-module Data.Active where
-{-
+module Data.Active
        ( -- * Representing time
 
          -- ** Time and duration
 
-         Time, toTime, fromTime
-       , Duration, toDuration, fromDuration
+         Time, Clock(..)
+       , Duration, Waiting(..)
 
          -- ** Eras
 
-       , Era, mkEra
+--       , Era, mkEra
        , start, end, duration
+
+         -- * Deadlines
+
+       , Deadline(..)
 
          -- * Dynamic values
        , Dynamic(..), mkDynamic, onDynamic
 
        , shiftDynamic
+       , transitionDeadline
 
          -- * Active values
          -- $active
@@ -129,13 +136,17 @@ module Data.Active where
 
        , (|>>), movie
 
+         -- * Deadlines
+
+         , activeDeadline
+
          -- * Discretization
 
        , discrete
        , simulate
 
        ) where
--}
+
 import Control.Applicative
 import Control.Arrow ((&&&))
 import Control.Newtype
