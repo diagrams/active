@@ -323,6 +323,10 @@ shiftDynamic sh =
       (e .+^ sh)
       (\t -> d (t .-^ sh))
 
+-- | take the first value until a deadline, then take the second value, inside a Dynamic.
+transitionDeadline :: Deadline t a => t -> Dynamic t (a -> a -> a)
+transitionDeadline dl = mkDynamic dl dl (\ t -> choose t dl)
+
 ------------------------------------------------------------
 --  Active
 ------------------------------------------------------------
@@ -432,6 +436,10 @@ isConstant = onActive (const True) (const False)
 -- | Test whether an 'Active' value is 'Dynamic'.
 isDynamic :: Active t a -> Bool
 isDynamic = onActive (const False) (const True)
+
+-- | take the first value until a deadline, then take the second value, inside an 'Active'.
+activeDeadline :: Deadline t a => t -> Active t (a -> a -> a)
+activeDeadline = fromDynamic . transitionDeadline
 
 ------------------------------------------------------------
 --  Combinators
