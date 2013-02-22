@@ -150,6 +150,8 @@ import Data.Monoid (First(..))
 import Data.VectorSpace hiding ((<.>))
 import Data.AffineSpace
 
+import Data.Boolean
+
 ------------------------------------------------------------
 -- Clock
 ------------------------------------------------------------
@@ -175,6 +177,10 @@ class (Fractional (Scalar w), VectorSpace w) => Waiting w where
   -- | Convert a 'Duration' to any other 'Fractional' type (such as
   --   @Rational@, @Float@, or @Double@).
   fromDuration :: w -> Scalar w
+
+class Deadline t a where
+        -- choose tm deadline (if before / at deadline) (if after deadline)
+        choose :: t -> t -> a -> a -> a
 
 ------------------------------------------------------------
 -- Time
@@ -204,6 +210,12 @@ instance Clock Time where
 instance Waiting Duration where
   toDuration = fromRational . toRational
   fromDuration = fromRational . unDuration
+
+type instance BooleanOf Time = Bool
+
+instance Deadline Time a where
+        -- choose tm deadline (if before / at deadline) (if after deadline)
+        choose t1 t2 a b = if t1 <= t2 then a else b
 
 -- | An abstract type representing /elapsed time/ between two points
 --   in time.  Note that durations can be negative. Literal numeric
@@ -552,15 +564,12 @@ clampAfter = undefined
 --   See also 'trimBefore' and 'trimActive', which trim only before or
 --   after the era, respectively.
 
---   AJG: trim is DE-unsafe.
-trim :: (Clock t, Monoid a) => Active t a -> Active t a
+trim :: (Clock t, Deadline t a, Monoid a) => Active t a -> Active t a
 trim =
   modActive id . onDynamic $ \s e d ->
     mkDynamic s e
-      (\t -> case () of _ | t < s     -> mempty
-                          | t > e     -> mempty
-                          | otherwise -> d t
-      )
+      (\t -> choose s t (choose t e (d t) mempty) mempty)
+
 
 -- | \"Trim\" an active value so that it is empty /before/ the start
 --   of its era. For example, @trimBefore 'ui'@ can be visualized as
@@ -568,13 +577,11 @@ trim =
 --   <<http://www.cis.upenn.edu/~byorgey/hosted/trimBefore.png>>
 --
 --   See the documentation of 'trim' for more details.
-trimBefore :: (Clock t, Monoid a) => Active t a -> Active t a
+trimBefore :: (Clock t, Deadline t a, Monoid a) => Active t a -> Active t a
 trimBefore =
   modActive id . onDynamic $ \s e d ->
     mkDynamic s e
-      (\t -> case () of _ | t < s     -> mempty
-                          | otherwise -> d t
-      )
+      (\t -> choose s t (d t) mempty)
 
 -- | \"Trim\" an active value so that it is empty /after/ the end
 --   of its era.  For example, @trimAfter 'ui'@ can be visualized as
@@ -582,13 +589,11 @@ trimBefore =
 --   <<http://www.cis.upenn.edu/~byorgey/hosted/trimAfter.png>>
 --
 --   See the documentation of 'trim' for more details.
-trimAfter :: (Clock t, Monoid a) => Active t a -> Active t a
+trimAfter :: (Clock t, Deadline t a, Monoid a) => Active t a -> Active t a
 trimAfter =
   modActive id . onDynamic $ \s e d ->
     mkDynamic s e
-      (\t -> case () of _ | t > e     -> mempty
-                          | otherwise -> d t
-      )
+      (\t -> choose t e (d t) mempty)
 
 -- | Set the era of an 'Active' value.  Note that this will change a
 --   constant 'Active' into a dynamic one which happens to have the
@@ -630,7 +635,7 @@ a1 ->> a2 = a1 <> (a2 `after` a1)
 --   the value which acts like the first up to the common end/start
 --   point, then like the second after that.  If both are constant,
 --   return the first.
-(|>>) :: Clock t => Active t a -> Active t a -> Active t a
+(|>>) :: (Clock t, Deadline t (First a)) => Active t a -> Active t a -> Active t a
 a1 |>> a2 = (fromJust . getFirst) <$>
              (trimAfter (First . Just <$> a1) ->> trimBefore (First . Just <$> a2))
 
@@ -638,7 +643,7 @@ a1 |>> a2 = (fromJust . getFirst) <$>
 
 -- | Splice together a list of active values using '|>>'.  The list
 --   must be nonempty.
-movie :: Clock t => [Active t a] -> Active t a
+movie :: (Clock t, Deadline t (First a)) => [Active t a] -> Active t a
 movie = foldr1 (|>>)
 
 ------------------------------------------------------------
