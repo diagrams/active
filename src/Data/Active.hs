@@ -698,7 +698,6 @@ discrete xs = f <$> ui
 --   If the 'Active' value is constant (and thus has no start or end
 --   times), a list of length 1 is returned, containing the constant
 --   value.
---simulate :: (Num t, Scalar t ~ Rational, Clock t, VectorSpace t, Enum t) => Rational -> Active t a -> [a]
 simulate :: (Clock t) => Rational -> Active t a -> [a]
 simulate rate =
   onActive (:[])
@@ -710,9 +709,3 @@ simulate rate =
                       )
            )
 
--- examples
-
-ex1 :: Active Time Float
-ex1 = fmap (*10) ui
-
-test1 e = map (runActive e) ([-1,-0.9..2] :: [Time])
