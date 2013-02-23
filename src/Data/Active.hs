@@ -175,19 +175,22 @@ class ( AffineSpace t
   toTime :: Real a => a -> t
   -- | Convert a 'Time' to a value of any 'Fractional' type (such as
   --   @Rational@, @Float@, or @Double@).
-  fromTime :: Fractional a => t -> a
+  fromTime :: (FractionalOf t a) => t -> a
 
   firstTime :: t -> t -> t
   lastTime  :: t -> t -> t
 
-class (Fractional (Scalar w), VectorSpace w) => Waiting w where
+class (FractionalOf w (Scalar w), VectorSpace w) => Waiting w where
   -- | Convert any value of a 'Real' type (including @Int@, @Integer@,
   --   @Rational@, @Float@, and @Double@) to a 'Duration'.
   toDuration :: Real a => a -> w
 
   -- | Convert a 'Duration' to any other 'Fractional' type (such as
   --   @Rational@, @Float@, or @Double@).
-  fromDuration :: w -> Scalar w
+  fromDuration :: (FractionalOf w a) => w -> a
+
+class Fractional a => FractionalOf v a where
+        toFractionalOf :: v -> a
 
 class Clock t => Deadline t a where
         -- choose time-now deadline-time (if before / at deadline) (if after deadline)
@@ -220,6 +223,9 @@ instance Clock Time where
   firstTime = min
   lastTime = max
 
+instance Fractional a => FractionalOf Time a where
+  toFractionalOf (Time d) = fromRational d
+
 instance Deadline Time a where
         -- choose tm deadline (if before / at deadline) (if after deadline)
         choose t1 t2 a b = if t1 <= t2 then a else b
@@ -244,7 +250,10 @@ instance VectorSpace Duration where
 
 instance Waiting Duration where
   toDuration = fromRational . toRational
-  fromDuration = fromRational . unDuration
+  fromDuration = toFractionalOf
+
+instance Fractional a => FractionalOf Duration a where
+  toFractionalOf (Duration d) = fromRational d
 
 -- | An @Era@ is a concrete span of time, that is, a pair of times
 --   representing the start and end of the era. @Era@s form a
@@ -476,12 +485,12 @@ activeDeadline = fromDynamic . transitionDeadline
 --   @(*2) \<$\> ui@ varies from @0@ to @2@ over the era @[0,1]@.  To
 --   alter the era, you can use 'stretch' or 'shift'.
 -- TODO: Num=>Clock
-ui :: (Clock t, Fractional a) => Active t a
+ui :: (Clock t, FractionalOf t a) => Active t a
 ui = interval (toTime 0) (toTime 1)
 
 -- | @interval a b@ is an active value starting at time @a@, ending at
 --   time @b@, and taking the value @t@ at time @t@.
-interval :: (Clock t, Fractional a) => t -> t -> Active t a
+interval :: (Clock t, FractionalOf t a) => t -> t -> Active t a
 interval a b = mkActive a b fromTime
 
 -- | @stretch s act@ \"stretches\" the active @act@ so that it takes
@@ -683,7 +692,7 @@ movie = foldr1 (|>>)
 --   after time 1.
 --
 --   It is an error to call @discrete@ on the empty list.
-discrete :: (Clock t) => [a] -> Active t a
+discrete :: (Clock t, FractionalOf t Rational) => [a] -> Active t a
 discrete [] = error "Data.Active.discrete must be called with a non-empty list."
 discrete xs = f <$> ui
   where f (t :: Rational)
@@ -702,7 +711,7 @@ discrete xs = f <$> ui
 --   If the 'Active' value is constant (and thus has no start or end
 --   times), a list of length 1 is returned, containing the constant
 --   value.
-simulate :: (Clock t) => Rational -> Active t a -> [a]
+simulate :: (Clock t, FractionalOf t Rational) => Rational -> Active t a -> [a]
 simulate rate =
   onActive (:[])
            (\d -> map (runDynamic d . toTime)
