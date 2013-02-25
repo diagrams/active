@@ -145,6 +145,10 @@ module Data.Active
        , discrete
        , simulate
 
+         -- * Fractionals
+
+       , FractionalOf(..)
+
        ) where
 
 import Control.Applicative
