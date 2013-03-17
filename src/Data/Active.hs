@@ -4,6 +4,8 @@
            , MultiParamTypeClasses
            , TypeFamilies
            , FlexibleInstances
+           , FlexibleContexts
+           , ScopedTypeVariables
   #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
@@ -70,6 +72,10 @@
 -- There are many functions for transforming and composing active
 -- values; see the documentation below for more details.
 --
+--
+-- With careful handling, this module should be suitable to generating
+-- deep embeddings if 'Active' values.
+--
 -----------------------------------------------------------------------------
 
 module Data.Active
@@ -77,18 +83,23 @@ module Data.Active
 
          -- ** Time and duration
 
-         Time, toTime, fromTime
-       , Duration, toDuration, fromDuration
+         Time, Clock(..)
+       , Duration, Waiting(..)
 
          -- ** Eras
 
        , Era, mkEra
        , start, end, duration
 
+         -- * Deadlines
+
+       , Deadline(..)
+
          -- * Dynamic values
        , Dynamic(..), mkDynamic, onDynamic
 
        , shiftDynamic
+       , transitionDeadline
 
          -- * Active values
          -- $active
@@ -125,10 +136,18 @@ module Data.Active
 
        , (|>>), movie
 
+         -- * Deadlines
+
+         , activeDeadline
+
          -- * Discretization
 
        , discrete
        , simulate
+
+         -- * Fractionals
+
+       , FractionalOf(..)
 
        ) where
 
@@ -147,6 +166,41 @@ import Data.VectorSpace hiding ((<.>))
 import Data.AffineSpace
 
 ------------------------------------------------------------
+-- Clock
+------------------------------------------------------------
+-- | A class that abstracts over time.
+
+class ( AffineSpace t
+      , Waiting (Diff t)
+      ) => Clock t where
+
+  -- | Convert any value of a 'Real' type (including @Int@, @Integer@,
+  --   @Rational@, @Float@, and @Double@) to a 'Time'.
+  toTime :: Real a => a -> t
+  -- | Convert a 'Time' to a value of any 'Fractional' type (such as
+  --   @Rational@, @Float@, or @Double@).
+  fromTime :: (FractionalOf t a) => t -> a
+
+  firstTime :: t -> t -> t
+  lastTime  :: t -> t -> t
+
+class (FractionalOf w (Scalar w), VectorSpace w) => Waiting w where
+  -- | Convert any value of a 'Real' type (including @Int@, @Integer@,
+  --   @Rational@, @Float@, and @Double@) to a 'Duration'.
+  toDuration :: Real a => a -> w
+
+  -- | Convert a 'Duration' to any other 'Fractional' type (such as
+  --   @Rational@, @Float@, or @Double@).
+  fromDuration :: (FractionalOf w a) => w -> a
+
+class Fractional a => FractionalOf v a where
+        toFractionalOf :: v -> a
+
+class Clock t => Deadline t a where
+        -- choose time-now deadline-time (if before / at deadline) (if after deadline)
+        choose :: t -> t -> a -> a -> a
+
+------------------------------------------------------------
 -- Time
 ------------------------------------------------------------
 
@@ -156,27 +210,29 @@ import Data.AffineSpace
 --   also provided for convenience in converting between @Time@ and
 --   other numeric types.
 newtype Time = Time { unTime :: Rational }
-  deriving ( Eq, Ord, Show, Read, Enum, Num, Fractional, Real, RealFrac
-           , AdditiveGroup, InnerSpace
-           )
+  deriving ( Eq, Ord, Show, Read, Enum, Num, Fractional, Real, RealFrac )
 
 instance Newtype Time Rational where
   pack   = Time
   unpack = unTime
 
-instance VectorSpace Time where
-  type Scalar Time = Rational
-  s *^ (Time t) = Time (s * t)
+instance AffineSpace Time where
+  type Diff Time = Duration
+  (Time t1) .-. (Time t2) = Duration (t1 - t2)
+  (Time t) .+^ (Duration d) = Time (t + d)
 
--- | Convert any value of a 'Real' type (including @Int@, @Integer@,
---   @Rational@, @Float@, and @Double@) to a 'Time'.
-toTime :: Real a => a -> Time
-toTime = fromRational . toRational
+instance Clock Time where
+  toTime = fromRational . toRational
+  fromTime = fromRational . unTime
+  firstTime = min
+  lastTime = max
 
--- | Convert a 'Time' to a value of any 'Fractional' type (such as
---   @Rational@, @Float@, or @Double@).
-fromTime :: Fractional a => Time -> a
-fromTime = fromRational . unTime
+instance Fractional a => FractionalOf Time a where
+  toFractionalOf (Time d) = fromRational d
+
+instance Deadline Time a where
+        -- choose tm deadline (if before / at deadline) (if after deadline)
+        choose t1 t2 a b = if t1 <= t2 then a else b
 
 -- | An abstract type representing /elapsed time/ between two points
 --   in time.  Note that durations can be negative. Literal numeric
@@ -196,20 +252,12 @@ instance VectorSpace Duration where
   type Scalar Duration = Rational
   s *^ (Duration d) = Duration (s * d)
 
-instance AffineSpace Time where
-  type Diff Time = Duration
-  (Time t1) .-. (Time t2) = Duration (t1 - t2)
-  (Time t) .+^ (Duration d) = Time (t + d)
+instance Waiting Duration where
+  toDuration = fromRational . toRational
+  fromDuration = toFractionalOf
 
--- | Convert any value of a 'Real' type (including @Int@, @Integer@,
---   @Rational@, @Float@, and @Double@) to a 'Duration'.
-toDuration :: Real a => a -> Duration
-toDuration = fromRational . toRational
-
--- | Convert a 'Duration' to any other 'Fractional' type (such as
---   @Rational@, @Float@, or @Double@).
-fromDuration :: Fractional a => Duration -> a
-fromDuration = fromRational . unDuration
+instance Fractional a => FractionalOf Duration a where
+  toFractionalOf (Duration d) = fromRational d
 
 -- | An @Era@ is a concrete span of time, that is, a pair of times
 --   representing the start and end of the era. @Era@s form a
@@ -220,23 +268,29 @@ fromDuration = fromRational . unDuration
 --
 --   @Era@ is abstract. To construct @Era@ values, use 'mkEra'; to
 --   deconstruct, use 'start' and 'end'.
-newtype Era = Era (Min Time, Max Time)
-  deriving (Semigroup, Show)
+newtype Era t = Era (Min t, Max t)
+  deriving (Show)
+
+-- AJG: I explicitly implement this to make sure we use min and max,
+-- and not compare (which does not reify into a deep embedded structure).
+instance Clock t => Semigroup (Era t) where
+  Era (Min min1,Max max1) <> Era (Min min2,Max max2)
+    = Era (Min (firstTime min1 min2),Max (lastTime max1 max2))
 
 -- | Create an 'Era' by specifying start and end 'Time's.
-mkEra :: Time -> Time -> Era
+mkEra :: t -> t -> Era t
 mkEra s e = Era (Min s, Max e)
 
 -- | Get the start 'Time' of an 'Era'.
-start :: Era -> Time
+start :: Era t -> t
 start (Era (Min t, _)) = t
 
 -- | Get the end 'Time' of an 'Era'.
-end :: Era -> Time
+end :: Era t -> t
 end (Era (_, Max t)) = t
 
 -- | Compute the 'Duration' of an 'Era'.
-duration :: Era -> Duration
+duration :: (Clock t) => Era t -> Diff t
 duration = (.-.) <$> end <*> start
 
 ------------------------------------------------------------
@@ -248,9 +302,12 @@ duration = (.-.) <$> end <*> start
 --   will be mostly an internal implementation detail and that
 --   'Active' will be most commonly used.  But you never know what
 --   uses people might find for things.
-data Dynamic a = Dynamic { era        :: Era
-                         , runDynamic :: Time -> a
-                         }
+
+type Transition t a = Dynamic t a       -- proposed name for Dynamic
+
+data Dynamic t a = Dynamic { era        :: Era t
+                           , runDynamic :: t -> a
+                           }
   deriving (Functor)
 
 -- | 'Dynamic' is an instance of 'Apply' (/i.e./ 'Applicative' without
@@ -261,33 +318,38 @@ data Dynamic a = Dynamic { era        :: Era
 --   'pure': the era would have to be empty, but there is no such
 --   thing as an empty era (that is, 'Era' is not an instance of
 --   'Monoid').
-instance Apply Dynamic where
+
+instance (Clock t) => Apply (Dynamic t) where
   (Dynamic d1 f1) <.> (Dynamic d2 f2) = Dynamic (d1 <> d2) (f1 <.> f2)
 
 -- | @'Dynamic' a@ is a 'Semigroup' whenever @a@ is: the eras are
 --   combined according to their semigroup structure, and the values
 --   of type @a@ are combined pointwise.  Note that @'Dynamic' a@ cannot
 --   be an instance of 'Monoid' since 'Era' is not.
-instance Semigroup a => Semigroup (Dynamic a) where
+instance (Clock t, Semigroup a) => Semigroup (Dynamic t a) where
   Dynamic d1 f1 <> Dynamic d2 f2 = Dynamic (d1 <> d2) (f1 <> f2)
 
 -- | Create a 'Dynamic' from a start time, an end time, and a
 --   time-varying value.
-mkDynamic :: Time -> Time -> (Time -> a) -> Dynamic a
+mkDynamic :: t -> t -> (t -> a) -> Dynamic t a
 mkDynamic s e = Dynamic (mkEra s e)
 
 -- | Fold for 'Dynamic'.
-onDynamic :: (Time -> Time -> (Time -> a) -> b) -> Dynamic a -> b
+onDynamic :: (t -> t -> (t -> a) -> b) -> Dynamic t a -> b
 onDynamic f (Dynamic e d) = f (start e) (end e) d
 
 -- | Shift a 'Dynamic' value by a certain duration.
-shiftDynamic :: Duration -> Dynamic a -> Dynamic a
+shiftDynamic :: (Clock t) => Diff t -> Dynamic t a -> Dynamic t a
 shiftDynamic sh =
   onDynamic $ \s e d ->
     mkDynamic
       (s .+^ sh)
       (e .+^ sh)
       (\t -> d (t .-^ sh))
+
+-- | take the first value until a deadline, then take the second value, inside a Dynamic.
+transitionDeadline :: Deadline t a => t -> Dynamic t (a -> a -> a)
+transitionDeadline dl = mkDynamic dl dl (\ t -> choose t dl)
 
 ------------------------------------------------------------
 --  Active
@@ -314,10 +376,10 @@ shiftDynamic sh =
 --
 --   The addition of constant values enable 'Monoid' and 'Applicative'
 --   instances for 'Active'.
-newtype Active a = Active (MaybeApply Dynamic a)
+newtype Active t a = Active (MaybeApply (Dynamic t) a)
   deriving (Functor, Apply, Applicative)
 
-instance Newtype (Active a) (MaybeApply Dynamic a) where
+instance Newtype (Active t a) (MaybeApply (Dynamic t) a) where
   pack              = Active
   unpack (Active m) = m
 
@@ -334,7 +396,7 @@ over2 _ f n1 n2 = pack (f (unpack n1) (unpack n2))
 -- | Active values over a type with a 'Semigroup' instance are also an
 --   instance of 'Semigroup'.  Two active values are combined
 --   pointwise; the resulting value is constant iff both inputs are.
-instance Semigroup a => Semigroup (Active a) where
+instance (Clock t, Semigroup a) => Semigroup (Active t a) where
   (<>) = (over2 Active . over2 MaybeApply) combine
    where
     combine (Right m1) (Right m2)
@@ -349,55 +411,59 @@ instance Semigroup a => Semigroup (Active a) where
     combine (Left d1) (Left d2)
       = Left (d1 <> d2)
 
-instance (Monoid a, Semigroup a) => Monoid (Active a) where
+instance (Clock t, Monoid a, Semigroup a) => Monoid (Active t a) where
   mempty  = Active (MaybeApply (Right mempty))
   mappend = (<>)
 
 -- | Create an 'Active' value from a 'Dynamic'.
-fromDynamic :: Dynamic a -> Active a
+fromDynamic :: Dynamic t a -> Active t a
 fromDynamic = Active . MaybeApply . Left
 
 -- | Create a dynamic 'Active' from a start time, an end time, and a
 --   time-varying value.
-mkActive :: Time -> Time -> (Time -> a) -> Active a
+mkActive :: t -> t -> (t -> a) -> Active t a
 mkActive s e f = fromDynamic (mkDynamic s e f)
 
 -- | Fold for 'Active's.  Process an 'Active a', given a function to
 --   apply if it is a pure (constant) value, and a function to apply if
 --   it is a 'Dynamic'.
-onActive :: (a -> b) -> (Dynamic a -> b) -> Active a -> b
+onActive :: (a -> b) -> (Dynamic t a -> b) -> Active t a -> b
 onActive f _ (Active (MaybeApply (Right a))) = f a
 onActive _ f (Active (MaybeApply (Left d)))  = f d
 
 -- | Modify an 'Active' value using a case analysis to see whether it
 --   is constant or dynamic.
-modActive :: (a -> b) -> (Dynamic a -> Dynamic b) -> Active a -> Active b
+modActive :: (Clock t) => (a -> b) -> (Dynamic t a -> Dynamic t b) -> Active t a -> Active t b
 modActive f g = onActive (pure . f) (fromDynamic . g)
 
 -- | Interpret an 'Active' value as a function from time.
-runActive :: Active a -> (Time -> a)
+runActive :: Active t a -> (t -> a)
 runActive = onActive const runDynamic
 
 -- | Get the value of an @Active a@ at the beginning of its era.
-activeStart :: Active a -> a
+activeStart :: Active t a -> a
 activeStart = onActive id (onDynamic $ \s _ d -> d s)
 
 -- | Get the value of an @Active a@ at the end of its era.
-activeEnd :: Active a -> a
+activeEnd :: Active t a -> a
 activeEnd = onActive id (onDynamic $ \_ e d -> d e)
 
 -- | Get the 'Era' of an 'Active' value (or 'Nothing' if it is
 --   a constant/pure value).
-activeEra :: Active a -> Maybe Era
+activeEra :: Active t a -> Maybe (Era t)
 activeEra = onActive (const Nothing) (Just . era)
 
 -- | Test whether an 'Active' value is constant.
-isConstant :: Active a -> Bool
+isConstant :: Active t a -> Bool
 isConstant = onActive (const True) (const False)
 
 -- | Test whether an 'Active' value is 'Dynamic'.
-isDynamic :: Active a -> Bool
+isDynamic :: Active t a -> Bool
 isDynamic = onActive (const False) (const True)
+
+-- | take the first value until a deadline, then take the second value, inside an 'Active'.
+activeDeadline :: Deadline t a => t -> Active t (a -> a -> a)
+activeDeadline = fromDynamic . transitionDeadline
 
 ------------------------------------------------------------
 --  Combinators
@@ -422,40 +488,44 @@ isDynamic = onActive (const False) (const True)
 --   era, use its 'Functor' and 'Applicative' instances.  For example,
 --   @(*2) \<$\> ui@ varies from @0@ to @2@ over the era @[0,1]@.  To
 --   alter the era, you can use 'stretch' or 'shift'.
-ui :: Fractional a => Active a
-ui = interval 0 1
+-- TODO: Num=>Clock
+ui :: (Clock t, FractionalOf t a) => Active t a
+ui = interval (toTime 0) (toTime 1)
 
 -- | @interval a b@ is an active value starting at time @a@, ending at
 --   time @b@, and taking the value @t@ at time @t@.
-interval :: Fractional a => Time -> Time -> Active a
-interval a b = mkActive a b (fromRational . unTime)
+interval :: (Clock t, FractionalOf t a) => t -> t -> Active t a
+interval a b = mkActive a b fromTime
 
 -- | @stretch s act@ \"stretches\" the active @act@ so that it takes
 --   @s@ times as long (retaining the same start time).
-stretch :: Rational -> Active a -> Active a
-stretch str =
-  modActive id . onDynamic $ \s e d ->
-    mkDynamic s (s .+^ (str *^ (e .-. s)))
-      (\t -> d (s .+^ ((t .-. s) ^/ str)))
+stretch :: (Clock t) => Rational -> Active t a -> Active t a
+stretch 0 = modActive id . onDynamic $ \s e d -> mkDynamic s s d
+stretch str = modActive id . onDynamic $ \s e d ->
+    mkDynamic s (s .+^ (fromRational str *^ (e .-. s)))
+      (\t -> d (s .+^ ((t .-. s) ^/ fromRational str)))
 
 -- | @stretchTo d@ 'stretch'es an 'Active' so it has duration @d@.
 --   Has no effect if (1) @d@ is non-positive, or (2) the 'Active'
 --   value is constant, or (3) the 'Active' value has zero duration.
-stretchTo :: Duration -> Active a -> Active a
-stretchTo d a
-  | d <= 0                               = a
-  | (duration <$> activeEra a) == Just 0 = a
-  | otherwise = maybe a (`stretch` a) ((toRational . (d /) . duration) <$> activeEra a)
+-- [AJG: conditions (1) and (3) no longer true: to consider changing]
+
+stretchTo :: (Deadline t a) => Diff t -> Active t a -> Active t a
+stretchTo diff = modActive id . onDynamic $ \s e d ->
+    mkDynamic s (s .+^ diff)
+        (\ t -> choose (s .+^ diff) s
+                     (d s)      -- avoiding dividing by zero
+                     (d (s .+^ (((t .-. s) ^/ (fromDuration diff / fromDuration (e .-. s)))))))
 
 -- | @a1 \`during\` a2@ 'stretch'es and 'shift's @a1@ so that it has the
 --   same era as @a2@.  Has no effect if either of @a1@ or @a2@ are constant.
-during :: Active a -> Active a -> Active a
+during :: (Deadline t a) => Active t a -> Active t a -> Active t a
 during a1 a2 = maybe a1 (\(d,s) -> stretchTo d . atTime s $ a1)
                  ((duration &&& start) <$> activeEra a2)
 
 -- | @shift d act@ shifts the start time of @act@ by duration @d@.
 --   Has no effect on constant values.
-shift :: Duration -> Active a -> Active a
+shift :: (Clock t) => Diff t -> Active t a -> Active t a
 shift sh = modActive id (shiftDynamic sh)
 
 -- | Reverse an active value so the start of its era gets mapped to
@@ -463,15 +533,16 @@ shift sh = modActive id (shiftDynamic sh)
 --   visualized as
 --
 --   <<http://www.cis.upenn.edu/~byorgey/hosted/backwards.png>>
-backwards :: Active a -> Active a
+backwards :: (Clock t) => Active t a -> Active t a
 backwards =
   modActive id . onDynamic $ \s e d ->
     mkDynamic s e
-      (\t -> d (e - t + s))
+      (\t -> d (s .+^ (e .-. t)))
+
 
 -- | Take a \"snapshot\" of an active value at a particular time,
 --   resulting in a constant value.
-snapshot :: Time -> Active a -> Active a
+snapshot :: (Clock t) => t -> Active t a -> Active t a
 snapshot t a = pure (runActive a t)
 
 -- | \"Clamp\" an active value so that it is constant before and after
@@ -486,14 +557,12 @@ snapshot t a = pure (runActive a t)
 --
 --   See also 'clampBefore' and 'clampAfter', which clamp only before
 --   or after the era, respectively.
-clamp :: Active a -> Active a
+
+clamp :: Clock t => Active t a -> Active t a
 clamp =
   modActive id . onDynamic $ \s e d ->
     mkDynamic s e
-      (\t -> case () of _ | t < s     -> d s
-                          | t > e     -> d e
-                          | otherwise -> d t
-      )
+      (\t -> d (firstTime (lastTime t s) e))
 
 -- | \"Clamp\" an active value so that it is constant before the start
 --   of its era. For example, @clampBefore 'ui'@ can be visualized as
@@ -501,7 +570,7 @@ clamp =
 --   <<http://www.cis.upenn.edu/~byorgey/hosted/clampBefore.png>>
 --
 --   See the documentation of 'clamp' for more information.
-clampBefore :: Active a -> Active a
+clampBefore :: Active t a -> Active t a
 clampBefore = undefined
 
 -- | \"Clamp\" an active value so that it is constant after the end
@@ -510,7 +579,7 @@ clampBefore = undefined
 --   <<http://www.cis.upenn.edu/~byorgey/hosted/clampAfter.png>>
 --
 --   See the documentation of 'clamp' for more information.
-clampAfter :: Active a -> Active a
+clampAfter :: Active t a -> Active t a
 clampAfter = undefined
 
 -- | \"Trim\" an active value so that it is empty outside its era.
@@ -528,14 +597,13 @@ clampAfter = undefined
 --
 --   See also 'trimBefore' and 'trimActive', which trim only before or
 --   after the era, respectively.
-trim :: Monoid a => Active a -> Active a
+
+trim :: (Clock t, Deadline t a, Monoid a) => Active t a -> Active t a
 trim =
   modActive id . onDynamic $ \s e d ->
     mkDynamic s e
-      (\t -> case () of _ | t < s     -> mempty
-                          | t > e     -> mempty
-                          | otherwise -> d t
-      )
+      (\t -> choose s t (choose t e (d t) mempty) mempty)
+
 
 -- | \"Trim\" an active value so that it is empty /before/ the start
 --   of its era. For example, @trimBefore 'ui'@ can be visualized as
@@ -543,13 +611,11 @@ trim =
 --   <<http://www.cis.upenn.edu/~byorgey/hosted/trimBefore.png>>
 --
 --   See the documentation of 'trim' for more details.
-trimBefore :: Monoid a => Active a -> Active a
+trimBefore :: (Clock t, Deadline t a, Monoid a) => Active t a -> Active t a
 trimBefore =
   modActive id . onDynamic $ \s e d ->
     mkDynamic s e
-      (\t -> case () of _ | t < s     -> mempty
-                          | otherwise -> d t
-      )
+      (\t -> choose s t (d t) mempty)
 
 -- | \"Trim\" an active value so that it is empty /after/ the end
 --   of its era.  For example, @trimAfter 'ui'@ can be visualized as
@@ -557,18 +623,16 @@ trimBefore =
 --   <<http://www.cis.upenn.edu/~byorgey/hosted/trimAfter.png>>
 --
 --   See the documentation of 'trim' for more details.
-trimAfter :: Monoid a => Active a -> Active a
+trimAfter :: (Clock t, Deadline t a, Monoid a) => Active t a -> Active t a
 trimAfter =
   modActive id . onDynamic $ \s e d ->
     mkDynamic s e
-      (\t -> case () of _ | t > e     -> mempty
-                          | otherwise -> d t
-      )
+      (\t -> choose t e (d t) mempty)
 
 -- | Set the era of an 'Active' value.  Note that this will change a
 --   constant 'Active' into a dynamic one which happens to have the
 --   same value at all times.
-setEra :: Era -> Active a -> Active a
+setEra :: Era t -> Active t a -> Active t a
 setEra er =
   onActive
     (mkActive (start er) (end er) . const)
@@ -577,13 +641,13 @@ setEra er =
 -- | @atTime t a@ is an active value with the same behavior as @a@,
 --   shifted so that it starts at time @t@.  If @a@ is constant it is
 --   returned unchanged.
-atTime :: Time -> Active a -> Active a
+atTime :: Clock t => t -> Active t a -> Active t a
 atTime t a = maybe a (\e -> shift (t .-. start e) a) (activeEra a)
 
 -- | @a1 \`after\` a2@ produces an active that behaves like @a1@ but is
 --   shifted to start at the end time of @a2@.  If either @a1@ or @a2@
 --   are constant, @a1@ is returned unchanged.
-after :: Active a -> Active a -> Active a
+after :: Clock t => Active t a -> Active t a -> Active t a
 after a1 a2 = maybe a1 ((`atTime` a1) . end) (activeEra a2)
 
 infixr 5 ->>
@@ -594,7 +658,7 @@ infixr 5 ->>
 -- | Sequence/overlay two 'Active' values: shift the second to start
 --   immediately after the first (using 'after'), then compose them
 --   (using '<>').
-(->>) :: Semigroup a => Active a -> Active a -> Active a
+(->>) :: (Clock t, Semigroup a) => Active t a -> Active t a -> Active t a
 a1 ->> a2 = a1 <> (a2 `after` a1)
 
 
@@ -605,16 +669,20 @@ a1 ->> a2 = a1 <> (a2 `after` a1)
 --   the value which acts like the first up to the common end/start
 --   point, then like the second after that.  If both are constant,
 --   return the first.
-(|>>) :: Active a -> Active a -> Active a
-a1 |>> a2 = (fromJust . getFirst) <$>
-             (trimAfter (First . Just <$> a1) ->> trimBefore (First . Just <$> a2))
+(|>>) :: (Deadline t a) => Active t a -> Active t a -> Active t a
+a1 |>> a2 = onActive pure (\ d1 ->
+                activeDeadline (end (era d1))
+                        <.> a1
+                        <.> (a2 `after` a1)
+          ) a1
 
 -- XXX implement 'movie' with a balanced fold
 
 -- | Splice together a list of active values using '|>>'.  The list
 --   must be nonempty.
-movie :: [Active a] -> Active a
+movie :: (Deadline t a) => [Active t a] -> Active t a
 movie = foldr1 (|>>)
+
 
 ------------------------------------------------------------
 --  Discretization
@@ -628,10 +696,11 @@ movie = foldr1 (|>>)
 --   after time 1.
 --
 --   It is an error to call @discrete@ on the empty list.
-discrete :: [a] -> Active a
+discrete :: (Clock t, FractionalOf t Rational) => [a] -> Active t a
 discrete [] = error "Data.Active.discrete must be called with a non-empty list."
-discrete xs = f <$> (ui :: Active Rational)
-  where f t | t <= 0    = arr ! 0
+discrete xs = f <$> ui
+  where f (t :: Rational)
+            | t <= 0    = arr ! 0
             | t >= 1    = arr ! (n-1)
             | otherwise = arr ! floor (t * fromIntegral n)
         n   = length xs
@@ -646,12 +715,14 @@ discrete xs = f <$> (ui :: Active Rational)
 --   If the 'Active' value is constant (and thus has no start or end
 --   times), a list of length 1 is returned, containing the constant
 --   value.
-simulate :: Rational -> Active a -> [a]
+simulate :: (Clock t, FractionalOf t Rational) => Rational -> Active t a -> [a]
 simulate rate =
   onActive (:[])
-           (\d -> map (runDynamic d)
-                      (let s = start (era d)
-                           e = end   (era d)
+           (\d -> map (runDynamic d . toTime)
+                      (let s, e :: Rational
+                           s = fromTime $ start $ era d
+                           e = fromTime $ end   $ era d
                        in  [s, s + 1^/rate .. e]
                       )
            )
+
