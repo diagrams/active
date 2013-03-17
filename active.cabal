@@ -1,5 +1,5 @@
 name:                active
-version:             0.1.0.3
+version:             0.2
 synopsis:            Abstractions for animation
 description:         "Active" abstraction for animated things with finite start and end times.
 license:             BSD3
@@ -11,7 +11,7 @@ category:            Data
 build-type:          Simple
 cabal-version:       >=1.10
 extra-source-files:  CHANGES
-tested-with:         GHC == 6.12.3, GHC == 7.0.4, GHC == 7.2.1, GHC == 7.4.1, GHC == 7.6.1
+tested-with:         GHC == 7.6.1
 bug-reports:         https://github.com/diagrams/active/issues
 source-repository head
   type:     git
