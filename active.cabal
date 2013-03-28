@@ -19,7 +19,7 @@ source-repository head
 
 library
   exposed-modules:     Data.Active
-  build-depends:       base >= 4.0 && < 4.7,
+  build-depends:       base >= 4.0 && < 4.8,
                        array >= 0.3 && < 0.5,
                        semigroups >= 0.1 && < 0.10,
                        semigroupoids >= 1.2 && < 3.1,
@@ -31,7 +31,7 @@ library
 test-suite active-tests
     type:              exitcode-stdio-1.0
     main-is:           active-tests.hs
-    build-depends:     base >= 4.0 && < 4.7,
+    build-depends:     base >= 4.0 && < 4.8,
                        array >= 0.3 && < 0.5,
                        semigroups >= 0.1 && < 0.10,
                        semigroupoids >= 1.2 && < 3.1,
