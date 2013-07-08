@@ -10,3 +10,14 @@ cabal-dev
 dist_*
 history
 TAGS
+.diagrams_cache
+.shake.database
+*.errors
+*.pdf
+Shake
+*.aux
+*.log
+*.ptb
+*.tex
+ActiveDiagrams
+semantics/diagrams/*
