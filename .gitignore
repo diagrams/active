@@ -19,5 +19,7 @@ Shake
 *.log
 *.ptb
 *.tex
+*.bbl
+*.blg
 ActiveDiagrams
 semantics/diagrams/*
