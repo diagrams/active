@@ -184,7 +184,7 @@ import ActiveDiagrams
 
 dia = vcat' with {sep = 1}
       [ xactiveD (-3) 1 red  <> tl
-      , text' "+"
+      , text' "+" -- TODO pick better symbol for operator
       , xactiveD (-4) 3 blue <> tl
       , text' "="
       , result
@@ -192,7 +192,7 @@ dia = vcat' with {sep = 1}
 
 result = (draw $ xactive' (-3) 8 (xactiveRect (-3) 1 red |||||| xactiveRect 1 8 blue))
    <> tl
-   %% TODO draw a blue arrow showing the translation of the second value
+   -- TODO draw a blue arrow showing the translation of the second value
 \end{diagram}
 \end{center}
 %$
