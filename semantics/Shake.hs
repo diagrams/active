@@ -18,5 +18,5 @@ main = shake shakeOptions $ do
       let input = replaceExtension output "tex"
       need [input]
       system' pdflatex $ ["--enable-write18", input]
-      -- system' bibtex $ [dropExtension input]
+      system' bibtex $ [dropExtension input]
       system' pdflatex $ ["--enable-write18", input]
