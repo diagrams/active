@@ -57,11 +57,19 @@ xactiveD s e c = draw (xactive s e c)
 a1, a2, a12 :: Diagram Cairo R2
 a1 = xactiveD (-6) 3 red
 a2 = xactiveD (-1) 5 blue
-a12 = xactiveD (-1) 3 purple
+a12 = draw (xactive' (-1) 3 (xactiveRect (-1) 3 red <> xactiveRect (-1) 3 blue))
+
+a1R :: Diagram Cairo R2
+a1R = draw $ XActive (Just (-6), a1RRect, Nothing)
+  where
+    a1RRect = xactiveRect (-6) 3 red
+              -- hack since diagrams doesn't yet support gradients
+          ||| hcat (map (\o -> rect 0.137 2 # lw 0 # fcA (red `withOpacity` o))
+                        [0.5, 0.49 .. 0]
+                   )
 
 tl :: Diagram Cairo R2
 tl = timeline (-10) 10
 
+text' :: Renderable (Path R2) b => String -> Diagram b R2
 text' s = (stroke $ textSVG' (TextOpts s lin2 INSIDE_H KERN False 4 4)) # fc black # lw 0
-
--- main = defaultMain (timeline (-10) 10)
