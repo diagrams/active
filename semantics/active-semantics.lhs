@@ -1,3 +1,5 @@
+%% -*- LaTeX -*-
+
 \documentclass{article}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -23,6 +25,10 @@
 
 %format a1
 %format a2
+%format l1
+%format l2
+%format r1
+%format r2
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Package imports
@@ -106,6 +112,8 @@
 
 \newcommand{\term}[1]{\emph{#1}}
 
+\newcommand{\pkg}[1]{\texttt{#1}}
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -140,7 +148,9 @@ The function $f$ is total on the interval $[t_s, t_e]$ but is
 undefined outside it.  (Note that we take $[t_s, t_e]$ to denote the
 empty interval when $t_s > t_e$.)  As for the type of time values $t$,
 we assume that it is bi-infinite, has a linear order, and forms an
-affine space together with an associated type $d$ of \emph{durations}.
+affine space together with an associated type $d$ of
+\emph{durations}.  In particular it does \emph{not} matter whether
+time is continuous or discrete; our model will work in either case.
 
 Our first goal is to enable \emph{parallel composition} of
 |Active|. The first question is how the start and end times should be
@@ -206,7 +216,7 @@ constantly the identity value at all times.
 \citet{matlage2011every} explicitly take the \emph{union} of intervals
 (to be precise, the smallest interval containing both input intervals)
 when forming the parallel composition of two |Active| values.  Early
-versions of the |active| library~\citep{yorgey2011active} made the
+versions of the \pkg{active} library~\citep{yorgey2011active} made the
 same choice.  \todo{talk about Hudak temporal media paper(s), need to
   figure out where they stand on these issues.}  Indeed, on the face
 of it, taking the union seems more ``useful'': one typically wants to
@@ -222,57 +232,236 @@ because it gives the user more control over how the unioning happens.
 In the end, we have come to the conclusion that taking the
 intersection of intervals gives a cleaner, more natural, and
 ultimately more useful semantics.  We can justify this decision in a
-few different ways:
-\begin{itemize}
-\item The natural identity element for parallel composition based on
-  union would be something like |(+inf, const mempty, -inf)|, which is
-  nonsense.  In practice we would end up adjoining a new,
-  distinguished identity element, leading to the need for many
-  special-case analyses to handle it appropriately.  On the other
-  hand, as we have seen above, the natural identity element for
-  intersection also has a natural interpretation,
-  and needs no special case.
-\item Combining via union forces us to decide what values should be
-  used \emph{outside} the interval of an active value, since we may
-  need a value to combine.
+few different ways.
+
+First, the natural identity element for parallel composition based on
+union would be something like |(+inf, const mempty, -inf)|, which is
+nonsense.  In practice we end up adjoining a new, distinguished
+identity element, leading to the need for many special-case analyses
+to handle it appropriately.  On the other hand, as we have seen above,
+the natural identity element for intersection has a natural
+interpretation, and needs no special case.
+
+Second, combining via union forces us to decide what values should be
+used \emph{outside} the interval of an active value, since we may need
+a value to combine.
 \begin{center}
 \begin{diagram}[width=200]
 import ActiveDiagrams
-dia = (cat' unitY with [a1,a2X]) <> tl
+dia = (cat' unitY with [a1X,a2X]) <> tl
 
-a2X = a2 <> (text' "?" # translateX (-3.5) <> xactiveRect (-6) (-1) (blend 0.5 blue white))
+a2X = mconcat
+  [ a2
+  , text' "?" # scale 0.7 # translateX (-3.5)
+  , xactiveRect (-6) (-1) (blend 0.7 blue white)
+  ]
+
+a1X = mconcat
+  [ a1
+  , text' "?" # scale 0.7 # translateX 4
+  , xactiveRect 3 5 (blend 0.5 red white)
+  ]
 \end{diagram}
 \end{center}
-We have a few choices.
+Essentially, we are forced to revise the semantics: where previously
+we said that the function of an active value is simply undefined
+outside the interval, we would now have to specify the values the
+function takes on outside the interval. We have a few choices.
 
-  \begin{itemize}
-  \item One seemingly sensible choice is |mempty|, which works as long
-    as there is a |Monoid| instance for the base type |a|.  However,
-    more generally, we want not only a monoidal parallel composition
-    operation, but also an |Applicative| instance for active values
-    (from which parallel composition can be derived).  Unlike parallel
-    composition itself, the |Applicative| instance should not depend
-    on |Monoid| instances for the base types, but implementing it
-    leads to the same need for values outside an active's interval.
+\begin{itemize}
+\item One seemingly sensible choice is |mempty|, which works as long
+  as there is a |Monoid| instance for the base type |a|.  However,
+  more generally, we want not only a monoidal parallel composition
+  operation, but also an |Applicative| instance for active values
+  (from which parallel composition can be derived).  Unlike parallel
+  composition itself, the |Applicative| instance cannot depend
+  on |Monoid| instances for the base types, but implementing it
+  leads to the same need for values outside an active's interval.
 
-  \item Another option
+\item Another option (the one taken by~\citep{matlage2011every}) is
+  to ``clamp'' the value of the function to its value at the
+  endpoints, \ie\ $f(t) = f(t_s)$ for all $t < t_s$ and $f(t) =
+  f(t_e)$ for all $t > t_e$.  However, this may not always be what
+  the user wants.
 
-  \end{itemize}
-\item Can define combinators for doing union from fundamental
-  intersection semantics, but not vice versa.
+\item A final option (taken by earlier versions of the \pkg{active}
+  package) is to simply require that the function always be defined
+  at all times in the first place.  However, this requires the user
+  to reason about the behavior of active values over the whole
+  timeline and not just on their interval, in some sense defeating
+  the point of having an interval in the first place.
 \end{itemize}
+
+The point is that there are multiple viable options, with no one
+option standing out as obviously the most correct or fundamental.
+This in and of itself is a strong hint that union should not be
+taken as primitive.  It is easy to imagine users wanting all three
+of the behaviors described above; baking any one of them into the
+primitive semantics of parallel composition necessitates awkward
+workarounds when the user wants a different behavior.
+
+As far as expressiveness goes, it does not matter that much: given
+appropriate extension and restriction operations to modify the
+intervals of active values, unioning and intersecting parallel
+composition are inter-definable.
 
 \section{Sequential composition and |FActive|}
 \label{sec:seq-comp}
 
 It's instructive to begin by trying to work out a semantics for
-sequential composition of |XActive|.  Of course it's clear enough that
-the end time of the first |XActive| should be matched up with the
-start time of the second.  But where should the resulting composite
-|XActive| be placed in time?  The main concern is that we want
-sequential composition to be associative.  One sensible choice is to
-leave the first |XActive| where it is, and translate the second so
-its start time coincides with the end time of the first:
+sequential composition of |XActive|. The idea, of course, is the end
+time of the first |XActive| should be matched up with the start time
+of the second.
+\begin{center}
+\begin{diagram}[width=200]
+import ActiveDiagrams
+
+dia = vcat' with {sep = 1}
+      [ hcat' with {sep = 2}
+        [ xactiveD (-3) 1 red
+        , text' ";"
+        , xactiveD (-4) 3 blue
+        ] # centerX
+      , text' "="
+      , result # centerX <> phantom tl
+      ]
+
+result = (draw $ xactive' (-3) 8 (xactiveRect (-3) 1 red |||||| xactiveRect 1 8 blue))
+\end{diagram}
+\end{center}
+%$
+However, this clear intuition has two big problems lurking in the details.
+First, what happens at the precise time of transition between the two
+values?  Second, how should the resulting composed value be positioned
+in time?  We will attack each problem in turn.
+
+\subsection{Transitions and endpoints}
+\label{sec:endpoints}
+
+When two actives are composed sequentially, what value does the
+composed active take on at the precise transition between the two?
+\begin{center}
+\begin{diagram}[width=200]
+import ActiveDiagrams
+
+dia = result # centerX <> phantom tl
+
+result = atop (text' "?" # scale 0.7 # translateX 1). draw . xactive' (-3) 8 $ hcat
+  [ xactiveRect (-3) 1 red
+  , vrule 3 # lw 0.1 # dashing [0.1,0.1] 0 # lc grey
+  , xactiveRect 1 8 blue
+  ]
+\end{diagram}
+\end{center}
+%$
+The problem is that at the precise transition time we have two values
+of the underlying type, one from each active.  Somehow we have to pick
+a single value for the combined active to take on at that time.
+Options include:
+\begin{itemize}
+\item We could combine the two values according to some semigroup operation.
+  However, this is not a very attractive option; intuitively, sequential
+  composition should not require any constraints on the base type at
+  all.
+\item We could simply take the second value and discard the first, or
+  take the first and discard the second. \todo{what do previous
+    versions of active do? this?} The problem is that this represents
+  an arbitrary choice, which we should be wary of baking into our
+  semantics.  As with unioning parallel composition, we take this as a
+  sign that we should take something yet more primitive which avoids
+  an arbitrary choice, and expose the choice to the user.
+\end{itemize}
+
+Our solution is to refine the semantics yet again. The idea is to
+track \emph{whether an active value is defined at its endpoints}, and
+only allow sequential composition when one value is defined at the
+endpoint (closed) and one is not (open). The semantics of an active
+value will still consist of a triple |(-inf + t, t -> a, t + inf)|.
+However, we also add two type indices, one for each endpoint, which
+are taken from a set $\{\infty,|C|,|O|\}$.  Their meanings are as
+follows:
+\begin{itemize}
+\item $\infty$ means that the endpoint is \emph{infinite}, that is,
+  $\pm \infty$.
+\item |C| means that the endpoint is \emph{closed}, that is, the
+  function is defined \emph{at} the endpoint.  We will continue to
+  illustrate such endpoints with a solid black line.
+\item |O| means that the endpoint is \emph{open}, that is, the
+  function is defined for values up to \emph{but not including} the
+  endpoint.  We will draw such endpoints using a dotted grey line.
+\end{itemize}
+
+Here are just a couple examples taken from the (nine) types which are now possible, with a
+representative illustration for each:
+
+\begin{itemize}
+
+\item |XActive O C t a|---a finite interval, closed at the right
+  endpoint but open on the left.
+\begin{center}
+\begin{diagram}[width=200]
+import ActiveDiagrams
+
+dia = oc <> tl
+
+oc = draw $ XActive (O (-6), r, C 3)  -- $
+  where
+    r = xactiveRect (-6) 3 red
+\end{diagram}
+\end{center}
+
+\item |XActive inf O t a|---an open endpoint on the right, infinite on
+  the left.
+\begin{center}
+\begin{diagram}[width=200]
+import ActiveDiagrams
+
+dia = infO <> tl
+
+infO = draw $ XActive (I, r, O 2)  -- $
+  where
+    r = cat' unit_X with
+      [ xactiveRect (-2) 2 red
+      , fade 7 0 0.5 50
+      ]
+\end{diagram}
+\end{center}
+\end{itemize}
+
+Now there are two sequential composition operators, with types given by
+\begin{spec}
+seqR  ::  XActive l1 O t a  ->  XActive C r2 t a  ->  XActive l1 r2 t a
+seqL  ::  XActive l1 C t a  ->  XActive O r2 t a  ->  XActive l1 r2 t a
+\end{spec}
+
+|seqR| gives rise to a semigroup operation on |XActive C O t a|
+(without the need for any constraints on |a|!), and similarly for
+|seqL| and |XActive O C t a|.
+
+Note that this also neatly handles the problem, noted earlier, of
+trying to sequentially compose infinite active values.  We can
+sequence, say, an |XActive inf O| and |XActive C O| (resulting in
+|XActive inf O|), but the types prevent us from sequencing, say, an
+|XActive C inf| with anything to its right.
+
+It is a bit awkward that we need two different sequential composition
+operators.  In some sense, there is really only one, with a type
+something like
+\begin{spec}
+seq  :: (r1,l2 `elem` {O,C}, r1 /= l2),
+     => XActive l1 r1 t a -> XActive l2 r2 t a -> XActive l1 r2 t a
+\end{spec}
+but it is not clear how best to express this type in such a way that
+|seq| is convenient to use.
+
+\subsection{Locations and translations}
+\label{sec:locations}
+
+ But where should the
+resulting composite |XActive| be placed in time?  The main concern is
+that we want sequential composition to be associative.  One sensible
+choice is to leave the first |XActive| where it is, and translate the
+second so its start time coincides with the end time of the first:
 \begin{center}
 \begin{diagram}[width=200]
 import ActiveDiagrams
@@ -291,17 +480,23 @@ result = (draw $ xactive' (-3) 8 (xactiveRect (-3) 1 red |||||| xactiveRect 1 8 
 \end{diagram}
 \end{center}
 %$
-It is easy to verify that this operation is associative.  However, the
-asymmetry is already a bit unsettling: another valid choice would be
-to translate the first value and leave the second unchanged.  Or we
-could always center the resulting |XActive| with respect to time $0$,
-or place its start time at time $0$, or\dots
+It is easy to verify that this operation is associative.\footnote{The
+  astute reader will already be wondering about values with infinite
+  start or end times.  We will return to deal with that complication
+  shortly.}  However, the asymmetry is already a bit unsettling:
+another valid choice would be to translate the first value and leave
+the second unchanged.  Or we could always center the resulting
+|XActive| with respect to time $0$, or place its start time at time
+$0$, or\dots
 
 In and of itself this plethora of choice is not necessarily a problem;
 we could just pick the most sensible-seeming option and leave it at
 that.  However, it points at a deeper problem, which comes into
 sharper focus when we consider what the identity element for
-sequential composition might be.
+sequential composition might be.  Just for the sake of concrete
+examples, let us assume that we have chosen the semantics for
+sequential composition illustrated above, where the second value is
+translated so that it follows the first.
 
 % type FixedActive t a = (-inf + t, t -> a, t + inf)
 %   -- closed, i.e. defined on x <= t <= y.

@@ -26,7 +26,11 @@ timeline t1 t2 =
               # centerY
               # alignR
 
-newtype XActive = XActive (Maybe Double, Diagram Cairo R2, Maybe Double)
+data End = I
+         | C Double
+         | O Double
+
+newtype XActive = XActive (End, Diagram Cairo R2, End)
 
 class Drawable d where
   draw :: d -> Diagram Cairo R2
@@ -34,14 +38,15 @@ class Drawable d where
 instance Drawable XActive where
   draw (XActive (s, d, e)) = drawLine s <> drawLine e <> d
     where
-      drawLine Nothing  = mempty
-      drawLine (Just x) = vrule 3 # lw 0.1 # translateX x
+      drawLine I     = mempty
+      drawLine (C x) = vrule 3 # lw 0.1 # translateX x
+      drawLine (O x) = vrule 3 # lw 0.1 # dashing [0.2,0.2] 0 # lc grey # translateX x  -- XXX fix me
 
 xactive' :: Double -> Double -> Diagram Cairo R2 -> XActive
 xactive' s e d = XActive
-  ( Just s
+  ( C s
   , d
-  , Just e
+  , C e
   )
 
 xactive :: Double -> Double -> Colour Double -> XActive
@@ -60,13 +65,16 @@ a2 = xactiveD (-1) 5 blue
 a12 = draw (xactive' (-1) 3 (xactiveRect (-1) 3 red <> xactiveRect (-1) 3 blue))
 
 a1R :: Diagram Cairo R2
-a1R = draw $ XActive (Just (-6), a1RRect, Nothing)
+a1R = draw $ XActive (C (-6), a1RRect, I)
   where
     a1RRect = xactiveRect (-6) 3 red
-              -- hack since diagrams doesn't yet support gradients
-          ||| hcat (map (\o -> rect 0.137 2 # lw 0 # fcA (red `withOpacity` o))
-                        [0.5, 0.49 .. 0]
-                   )
+          ||| fade 7 0.5 0 50
+
+-- Hack since diagrams doesn't yet support gradients.  This doesn't even look right.
+fade len o1 o2 n =
+  hcat (map (\o -> let c = red `withOpacity` o in rect (len / n) 2 # lw 0 # fcA c)
+            [o1, o1 + (o2 - o1) / (n - 1) .. o2]
+       )
 
 tl :: Diagram Cairo R2
 tl = timeline (-10) 10
