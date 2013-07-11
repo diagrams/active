@@ -617,7 +617,6 @@ result = (draw $ Active (C (-3), r, O 8)) <> tl  -- $
     r = hcat [ activeRect (-3) 1 red, activeRect 1 8 blue ]
 \end{diagram}
 \end{center}
-%$
 It is easy to verify that this operation is associative.  However, the
 asymmetry is already a bit unsettling: another valid choice would be
 to translate the first value and leave the second unchanged.  (Because
@@ -659,12 +658,50 @@ causing the other |Active| to be translated.  But what if |z|
 \emph{had no} absolute time?  What if we didn't have to make this kind
 of choice for the result of |seqR| either?
 
-\todo{equivalence classes of |Active| under translation.  seq.comp. is
-naturally a monoid on such equivalence classes.  What we were really
-doing before is working with representatives of these equivalence
-classes---that's why we kept having to make arbitrary decisions of a
-time, we were picking a concrete representative for an equivalence
-class.  The point, of course, is that the representative doesn't matter.}
+This turns out to be exactly the right idea.  |seqR| and |seqL| do not
+naturally operate on |Active| directly, but rather on
+\emph{equivalence classes} of |Active| values up to translation!  That
+is, we introduce a translation operation |trans :: d -> Active l r t a
+-> Active l r t a| which is the derived group action of durations on
+|Active| values. We then define the relation \[ a_1 \sim a_2 \quad
+\iff \quad \exists d.\ |trans d a1| = |a2|, \] that is, two |Active|
+values are related if one is a shifted copy of the other.
+\begin{center}
+\begin{diagram}[width=200]
+import ActiveDiagrams
+
+dia = vcat' with {sep = 1}
+  [ a1                <> tl
+  , text' "~"
+  , a1 # translateX 4 <> tl
+  ]
+\end{diagram}
+\end{center}
+It is not hard to show this is an equivalence, and we may therefore
+form the set of equivalence classes of |Active| values under this
+relation, and write $[a]$ for the class of values equivalent to $a$.
+Intuitively, we may think of these classes as |Active| values whose
+position on the timeline has been ``forgotten''; pictorially, we can
+just represent them without a timeline at all:
+\begin{center}
+\begin{diagram}[width=200]
+import ActiveDiagrams
+dia = (a1 # centerXY) <> phantom tl
+\end{diagram}
+\end{center}
+We may now define |seqR| on equivalence classes by |[a1] `seqR` [a2] =
+[a1 `seqR` a2]| (where the second |seqR| is the one from before, which
+translates |a2| to start after |a1|).  It is not hard to verify that
+this |seqR| is well-defined, associative, and has |[z]| as an
+identity---note that there is only \emph{one} equivalence class of
+zero-duration, closed-open |Active| values, consisting precisely of
+|z| for all possible choices of $t_z$.
+
+In fact, what we were really doing all along when discussing
+sequential composition was working with \emph{representatives} of
+these equivalence classes---that's why we kept running into an
+arbitrary choice of time; we were trying to pick some concrete
+representative of an equivalence class.
 
 \section{|XActive| and |FActive|}
 \label{sec:xactive-factive}
