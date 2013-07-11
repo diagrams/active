@@ -278,6 +278,8 @@ components; the identity element for parallel composition is thus
 given by |(-inf, const mempty, inf)|, that is, the |Active| which is
 constantly the identity value at all times.
 
+\todo{write about |Applicative| instance here too}
+
 \section{Why not union?}
 \label{sec:why-not-union}
 
