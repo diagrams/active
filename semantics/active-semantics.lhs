@@ -23,10 +23,16 @@
 %format pure  = "\cons{pure}"
 
 %format ===      = "\equiv"
+%format /=       = "\neq"
 %format <>       = "\diamond"
 %format mempty   = "\varepsilon"
 %format idiom(a) = "\idiom{" a "}"
 %format <*>      = "\circledast"
+
+%format `seqR`   = "\rhd"
+%format seqR     = "(\mathord{\rhd}\!)"
+%format `seqL`   = "\lhd"
+%format seqL     = "(\!\mathord{\lhd})"
 
 %format a1
 %format a2
@@ -150,11 +156,13 @@ consisting of
 \item an absolute end time $t_e$.
 \end{itemize}
 We call |a| the \term{base type}, and $[t_s, t_e]$ the
-\term{interval}.  We assume the type of time values $t$ is
-bi-infinite, has a linear order, and forms an affine space together
-with an associated type $d$ of \emph{durations}.  In particular it
-does not matter whether time is continuous or discrete.  Finally, we
-note that |Active t| is a |Functor|.
+\term{interval}.  (For now, we put off the question of where the
+function is defined---we return to it in \pref{sec:why-not-union}). We
+assume the type of time values $t$ is bi-infinite, has a linear order,
+and forms an affine space together with an associated type $d$ of
+\emph{durations}.  In particular it does not matter whether time is
+continuous or discrete.  Finally, we note that |Active t| is a
+|Functor|.
 
 This is our starting point, but over the remainder of this document we
 will greatly refine it.  In particular:
@@ -428,7 +436,7 @@ import ActiveDiagrams
 dia = vcat' with {sep = 1}
       [ hcat' with {sep = 2}
         [ activeD (-3) 1 red
-        , text' ";"
+        , seqR
         , activeD (-4) 3 blue
         ] # centerX
       , text' "="
@@ -558,7 +566,9 @@ Note that this also neatly handles the problem, noted in passing
 earlier, of trying to sequentially compose infinite active values.  We
 can sequence, say, an |Active inf O| and |Active C O| (resulting in
 |Active inf O|), but the types prevent us from sequencing, say, an
-|Active C inf| with anything to its right.
+|Active C inf| with anything to its right. On the other hand, the very
+astute reader will note that we have created problems for parallel
+composition---we return to patch things up in \pref{sec:fix-par-comp}.
 
 It is a bit awkward that we need two different sequential composition
 operators.  In some sense, there is really only one, with a type
@@ -576,10 +586,11 @@ instead of match!).
 \subsection{Locations and translations}
 \label{sec:locations}
 
-We now attack the second problem: \todo{XXX working here} But where
-should the resulting composite |Active| be placed in time?  The main
-concern is that we want sequential composition to be associative.  One
-sensible choice is to leave the first |Active| where it is, and
+We now attack the second problem: where should the result of a
+sequential composition be placed in time?  Our primary motivation is
+to ensure that |seqR| and |seqL| are monoidal.
+
+One sensible choice is to leave the first |Active| where it is, and
 translate the second so its start time coincides with the end time of
 the first:
 \begin{center}
@@ -587,33 +598,94 @@ the first:
 import ActiveDiagrams
 
 dia = vcat' with {sep = 1}
-      [ activeD (-3) 1 red  <> tl
-      , text' "+" -- TODO pick better symbol for operator
-      , activeD (-4) 3 blue <> tl
+      [ activeDR (-3) 1 red  <> tl
+      , seqR
+      , activeDR (-4) 3 blue <> tl
       , text' "="
-      , result
+      , vcat
+        [ mconcat
+          [ ( ((-4) & 0)  ~~  (0.5 & 0) ) # dashing [0.2,0.2] 0
+          , triangle 0.5 # rotateBy (-1/4) # alignR # translateX 1 # lw 0
+          ]
+          # lw 0.2 # lc blue # fc blue # opacity 0.5
+        , result
+        ]
       ]
 
-result = (draw $ active' (-3) 8 (activeRect (-3) 1 red |||||| activeRect 1 8 blue))
-   <> tl
-   -- TODO draw a blue arrow showing the translation of the second value
+result = (draw $ Active (C (-3), r, O 8)) <> tl  -- $
+  where
+    r = hcat [ activeRect (-3) 1 red, activeRect 1 8 blue ]
 \end{diagram}
 \end{center}
 %$
 It is easy to verify that this operation is associative.  However, the
 asymmetry is already a bit unsettling: another valid choice would be
-to translate the first value and leave the second unchanged.  Or we
-could always center the resulting |Active| with respect to time $0$,
-or place its start time at time $0$, or\dots
+to translate the first value and leave the second unchanged.  (Because
+of infinite |Active| values these are essentially the only choices; if
+we restricted to only finite |Active|s, however, there would be more,
+such as always centering the resulting |Active| with respect to time
+$0$, or placing the start time at $0$.)
 
-In and of itself this plethora of choice is not necessarily a problem;
-we could just pick the most sensible-seeming option and leave it at
-that.  However, it points at a deeper problem, which comes into
-sharper focus when we consider what the identity element for
-sequential composition might be.  Just for the sake of concrete
-examples, let us assume that we have chosen the semantics for
-sequential composition illustrated above, where the second value is
-translated so that it follows the first.
+Once again, the existence of multiple choices, with no clear best
+choice, prompts us to take a step back. In this case, it points at a
+deeper phenomenon, which comes into sharper focus when we consider
+what the identity element for |seqR| (or, dually, |seqL|) might be.
+Just for the sake of concrete examples, let us assume that we have
+chosen the semantics for sequential composition illustrated above,
+where the second value is translated so that it follows the first.
+
+Clearly, the identity element should have duration $0$, \ie it should
+be some |z :: Active C O t a| with $t_s = t_e = t_z$ for some absolute
+time $t_z$ (ugh, another arbitrary choice!).  Note that |z|'s function
+is undefined everywhere, since the interval $[t_z,t_z)$ is empty. We
+can see that |a `seqR` z = a| for all |a :: Active l O t a|, since |z|
+gets translated and placed after |a|, which has no effect.  However,
+generally speaking |z `seqR` a /= a|. Instead, |z `seqR` a| consists
+of a translated copy of |a| with its start time at $t_z$.  Clearly,
+this problem is independent of the particular value chosen for $t_z$.
+
+One way around this would be to simply add a new distinguished
+element to serve as the identity for |seqR|.  Although that works, it
+is unsatisfying, and in fact there is a better solution.
+
+So far, the problems with sequential composition all center around
+having to make some arbitrary choice of a point in time: with |seqR|
+we had to arbitrarily choose how to position the result in time; we
+also had to arbitrarily choose a time $t_z$ for |z|, but no matter
+what time we choose |z| cannot be a left identity for |seqR|.  Indeed,
+in some sense the \emph{reason} |z| is not a left identity for |seqR|
+is \emph{because} it has an arbitrary position in time, which ends up
+causing the other |Active| to be translated.  But what if |z|
+\emph{had no} absolute time?  What if we didn't have to make this kind
+of choice for the result of |seqR| either?
+
+\todo{equivalence classes of |Active| under translation.  seq.comp. is
+naturally a monoid on such equivalence classes.  What we were really
+doing before is working with representatives of these equivalence
+classes---that's why we kept having to make arbitrary decisions of a
+time, we were picking a concrete representative for an equivalence
+class.  The point, of course, is that the representative doesn't matter.}
+
+\section{|XActive| and |FActive|}
+\label{sec:xactive-factive}
+
+\todo{split |Active| into two types.}
+
+\subsection{Fixing parallel composition}
+\label{sec:fix-par-comp}
+
+\todo{Can't do par comp with C/O.  Would need dependent types.
+  solution: drop C/O distinction, just distinguish infinite/finite.}
+
+\subsection{Conversion}
+\label{sec:conversion}
+
+\todo{X to F is easy (just forgetful).  Other direction, have to fix a
+representative.  Not obvious.  Can't just pass a time, e.g. consider
+bi-infinite FActive values.  Solution: keep track of a set of
+``anchors''.  Give examples.  To convert F to X have to give (time,
+anchor) pair.  Note can also derive version of par comp for FActive by
+matching two anchors.}
 
 \section{Related work}
 \label{sec:related}

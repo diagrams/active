@@ -1,9 +1,10 @@
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 
-{-# LANGUAGE FlexibleContexts      #-}
-{-# LANGUAGE FlexibleInstances     #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE UndecidableInstances  #-}
+{-# LANGUAGE FlexibleContexts          #-}
+{-# LANGUAGE FlexibleInstances         #-}
+{-# LANGUAGE MultiParamTypeClasses     #-}
+{-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE UndecidableInstances      #-}
 
 module ActiveDiagrams where
 
@@ -59,6 +60,9 @@ activeRect s e c
 activeD :: Double -> Double -> Colour Double -> Diagram Cairo R2
 activeD s e c = draw (active s e c)
 
+activeDR :: Double -> Double -> Colour Double -> Diagram Cairo R2
+activeDR s e c = draw $ Active (C s, activeRect s e c, O e)
+
 a1, a2, a12 :: Diagram Cairo R2
 a1 = activeD (-6) 3 red
 a2 = activeD (-1) 5 blue
@@ -81,3 +85,5 @@ tl = timeline (-10) 10
 
 text' :: Renderable (Path R2) b => String -> Diagram b R2
 text' s = (stroke $ textSVG' (TextOpts s lin2 INSIDE_H KERN False 4 4)) # fc black # lw 0
+
+seqR = triangle 1 # rotateBy (-1/4) # lw 0.15
