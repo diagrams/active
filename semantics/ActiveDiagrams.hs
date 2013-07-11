@@ -9,7 +9,7 @@ module ActiveDiagrams where
 
 import           Diagrams.Backend.Cairo
 import           Diagrams.Coordinates
-import           Diagrams.Prelude
+import           Diagrams.Prelude           hiding (Active)
 import           Graphics.SVGFonts.ReadFont
 
 timeline :: Double -> Double -> Diagram Cairo R2
@@ -30,44 +30,44 @@ data End = I
          | C Double
          | O Double
 
-newtype XActive = XActive (End, Diagram Cairo R2, End)
+newtype Active = Active (End, Diagram Cairo R2, End)
 
 class Drawable d where
   draw :: d -> Diagram Cairo R2
 
-instance Drawable XActive where
-  draw (XActive (s, d, e)) = drawLine s <> drawLine e <> d
+instance Drawable Active where
+  draw (Active (s, d, e)) = drawLine s <> drawLine e <> d
     where
       drawLine I     = mempty
       drawLine (C x) = vrule 3 # lw 0.1 # translateX x
       drawLine (O x) = vrule 3 # lw 0.1 # dashing [0.2,0.2] 0 # lc grey # translateX x  -- XXX fix me
 
-xactive' :: Double -> Double -> Diagram Cairo R2 -> XActive
-xactive' s e d = XActive
+active' :: Double -> Double -> Diagram Cairo R2 -> Active
+active' s e d = Active
   ( C s
   , d
   , C e
   )
 
-xactive :: Double -> Double -> Colour Double -> XActive
-xactive s e c = xactive' s e (xactiveRect s e c)
+active :: Double -> Double -> Colour Double -> Active
+active s e c = active' s e (activeRect s e c)
 
-xactiveRect :: Double -> Double -> Colour Double -> Diagram Cairo R2
-xactiveRect s e c
+activeRect :: Double -> Double -> Colour Double -> Diagram Cairo R2
+activeRect s e c
   = rect (e - s) 2 # lw 0 # fcA (c `withOpacity` 0.5) # alignL # translateX s
 
-xactiveD :: Double -> Double -> Colour Double -> Diagram Cairo R2
-xactiveD s e c = draw (xactive s e c)
+activeD :: Double -> Double -> Colour Double -> Diagram Cairo R2
+activeD s e c = draw (active s e c)
 
 a1, a2, a12 :: Diagram Cairo R2
-a1 = xactiveD (-6) 3 red
-a2 = xactiveD (-1) 5 blue
-a12 = draw (xactive' (-1) 3 (xactiveRect (-1) 3 red <> xactiveRect (-1) 3 blue))
+a1 = activeD (-6) 3 red
+a2 = activeD (-1) 5 blue
+a12 = draw (active' (-1) 3 (activeRect (-1) 3 red <> activeRect (-1) 3 blue))
 
 a1R :: Diagram Cairo R2
-a1R = draw $ XActive (C (-6), a1RRect, I)
+a1R = draw $ Active (C (-6), a1RRect, I)
   where
-    a1RRect = xactiveRect (-6) 3 red
+    a1RRect = activeRect (-6) 3 red
           ||| fade 7 0.5 0 50
 
 -- Hack since diagrams doesn't yet support gradients.  This doesn't even look right.
