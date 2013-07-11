@@ -14,14 +14,19 @@
 
 \newcommand{\cons}[1]{\mathsf{#1}}
 
+\newcommand{\idiom}[1]{\llbracket #1 \rrbracket}
+
 %format const = "\cons{const}"
 %format inf   = "\infty"
 %format max   = "\cons{max}"
 %format min   = "\cons{min}"
+%format pure  = "\cons{pure}"
 
-%format ===    = "\equiv"
-%format <>     = "\diamond"
-%format mempty = "\varepsilon"
+%format ===      = "\equiv"
+%format <>       = "\diamond"
+%format mempty   = "\varepsilon"
+%format idiom(a) = "\idiom{" a "}"
+%format <*>      = "\circledast"
 
 %format a1
 %format a2
@@ -148,7 +153,8 @@ We call |a| the \term{base type}, and $[t_s, t_e]$ the
 \term{interval}.  We assume the type of time values $t$ is
 bi-infinite, has a linear order, and forms an affine space together
 with an associated type $d$ of \emph{durations}.  In particular it
-does not matter whether time is continuous or discrete.
+does not matter whether time is continuous or discrete.  Finally, we
+note that |Active t| is a |Functor|.
 
 This is our starting point, but over the remainder of this document we
 will greatly refine it.  In particular:
@@ -187,9 +193,13 @@ for time-varying values: \emph{parallel composition} (\ie\ performing
 two time-varying values simultaneously) and \emph{sequential
   composition} (\ie\ performing two time-varying values one after the
 other).  Ultimately, our refinements to |Active| all have their root
-in the semantics of one or the other.
+in the semantics of one or the other. We begin with parallel
+composition.
 
-We begin with parallel composition. If two |Active| values happen to
+\subsection{Parallel composition as a monoid}
+\label{sec:par-monoid}
+
+If two |Active| values happen to
 have the same interval, it is clear how their parallel composition
 ought to work: just just combine their values pointwise (of course,
 this requires a semigroup structure on the base type), resulting in
@@ -278,7 +288,33 @@ components; the identity element for parallel composition is thus
 given by |(-inf, const mempty, inf)|, that is, the |Active| which is
 constantly the identity value at all times.
 
-\todo{write about |Applicative| instance here too}
+\subsection{Parallel composition as an applicative functor}
+\label{sec:par-applicative}
+
+So far we have seen that |Active t a| has a monoid structure
+corresponding to parallel composition (as long as |a| has a monoid
+structure).  However, more is true: parallel composition in fact gives
+rise to an applicative functor structure for |Active t|.  |pure :: a
+-> Active t a| generates a bi-infinite, constant |Active| value;
+|(<*>) :: Active t (a -> b) -> Active t a -> Active t b| applies
+functions to values pointwise on the intersection of the two
+intervals.  Note that neither of these operations require any
+constraints on |a| or |b|.
+
+It is not hard to verify that this definition satisfies the usual laws
+for |Applicative|; but in fact we don't need to.  Instead, we need
+only note that it can be built compositionally from the well-known
+|Applicative| instance for functions and two applications of the
+standard pairing construction (known as |Writer| in the Haskell
+standard libraries) which creates an |Applicative| instance
+for |(w,) . f| given an |Applicative| instance for |f| and a |Monoid|
+on |w|.
+
+As usual, the |Applicative| instance is more fundamental than the
+|Monoid| instance, in the sense that we can recover the latter from
+the former.  In particular, we may take |mempty = pure mempty| and |a1
+<> a2 = idiom(a1 <> a2)| (where |idiom(-)| are \emph{idiom
+  brackets}~\cite{applicative}).
 
 \section{Why not union?}
 \label{sec:why-not-union}
@@ -532,7 +568,10 @@ seq  :: (r1,l2 `elem` {O,C}, r1 /= l2),
      => Active l1 r1 t a -> Active l2 r2 t a -> Active l1 r2 t a
 \end{spec}
 but it is not clear how best to express this type in such a way that
-|seq| is convenient to use.
+|seq| is convenient to use.  More abstractly, it is not clear what to
+make of |seq|.  It seems like some sort of ``indexed monoid'', but it
+is not quite a category (since the indices must \emph{not} match
+instead of match!).
 
 \subsection{Locations and translations}
 \label{sec:locations}
