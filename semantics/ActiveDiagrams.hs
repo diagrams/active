@@ -60,8 +60,11 @@ activeRect s e c
 activeD :: Double -> Double -> Colour Double -> Diagram Cairo R2
 activeD s e c = draw (active s e c)
 
+activeD' :: (Double -> End) -> (Double -> End) -> Double -> Double -> [Colour Double] -> Diagram Cairo R2
+activeD' l r s e cs = draw $ Active (l s, mconcat . map (activeRect s e) $ cs, r e)
+
 activeDR :: Double -> Double -> Colour Double -> Diagram Cairo R2
-activeDR s e c = draw $ Active (C s, activeRect s e c, O e)
+activeDR s e c = activeD' C O s e [c]
 
 a1, a2, a12 :: Diagram Cairo R2
 a1 = activeD (-6) 3 red

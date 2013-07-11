@@ -130,6 +130,11 @@
 
 \begin{document}
 
+\title{|Active| semantics}
+\author{Brent Yorgey \and Andy Gill \and Ed Komp}
+
+\maketitle
+
 \section{Introduction}
 \label{sec:active}
 
@@ -172,11 +177,12 @@ will greatly refine it.  In particular:
   knowledge has not previously been considered.
 \item We extend |Active| to allow for \emph{infinite} time-varying
   values---indeed, this falls out naturally from considering the
-  semantics of parallel composition.  \todo{is this a novel
-    contribution?  The idea of infinite time-varying values is not
-    hard to come up with, but making it work nicely depends crucially
-    on the other refinements listed below; in particular, recognizing
-    the distinction between |XActive| and |FActive|.}
+  semantics of parallel composition.
+ % \todo{is this a novel
+ %    contribution?  The idea of infinite time-varying values is not
+ %    hard to come up with, but making it work nicely depends crucially
+ %    on the other refinements listed below; in particular, recognizing
+ %    the distinction between |XActive| and |FActive|.}
 \item In order to endow sequential composition with the proper
   semantics, we introduce a more refined way to keep track of what
   happens at the endpoints of intervals.
@@ -706,23 +712,101 @@ representative of an equivalence class.
 \section{|XActive| and |FActive|}
 \label{sec:xactive-factive}
 
-\todo{split |Active| into two types.}
+Given the above discussion, we split |Active| into two types.
+|XActive|\footnote{The |X| stands for e|X|plicit or ``|X| marks the
+  spot''.} will play the same role as |Active| did;
+|FActive|\footnote{The |F| stands for |F|ree.} will classify
+equivalence classes of |XActive| values.  Of course, we cannot
+work with equivalence classes directly; any |FActive| value will
+simply contain a \emph{representative} of an equivalence class, that
+is, an |XActive|.  But giving it a distinct type allows us to
+construct an API that does not allow the user to observe the
+particular representative in use.
+
+The most important remaining issue is to discuss conversion between
+|XActive| and |FActive|.  But first, we need to clean up one tiny
+remaining problem, which will lead to one more small difference
+bewteen |XActive| and |FActive|.
 
 \subsection{Fixing parallel composition}
 \label{sec:fix-par-comp}
 
-\todo{Can't do par comp with C/O.  Would need dependent types.
-  solution: drop C/O distinction, just distinguish infinite/finite.}
+The problem is that with our new |inf/C/O| type indices, we can no
+longer give a sensible type to parallel composition.  For example,
+suppose we want to take the parallel composition of two values of types
+|Active C C t a| and |Active O C t a|.  What should be the type of the
+result---|Active C C t a| or |Active O C t a|?  In fact, it depends on
+which of the left endpoints comes later!
+\begin{center}
+\begin{diagram}[width=300]
+import ActiveDiagrams
+
+b1  = activeD' C C (-6) 3 [red]
+b2  = activeD' O C (-1) 5 [blue]
+b12 = activeD' O C (-1) 3 [red,blue]
+
+bs :: Diagram Cairo R2
+bs = cat' unitY with {sep = 0.5} [b12, b2, b1]
+
+b1'  = activeD' C C (-6) 3 [red]
+b2'  = activeD' O C (-8) 5 [blue]
+b12' = activeD' C C (-6) 3 [red,blue]
+
+bs' = cat' unitY with {sep = 0.5} [b12', b2', b1']
+
+dia = hcat [ bs <> tl , strutX 3, bs' <> tl ]
+\end{diagram}
+\end{center}
+So it seems we need a dependent type.  However, there is a way out: in
+fact, the more refined closed/open information is needed only in order
+to be able to do sequential composition of |FActive| values.  For
+|XActive|, we can require endpoints to be only infinite or closed,
+which gives us just enough leverage to write a non-dependent type for
+parallel composition, namely
+\begin{spec}
+par  :: XActive l1 r1 t a -> XActive l2 r2 t a
+     -> XActive (Isect l1 l2) (Isect r1 r2) t a
+\end{spec}
+where |Isect| is defined by
+\begin{spec}
+Isect  inf  inf  =  inf
+Isect  _    _    =  C
+\end{spec}
+The original |Monoid| and |Applicative| instances can be recovered for
+a variant of |XActive| which existentially hides the |l| and |r| type
+indices.
 
 \subsection{Conversion}
 \label{sec:conversion}
 
-\todo{X to F is easy (just forgetful).  Other direction, have to fix a
-representative.  Not obvious.  Can't just pass a time, e.g. consider
-bi-infinite FActive values.  Solution: keep track of a set of
-``anchors''.  Give examples.  To convert F to X have to give (time,
-anchor) pair.  Note can also derive version of par comp for FActive by
-matching two anchors.}
+Converting from |XActive| to |FActive| is easy: we just wrap up the
+|XActive|, ``forgetting'' its absolute location.  Converting in the
+other direction, however, is tricky.  We have to specify how to pick a
+particular representative from an equivalence class. One's first
+instinct might be to have a function with the type
+\begin{spec}
+f2x :: t -> FActive l r t a -> XActive l r t a
+\end{spec}
+(with |l| and |r| somehow suitably restricted to only |inf| or |C|).
+That is, to convert an |FActive| to |XActive| one needs only to
+specify an absolute time.  However, this does not work!  The problem
+is that |f2x| has no idea how the given time is supposed to relate to
+the |FActive|.  If our |FActive| values were all finite, or even all
+finite on the left, we could specify that the |FActive| should be
+positioned with its start at the given time.  However, this completely
+falls apart for bi-infinite |FActive| values.
+
+The proposed solution is to store along with each |FActive| (and with
+each |XActive|, while we're at it) a set of named ``anchor times''.
+Some anchor times will always implicitly be available, for example,
+``start'', ``end'', and ``center'' for finite intervals.  Some
+operations can create new named anchor points; for example, sequential
+composition may create one at the transition point.  The user can also
+explicitly create named anchors (directly by specifying a time, in the
+case of |XActive|, or relative to other existing anchors in the case
+of |FActive|).  In order to convert from |FActive| to |XActive|, one
+must specify a pair of a time \emph{and an anchor}; the |FActive| will
+be positioned so the anchor is at the specified time.
 
 \section{Related work}
 \label{sec:related}
