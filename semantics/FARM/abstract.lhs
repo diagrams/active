@@ -101,7 +101,7 @@
 
 \begin{document}
 
-\thispagestyle{empty}
+%\thispagestyle{empty}
 
 \title{Functional \pkg{active} programming}
 \subtitle{Demonstration proposal}
