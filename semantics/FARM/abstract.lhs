@@ -101,6 +101,8 @@
 
 \begin{document}
 
+\thispagestyle{empty}
+
 \title{Functional \pkg{active} programming}
 \subtitle{Demonstration proposal}
 
@@ -136,9 +138,9 @@ than taking these operations as algebraic primitives and leaving
 active values opaque, as in the approach of
 \citet{hudak2004algebraic}, we take inspiration from functional
 reactive programming ``behaviors''~\cite{elliott1997functional,
-  Elliott03:FOP} in making the semantics of active values
-\emph{functions} |t -> a| from some interval of time to some
-underlying type |a|.
+  Elliott03:FOP} and from the work of~\citet{matlage2011every} in
+making the semantics of active values \emph{functions} |t -> a| from
+some \emph{interval} of time to some underlying type |a|.
 
 The novel contribution of \pkg{active} is the recognition that
 \emph{sequential and parallel composition operate on different types}.
