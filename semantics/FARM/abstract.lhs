@@ -218,7 +218,17 @@ in conjunction with a deep DSL to construct a deeply embedded function
 from time to values.  This allows the animation sequence to be
 exported to another computation engine. Using \pkg{active} with
 \pkg{Sunroof}, a deep DSL for JavaScript, we will demonstrate
-how real-time browser-side animations can be constructed.
+how real-time browser-side animations can be built.
+
+{\centering
+\vspace{0.05in}
+\includegraphics[width=0.33\columnwidth]{C.png}~%
+\includegraphics[width=0.33\columnwidth]{A.png}~%
+\includegraphics[width=0.33\columnwidth]{D.png}~%
+}
+
+\noindent
+(Example of a tic-tac-toe animation DSL, built on top of active)
 
 \bibliographystyle{plainnat}
 \bibliography{abstract}
