@@ -194,9 +194,9 @@ has several other novel features:
 \item The ability to deal cleanly with half- or fully-infinite
   intervals, \ie\ active values which are defined for all times
   greater or less than some specified time, or on the entire timeline.
-  This feature in particular is quite useful, \eg\ for composing an
-  infinite animated ``background'' with some other finite animation of
-  unknown length.
+  This feature in particular is quite useful in practice, \eg\ for
+  composing an infinite animated ``background'' with some other finite
+  animation of unknown length.
 \end{itemize}
 
 \section{Applications}
