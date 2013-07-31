@@ -151,15 +151,22 @@ underlying type |a|.
 
 \section{Applications}
 
-\begin{todoP}
-  Strong semantic foundation gives a pleasing and powerful API for
-  constructing animations.  We will demonstrate several examples.
-  \begin{itemize}
-  \item animations with \pkg{diagrams}
-  \item Abstracting over the time type allows for deep
-    embeddings---compilation to JS---animations in the browser
-  \end{itemize}
-\end{todoP}
+Strong semantic foundation gives a pleasing and powerful API for
+constructing animations.  
+There are many applications for such a time-centric domain specific language.
+We have two in mind, both of which will be presented in the demonstration.
+
+First, active can be supporting DSL for the shallow DSL called diagrams, a DSL for
+drawing functionally-described diagrams. Such a DSL stack allows
+for offline frame-by-frame scripting of animations.
+We have been using an earlier version of active to animate and document
+diagrams for while now.
+
+Second, with a careful construction, our active DSL can be used in conjunction with a 
+deep DSL to construct a deeply embedded function from time to value.
+This allows the animation sequence to be exported to another computation
+engine. Using active with Sunroof, a deep DSL for JavaScript, we will
+demonstrate real-time browser-side animations can be constructed.
 
 \bibliographystyle{plainnat}
 \bibliography{abstract}
