@@ -125,7 +125,7 @@ Philadelphia, Pennsylvania, USA}
 We present \pkg{active}, a domain-specific language for functional
 animation, embedded in the Haskell programming language, and inspired
 by ideas from functional reactive
-programming~\cite{elliott1997functional, Elliott03:FOP}. It omits,
+programming~\cite{elliott1997functional, Elliott2009:push-pull-frp}. It omits,
 however, any notion of reactivity---hence \emph{functional active
   programming}.  Omitting reactivity vastly simplifies matters, but
 still leaves plenty of interesting structure to exploit.
@@ -137,8 +137,8 @@ operations of sequential and parallel composition.  However, rather
 than taking these operations as algebraic primitives and leaving
 active values opaque, as in the approach of
 \citet{hudak2004algebraic}, we take inspiration from functional
-reactive programming ``behaviors''~\cite{elliott1997functional,
-  Elliott03:FOP} and from the work of~\citet{matlage2011every} in
+reactive programming ``behaviors''~\cite{elliott1997functional}
+and from the work of~\citet{matlage2011every} in
 making the semantics of active values \emph{functions} |t -> a| from
 some \emph{interval} of time to some underlying type |a|.
 
