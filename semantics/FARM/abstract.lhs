@@ -201,22 +201,23 @@ has several other novel features:
 
 \section{Applications}
 
-Strong semantic foundation gives a pleasing and powerful API for
-constructing animations.  
-There are many applications for such a time-centric domain specific language.
-We have two in mind, both of which will be presented in the demonstration.
+Our strong semantic foundation gives a pleasing and powerful API for
+constructing animations.  There are many applications for such a
+time-centric domain specific language.  We have two in mind, both of
+which will be presented in the demonstration.
 
-First, active can be supporting DSL for the shallow DSL called diagrams, a DSL for
-drawing functionally-described diagrams. Such a DSL stack allows
-for offline frame-by-frame scripting of animations.
-We have been using an earlier version of active to animate and document
-diagrams for while now.
+First, \pkg{active} can be used as a supporting DSL for
+\pkg{diagrams}, a shallow DSL for drawing functionally-described
+diagrams. Such a DSL stack allows for offline frame-by-frame scripting
+of animations.  We have been using an earlier version of \pkg{active}
+to animate and document \pkg{diagrams} for a while now.
 
-Second, with a careful construction, our active DSL can be used in conjunction with a 
-deep DSL to construct a deeply embedded function from time to value.
-This allows the animation sequence to be exported to another computation
-engine. Using active with Sunroof, a deep DSL for JavaScript, we will
-demonstrate real-time browser-side animations can be constructed.
+Second, with a careful construction, our \pkg{active} DSL can be used
+in conjunction with a deep DSL to construct a deeply embedded function
+from time to values.  This allows the animation sequence to be
+exported to another computation engine. Using \pkg{active} with
+\pkg{Sunroof}, a deep DSL for JavaScript, we will demonstrate
+how real-time browser-side animations can be constructed.
 
 \bibliographystyle{plainnat}
 \bibliography{abstract}
