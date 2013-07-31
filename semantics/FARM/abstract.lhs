@@ -36,7 +36,7 @@
 %% Diagrams
 
 \usepackage{graphicx}
-\usepackage[outputdir=diagrams/,backend=ps,extension=eps]{diagrams-latex}
+\usepackage[outputdir=diagrams/]{diagrams-latex}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Prettyref
@@ -137,17 +137,67 @@ than taking these operations as algebraic primitives and leaving
 active values opaque, as in the approach of
 \cite{hudak-temporal-media}, we take inspiration from functional
 reactive programming ``behaviors''~\cite{frp} in making the semantics
-of active values \emph{functions} |t -> a| from time to some
-underlying type |a|.
+of active values \emph{functions} |t -> a| from some interval of time
+to some underlying type |a|.
 
-\begin{todoP}
-  \begin{itemize}
-  \item (potentially infinite) start and end times
-  \item seq. and par. comp operate on different types
-  \item e.g. this is what makes infinite start + end times possible
-  \item some nice pictures?
-  \end{itemize}
-\end{todoP}
+The novel contribution of \pkg{active} is the recognition that
+\emph{sequential and parallel composition operate on different types}.
+In particular, parallel composition operates on active values as
+described above; the resulting value is defined on the
+\emph{intersection} of the input intervals.
+
+\begin{center}
+\begin{diagram}[width=150]
+import ActiveDiagrams
+as :: Diagram Cairo R2
+as = cat' unitY with {sep = 0.5} [a12, a2, a1]
+dia = (   vrule (height as) # translateX (-1)
+       <> vrule (height as) # translateX 3
+      )
+      # alignB # translateY (-1.5)
+      # lw 0.1 # dashing [0.3,0.2] 0
+   <> as
+   <> tl
+\end{diagram}
+\end{center}
+
+Sequential composition, on the other hand, operates on
+\emph{equivalence classes} of active values under translation in time,
+which have a \emph{duration} but no fixed start and end times.
+
+\begin{center}
+\begin{diagram}[width=150]
+import ActiveDiagrams
+
+dia = vcat' with {sep = 1}
+      [ hcat' with {sep = 2}
+        [ activeD (-3) 1 red
+        , seqR
+        , activeD (-4) 3 blue
+        ] # centerX
+      , text' "="
+      , result # centerX <> phantom tl
+      ]
+
+result = (draw $ active' (-3) 8 (activeRect (-3) 1 red |||||| activeRect 1 8 blue))
+\end{diagram}
+\end{center}
+%$
+
+This distinction allows both parallel and sequential composition to
+form monoid structures on their respective types.  \pkg{active} also
+has several other novel features:
+
+\begin{itemize}
+\item A careful analysis of the behavior of active values at the
+  endpoints of their intervals, which we track via the type system.
+\item The ability to deal cleanly with half- or fully-infinite
+  intervals, \ie\ active values which are defined for all times
+  greater or less than some specified time, or on the entire timeline.
+  This feature in particular is quite useful, \eg\ for composing an
+  infinite animated ``background'' with some other finite animation of
+  unknown length.
+\end{itemize}
 
 \section{Applications}
 
