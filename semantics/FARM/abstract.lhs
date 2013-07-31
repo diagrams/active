@@ -104,15 +104,15 @@
 \title{Functional \pkg{active} programming}
 \subtitle{Demonstration proposal}
 
+\authorinfo{Andy Gill}
+{Information and Telecommunication Technology Center \\ The University of Kansas \\
+Lawrence, Kansas, USA}
+{andygill@@ittc.ku.edu}
+
 \authorinfo{Brent A. Yorgey}
 {Dept. of Computer and Information Science\\ The University of Pennsylvania\\
 Philadelphia, Pennsylvania, USA}
 {byorgey@@cis.upenn.edu}
-
-\authorinfo{Andy Gill}
-{XXX department \\ The University of Kansas \\
-Lawrence, Kansas, USA}
-{XXX email}
 
 \preprintfooter{Submitted to FARM 2013}
 
