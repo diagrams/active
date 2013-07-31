@@ -121,13 +121,12 @@ Philadelphia, Pennsylvania, USA}
 \section{Introduction}
 
 We present \pkg{active}, a domain-specific language for functional
-animation, embedded in the Haskell programming
-language~\cite{haskell}, and inspired by ideas from functional
-reactive programming~\cite{frp}. It omits, however, any notion of
-reactivity---hence \emph{functional active programming}.
-
-Omitting reactivity vastly simplifies matters, but still leaves plenty
-to chew on.
+animation, embedded in the Haskell programming language, and inspired
+by ideas from functional reactive
+programming~\cite{elliott1997functional, Elliott03:FOP}. It omits,
+however, any notion of reactivity---hence \emph{functional active
+  programming}.  Omitting reactivity vastly simplifies matters, but
+still leaves plenty of interesting structure to exploit.
 
 \section{Semantics}
 
@@ -135,10 +134,11 @@ The \pkg{active} library is centered around the two familiar
 operations of sequential and parallel composition.  However, rather
 than taking these operations as algebraic primitives and leaving
 active values opaque, as in the approach of
-\cite{hudak-temporal-media}, we take inspiration from functional
-reactive programming ``behaviors''~\cite{frp} in making the semantics
-of active values \emph{functions} |t -> a| from some interval of time
-to some underlying type |a|.
+\citet{hudak2004algebraic}, we take inspiration from functional
+reactive programming ``behaviors''~\cite{elliott1997functional,
+  Elliott03:FOP} in making the semantics of active values
+\emph{functions} |t -> a| from some interval of time to some
+underlying type |a|.
 
 The novel contribution of \pkg{active} is the recognition that
 \emph{sequential and parallel composition operate on different types}.
@@ -209,8 +209,9 @@ which will be presented in the demonstration.
 First, \pkg{active} can be used as a supporting DSL for
 \pkg{diagrams}, a shallow DSL for drawing functionally-described
 diagrams. Such a DSL stack allows for offline frame-by-frame scripting
-of animations.  We have been using an earlier version of \pkg{active}
-to animate and document \pkg{diagrams} for a while now.
+of animations.  We have been using an earlier version of
+\pkg{active}~\cite{yorgey2011active} to animate and document
+\pkg{diagrams} for a while now.
 
 Second, with a careful construction, our \pkg{active} DSL can be used
 in conjunction with a deep DSL to construct a deeply embedded function
