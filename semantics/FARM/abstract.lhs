@@ -149,7 +149,7 @@ described above; the resulting value is defined on the
 \emph{intersection} of the input intervals.
 
 \begin{center}
-\begin{diagram}[width=150]
+\begin{diagram}[width=140]
 import ActiveDiagrams
 as :: Diagram Cairo R2
 as = cat' unitY with {sep = 0.5} [a12, a2, a1]
@@ -168,7 +168,7 @@ Sequential composition, on the other hand, operates on
 which have a \emph{duration} but no fixed start and end times.
 
 \begin{center}
-\begin{diagram}[width=150]
+\begin{diagram}[width=140]
 import ActiveDiagrams
 
 dia = vcat' with {sep = 1}
@@ -194,11 +194,9 @@ has several other novel features:
 \item A careful analysis of the behavior of active values at the
   endpoints of their intervals, which we track via the type system.
 \item The ability to deal cleanly with half- or fully-infinite
-  intervals, \ie\ active values which are defined for all times
-  greater or less than some specified time, or on the entire timeline.
-  This feature in particular is quite useful in practice, \eg\ for
-  composing an infinite animated ``background'' with some other finite
-  animation of unknown length.
+  intervals.  This feature in particular is quite useful in practice,
+  \eg\ for composing an infinite animated ``background'' with some
+  other finite animation of unknown length.
 \end{itemize}
 
 \section{Applications}
@@ -222,15 +220,24 @@ exported to another computation engine. Using \pkg{active} with
 \pkg{Sunroof}, a deep DSL for JavaScript, we will demonstrate
 how real-time browser-side animations can be built.
 
-{\centering
-\vspace{0.05in}
+
+% {\centering
+% \vspace{0.05in}
+% \includegraphics[width=0.33\columnwidth]{C.png}~%
+% \includegraphics[width=0.33\columnwidth]{A.png}~%
+% \includegraphics[width=0.33\columnwidth]{D.png}~%
+% }
+
+% \noindent
+% (Example of a tic-tac-toe animation DSL, built on top of active
+\begin{figure}[h]
+  \centering
 \includegraphics[width=0.33\columnwidth]{C.png}~%
 \includegraphics[width=0.33\columnwidth]{A.png}~%
 \includegraphics[width=0.33\columnwidth]{D.png}~%
-}
-
-\noindent
-(Example of a tic-tac-toe animation DSL, built on top of active)
+  \caption{Example of a tic-tac-toe animation built on top of \pkg{active}}
+  \label{fig:tic-tac-toe}
+\end{figure}
 
 \bibliographystyle{plainnat}
 \bibliography{abstract}
