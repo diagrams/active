@@ -1,6 +1,6 @@
 %% -*- LaTeX -*-
 
-\documentclass[9pt,preprint,authoryear]{sigplanconf}
+\documentclass[9pt,preprint,authoryear,nocopyrightspace]{sigplanconf}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% lhs2TeX
