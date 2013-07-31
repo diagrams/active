@@ -21,5 +21,6 @@ Shake
 *.tex
 *.bbl
 *.blg
+*.cut
 ActiveDiagrams
 semantics/diagrams/*
