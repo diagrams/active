@@ -5,13 +5,14 @@
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE RankNTypes                 #-}
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeFamilies               #-}
 
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Data.Active
--- Copyright   :  (c) 2013 XXX
+-- Copyright   :  (c) 2013 Andy Gill, Brent Yorgey
 -- License     :  BSD-style (see LICENSE)
 -- Maintainer  :  byorgey@cis.upenn.edu
 --
@@ -20,7 +21,7 @@
 module Data.Active where
 
 import           Control.Applicative
-import           Control.Lens        (Lens', makeLenses, view)
+import           Control.Lens        (Lens', makeLenses, view, (^.))
 import           Data.AffineSpace
 import           Data.Monoid.Inf
 import           Data.Semigroup
@@ -64,11 +65,16 @@ class (FractionalOf w (Scalar w), VectorSpace w) => Waiting w where
   fromDuration :: (FractionalOf w a) => w -> a
 
 class Fractional a => FractionalOf v a where
-        toFractionalOf :: v -> a
+  toFractionalOf :: v -> a
 
 class Clock t => Deadline t a where
-        -- choose time-now deadline-time (if before / at deadline) (if after deadline)
-        choose :: t -> t -> a -> a -> a
+  -- choose time-now deadline-time (if before deadline) (if after deadline)
+  chooseL :: t -> t -> a -> a -> a
+  chooseR :: t -> t -> a -> a -> a
+
+  -- chooseL takes the lefthand value at the precise deadline time.
+  -- chooseR takes the righthand value.
+  -- at all other times they are identical.
 
 ------------------------------------------------------------
 -- Time
@@ -99,8 +105,8 @@ instance Fractional a => FractionalOf Time a where
   toFractionalOf (Time d) = fromRational d
 
 instance Deadline Time a where
-        -- choose tm deadline (if before / at deadline) (if after deadline)
-        choose t1 t2 a b = if t1 <= t2 then a else b
+  chooseL t1 t2 a b = if t1 <= t2 then a else b
+  chooseR t1 t2 a b = if t1 <  t2 then a else b
 
 -- | An abstract type representing /elapsed time/ between two points
 --   in time.  Note that durations can be negative. Literal numeric
@@ -152,7 +158,6 @@ start f (Era (s, e)) = (\s' -> Era (s',e)) <$> f s
 end :: Lens' (Era t) (PosInf t)
 end f (Era (s,e)) = (\e' -> Era (s,e')) <$> f e
 
-
 ------------------------------------------------------------
 
 data I -- nfinite
@@ -185,9 +190,10 @@ pApp (PActiveX e1 f1) (PActiveX e2 f2) = PActiveX (e1 <> e2) (f1 <*> f2)
 par :: (Semigroup a, Ord t)
     => PActiveX l1 r1 t a -> PActiveX l2 r2 t a -> PActiveX (Isect l1 l2) (Isect r1 r2) t a
 par (PActiveX e1 f1) (PActiveX e2 f2) = PActiveX (e1 <> e2) (f1 <> f2)
+
 -- par p1 p2 = pPure (<>) `pApp` p1 `pApp` p2
---   for the above to typecheck, need to introduce a type-level proof
---   that I is a left identity for Isect
+--   for the above to typecheck, would need to introduce a type-level proof
+--   that I is a left identity for Isect.  Doable but not worth it. =)
 
 data PActive t a where
   PActive :: PActiveX l r t a -> PActive t a
@@ -199,21 +205,49 @@ instance Ord t => Applicative (PActive t) where
   pure  = PActive . pPure
   PActive p1 <*> PActive p2 = PActive (p1 `pApp` p2)
 
+instance (Semigroup a, Ord t) => Semigroup (PActive t a) where
+  PActive p1 <> PActive p2 = PActive (p1 `par` p2)
+
+instance (Semigroup a, Monoid a, Ord t) => Monoid (PActive t a) where
+  mempty  = PActive $ pPure mempty
+  mappend = (<>)
+
 ------------------------------------------------------------
 
+-- Abstractly, SActiveX represents equivalence classes of PActive
+-- under translation.  Concretely, SActiveX is just a wrapper around
+-- PActiveX, where we are careful not to expose the absolute
+-- positioning of the underlying PActiveX.
 newtype SActiveX l r t a = SActiveX { _getPActive :: PActiveX l r t a }
 
 float :: PActiveX l r t a -> SActiveX l r t a
 float = SActiveX
 
 openR :: SActiveX l C t a -> SActiveX l O t a
-openR = undefined
+openR = unsafeOpen
 
-closeR :: a -> SActiveX l O t a -> SActiveX l C t a
-closeR = undefined
+openL :: SActiveX C r t a -> SActiveX O r t a
+openL = unsafeOpen
 
--- openL
--- closeL
+-- do not export!
+unsafeOpen :: SActiveX l r t a -> SActiveX l' r' t a
+unsafeOpen (SActiveX (PActiveX e f)) = SActiveX (PActiveX e f)
+
+closeR :: Eq t => a -> SActiveX l O t a -> SActiveX l C t a
+closeR = unsafeClose end
+
+closeL :: Eq t => a -> SActiveX O r t a -> SActiveX C r t a
+closeL = unsafeClose start
+
+-- do not export!
+unsafeClose :: Eq t
+            => Lens' (Era t) (Inf pn t)
+            -> a -> SActiveX l r t a -> SActiveX l' r' t a
+unsafeClose endpt a (SActiveX (PActiveX e f)) =
+  case e ^. endpt of
+    -- can we actually make this case impossible??
+    Infinity  -> error "close: this should never happen!  An Open endpoint is Infinite!"
+    Finite t' -> SActiveX (PActiveX e (\t -> if t == t' then a else f t))
 
 seqR :: SActiveX l O t a -> SActiveX C r t a -> SActiveX l r t a
 seqR = undefined
