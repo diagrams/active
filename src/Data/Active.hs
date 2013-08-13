@@ -249,15 +249,10 @@ float_ :: Active_ l r t a -> SActive_ l r t a
 float_ = SActive_
 
 floatR_ :: Active_ l r t a -> SActive_ l (Open r) t a
-floatR_ = openR . float_
+floatR_ = openR_ . float_
 
 floatL_ :: Active_ l r t a -> SActive_ (Open l) r t a
-floatL_ = openL . float_
-
--- default conversion: left endpoints are closed, right are open
--- (thrown away)
-float :: Active t a -> SActive t a
-float (Active a) = SActive (floatR_ a)
+floatL_ = openL_ . float_
 
 openR_ :: SActive_ l r t a -> SActive_ l (Open r) t a
 openR_ = unsafeConvertS_
@@ -303,3 +298,8 @@ unsafeSeq _ _ _ = error "seq: impossible"
 offsetTime :: AffineSpace t => Inf p t -> Diff t -> Inf p t
 offsetTime Infinity _ = Infinity
 offsetTime (Finite t) d = Finite (t .+^ d)
+
+-- default conversion: left endpoints are closed, right are open
+-- (thrown away)
+float :: Active t a -> SActive t a
+float (Active a) = SActive (floatR_ a)
