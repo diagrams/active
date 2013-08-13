@@ -164,117 +164,142 @@ data I -- nfinite
 data C -- losed
 data O -- pen
 
+type family Open x :: *
+type instance Open I = I
+type instance Open C = O
+type instance Open O = O
+
 type family Isect x y :: *
 type instance Isect I I = I
 type instance Isect C I = C
 type instance Isect I C = C
 type instance Isect C C = C
 
-data PActiveX l r t a = PActiveX
-  { _pEra       :: Era t
-  , _runPActive :: t -> a
+{- Ideally, the C/O/I type indices would actually determine what sort
+of Eras could be contained in a Active_, so e.g. we don't need the
+error case in unsafeClose.  How might this work?  Would need a GADT
+variant of Inf?  But that would probably lead to trouble making it Ord
+and so on...?
+-}
+
+-- invariant: l and r are always either I or C, never O
+data Active_ l r t a = Active_
+  { _pEra      :: Era t
+  , _runActive :: t -> a
   }
   deriving (Functor)
 
-makeLenses ''PActiveX
+unsafeConvert_ :: Active_ l r t a -> Active_ l' r' t a
+unsafeConvert_ (Active_ e f) = Active_ e f
 
-pPure :: Ord t => a -> PActiveX I I t a
-pPure a = PActiveX mempty (pure a)
+makeLenses ''Active_
+
+pPure :: Ord t => a -> Active_ I I t a
+pPure a = Active_ mempty (pure a)
 
 pApp :: Ord t
-     => PActiveX l1 r1 t (a -> b)
-     -> PActiveX l2 r2 t a
-     -> PActiveX (Isect l1 l2) (Isect r1 r2) t b
-pApp (PActiveX e1 f1) (PActiveX e2 f2) = PActiveX (e1 <> e2) (f1 <*> f2)
+     => Active_ l1 r1 t (a -> b)
+     -> Active_ l2 r2 t a
+     -> Active_ (Isect l1 l2) (Isect r1 r2) t b
+pApp (Active_ e1 f1) (Active_ e2 f2) = Active_ (e1 <> e2) (f1 <*> f2)
 
 par :: (Semigroup a, Ord t)
-    => PActiveX l1 r1 t a -> PActiveX l2 r2 t a -> PActiveX (Isect l1 l2) (Isect r1 r2) t a
-par (PActiveX e1 f1) (PActiveX e2 f2) = PActiveX (e1 <> e2) (f1 <> f2)
+    => Active_ l1 r1 t a -> Active_ l2 r2 t a -> Active_ (Isect l1 l2) (Isect r1 r2) t a
+par (Active_ e1 f1) (Active_ e2 f2) = Active_ (e1 <> e2) (f1 <> f2)
 
 -- par p1 p2 = pPure (<>) `pApp` p1 `pApp` p2
 --   for the above to typecheck, would need to introduce a type-level proof
 --   that I is a left identity for Isect.  Doable but not worth it. =)
+--   can also do:
+-- par p1 p2 = unsafeConvert_ $ pPure (<>) `pApp` p1 `pApp` p2
 
-data PActive t a where
-  PActive :: PActiveX l r t a -> PActive t a
+data Active t a where
+  Active :: Active_ l r t a -> Active t a
 
-instance Functor (PActive t) where
-  fmap f (PActive p) = PActive (fmap f p)
+instance Functor (Active t) where
+  fmap f (Active p) = Active (fmap f p)
 
-instance Ord t => Applicative (PActive t) where
-  pure  = PActive . pPure
-  PActive p1 <*> PActive p2 = PActive (p1 `pApp` p2)
+instance Ord t => Applicative (Active t) where
+  pure  = Active . pPure
+  Active p1 <*> Active p2 = Active (p1 `pApp` p2)
 
-instance (Semigroup a, Ord t) => Semigroup (PActive t a) where
-  PActive p1 <> PActive p2 = PActive (p1 `par` p2)
+instance (Semigroup a, Ord t) => Semigroup (Active t a) where
+  Active p1 <> Active p2 = Active (p1 `par` p2)
 
-instance (Semigroup a, Monoid a, Ord t) => Monoid (PActive t a) where
-  mempty  = PActive $ pPure mempty
+instance (Semigroup a, Monoid a, Ord t) => Monoid (Active t a) where
+  mempty  = Active $ pPure mempty
   mappend = (<>)
 
 ------------------------------------------------------------
 
--- Abstractly, SActiveX represents equivalence classes of PActive
--- under translation.  Concretely, SActiveX is just a wrapper around
--- PActiveX, where we are careful not to expose the absolute
--- positioning of the underlying PActiveX.
-newtype SActiveX l r t a = SActiveX { _getPActive :: PActiveX l r t a }
+-- Abstractly, SActive_ represents equivalence classes of Active
+-- under translation.  Concretely, SActive_ is just a wrapper around
+-- Active_, where we are careful not to expose the absolute
+-- positioning of the underlying Active_.
+newtype SActive_ l r t a = SActive_ { _getActive :: Active_ l r t a }
 
-float :: PActiveX l r t a -> SActiveX l r t a
-float = SActiveX
-
-openR :: SActiveX l C t a -> SActiveX l O t a
-openR = unsafeOpen
-
-openL :: SActiveX C r t a -> SActiveX O r t a
-openL = unsafeOpen
+data SActive t a where
+  SActive :: SActive_ l r t a -> SActive t a
 
 -- do not export!
-unsafeOpen :: SActiveX l r t a -> SActiveX l' r' t a
-unsafeOpen (SActiveX (PActiveX e f)) = SActiveX (PActiveX e f)
+unsafeConvertS_ :: SActive_ l r t a -> SActive_ l' r' t a
+unsafeConvertS_ (SActive_ a) = SActive_ (unsafeConvert_ a)
 
-closeR :: Eq t => a -> SActiveX l O t a -> SActiveX l C t a
-closeR = unsafeClose end
+float_ :: Active_ l r t a -> SActive_ l r t a
+float_ = SActive_
 
-closeL :: Eq t => a -> SActiveX O r t a -> SActiveX C r t a
-closeL = unsafeClose start
+floatR_ :: Active_ l r t a -> SActive_ l (Open r) t a
+floatR_ = openR . float_
+
+floatL_ :: Active_ l r t a -> SActive_ (Open l) r t a
+floatL_ = openL . float_
+
+-- default conversion: left endpoints are closed, right are open
+-- (thrown away)
+float :: Active t a -> SActive t a
+float (Active a) = SActive (floatR_ a)
+
+openR_ :: SActive_ l r t a -> SActive_ l (Open r) t a
+openR_ = unsafeConvertS_
+
+openL_ :: SActive_ l r t a -> SActive_ (Open l) r t a
+openL_ = unsafeConvertS_
+
+closeR_ :: Eq t => a -> SActive_ l O t a -> SActive_ l C t a
+closeR_ = unsafeCloseS_ end
+
+closeL_ :: Eq t => a -> SActive_ O r t a -> SActive_ C r t a
+closeL_ = unsafeCloseS_ start
 
 -- do not export!
-unsafeClose :: Eq t
-            => Lens' (Era t) (Inf pn t)
-            -> a -> SActiveX l r t a -> SActiveX l' r' t a
-unsafeClose endpt a (SActiveX (PActiveX e f)) =
+unsafeCloseS_ :: Eq t
+              => Lens' (Era t) (Inf pn t)
+              -> a -> SActive_ l r t a -> SActive_ l' r' t a
+unsafeCloseS_ endpt a (SActive_ (Active_ e f)) =
   case e ^. endpt of
     -- can we actually make this case impossible??
     Infinity  -> error "close: this should never happen!  An Open endpoint is Infinite!"
-    Finite t' -> SActiveX (PActiveX e (\t -> if t == t' then a else f t))
+    Finite t' -> SActive_ (Active_ e (\t -> if t == t' then a else f t))
 
 seqR :: (AffineSpace t, Deadline t a)
-     => SActiveX l O t a -> SActiveX C r t a -> SActiveX l r t a
+     => SActive_ l O t a -> SActive_ C r t a -> SActive_ l r t a
 seqR = unsafeSeq chooseR
 
 seqL :: (AffineSpace t, Deadline t a)
-     => SActiveX l C t a -> SActiveX O r t a -> SActiveX l r t a
+     => SActive_ l C t a -> SActive_ O r t a -> SActive_ l r t a
 seqL = unsafeSeq chooseL
 
 -- do not export!
 unsafeSeq :: (AffineSpace t, Deadline t a)
      => (t -> t -> a -> a -> a)
-     -> SActiveX l r1 t a -> SActiveX l2 r t a -> SActiveX l r t a
-unsafeSeq choice (SActiveX (PActiveX (Era (s1, Finite e1)) f1))
-     (SActiveX (PActiveX (Era (Finite s2, e2)) f2))
-  = SActiveX (PActiveX (Era (s1, e2 `offsetTime` (e1 .-. s2)))
-                       (\t -> choice e1 t (f1 t) (f2 t))
+     -> SActive_ l r1 t a -> SActive_ l2 r t a -> SActive_ l r t a
+unsafeSeq choice (SActive_ (Active_ (Era (s1, Finite e1)) f1))
+                 (SActive_ (Active_ (Era (Finite s2, e2)) f2))
+  = SActive_ (Active_ (Era (s1, e2 `offsetTime` (e1 .-. s2)))
+                      (\t -> choice e1 t (f1 t) (f2 t))
              )
 unsafeSeq _ _ _ = error "seq: impossible"
 
 offsetTime :: AffineSpace t => Inf p t -> Diff t -> Inf p t
 offsetTime Infinity _ = Infinity
 offsetTime (Finite t) d = Finite (t .+^ d)
-
-{- Ideally, the C/O/I type indices would actually determine what sort
-of Eras could be contained in a PActiveX, so e.g. we don't need the
-error case in unsafeClose.  How might this work?  Would need a GADT
-variant of Inf?  But that would probably lead to trouble making it Ord
-and so on...?
--}
