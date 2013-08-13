@@ -250,8 +250,20 @@ unsafeClose endpt a (SActiveX (PActiveX e f)) =
     Finite t' -> SActiveX (PActiveX e (\t -> if t == t' then a else f t))
 
 seqR :: SActiveX l O t a -> SActiveX C r t a -> SActiveX l r t a
-seqR = undefined
+seqR (SActiveX (PActiveX (Era (s1, Finite e1)) f1))
+     (SActiveX (PActiveX (Era (Finite s2, e2)) f2))
+      -- XXX what to do here?  Can't make PosInf an AdditiveGroup...
+  = SActiveX (PActiveX (Era (s1, e2 .+^ (Finite (e1 - s2))))
+                       (\t -> chooseR t e1 (f1 t) (f2 t))
+             )
+seqR _ _ = error "seqR: impossible"
 
 seqL :: SActiveX l C t a -> SActiveX O r t a -> SActiveX l r t a
 seqL = undefined
 
+{- Ideally, the C/O/I type indices would actually determine what sort
+of Eras could be contained in a PActiveX, so e.g. we don't need the
+error case in unsafeClose.  How might this work?  Would need a GADT
+variant of Inf?  But that would probably lead to trouble making it Ord
+and so on...?
+-}
