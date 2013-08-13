@@ -68,7 +68,7 @@ class Fractional a => FractionalOf v a where
   toFractionalOf :: v -> a
 
 class Clock t => Deadline t a where
-  -- choose time-now deadline-time (if before deadline) (if after deadline)
+  -- choose deadline-time time-now (if before deadline) (if after deadline)
   chooseL :: t -> t -> a -> a -> a
   chooseR :: t -> t -> a -> a -> a
 
@@ -105,8 +105,8 @@ instance Fractional a => FractionalOf Time a where
   toFractionalOf (Time d) = fromRational d
 
 instance Deadline Time a where
-  chooseL t1 t2 a b = if t1 <= t2 then a else b
-  chooseR t1 t2 a b = if t1 <  t2 then a else b
+  chooseL deadline now a b = if now <= deadline then a else b
+  chooseR deadline now a b = if now <  deadline then a else b
 
 -- | An abstract type representing /elapsed time/ between two points
 --   in time.  Note that durations can be negative. Literal numeric
@@ -249,17 +249,28 @@ unsafeClose endpt a (SActiveX (PActiveX e f)) =
     Infinity  -> error "close: this should never happen!  An Open endpoint is Infinite!"
     Finite t' -> SActiveX (PActiveX e (\t -> if t == t' then a else f t))
 
-seqR :: SActiveX l O t a -> SActiveX C r t a -> SActiveX l r t a
-seqR (SActiveX (PActiveX (Era (s1, Finite e1)) f1))
-     (SActiveX (PActiveX (Era (Finite s2, e2)) f2))
-      -- XXX what to do here?  Can't make PosInf an AdditiveGroup...
-  = SActiveX (PActiveX (Era (s1, e2 .+^ (Finite (e1 - s2))))
-                       (\t -> chooseR t e1 (f1 t) (f2 t))
-             )
-seqR _ _ = error "seqR: impossible"
+seqR :: (AffineSpace t, Deadline t a)
+     => SActiveX l O t a -> SActiveX C r t a -> SActiveX l r t a
+seqR = unsafeSeq chooseR
 
-seqL :: SActiveX l C t a -> SActiveX O r t a -> SActiveX l r t a
-seqL = undefined
+seqL :: (AffineSpace t, Deadline t a)
+     => SActiveX l C t a -> SActiveX O r t a -> SActiveX l r t a
+seqL = unsafeSeq chooseL
+
+-- do not export!
+unsafeSeq :: (AffineSpace t, Deadline t a)
+     => (t -> t -> a -> a -> a)
+     -> SActiveX l r1 t a -> SActiveX l2 r t a -> SActiveX l r t a
+unsafeSeq choice (SActiveX (PActiveX (Era (s1, Finite e1)) f1))
+     (SActiveX (PActiveX (Era (Finite s2, e2)) f2))
+  = SActiveX (PActiveX (Era (s1, e2 `offsetTime` (e1 .-. s2)))
+                       (\t -> choice e1 t (f1 t) (f2 t))
+             )
+unsafeSeq _ _ _ = error "seq: impossible"
+
+offsetTime :: AffineSpace t => Inf p t -> Diff t -> Inf p t
+offsetTime Infinity _ = Infinity
+offsetTime (Finite t) d = Finite (t .+^ d)
 
 {- Ideally, the C/O/I type indices would actually determine what sort
 of Eras could be contained in a PActiveX, so e.g. we don't need the
