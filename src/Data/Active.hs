@@ -144,6 +144,7 @@ import Data.Semigroup hiding (First(..))
 import Data.Monoid (First(..))
 
 import Data.VectorSpace hiding ((<.>))
+import qualified Data.VectorSpace as VS
 import Data.AffineSpace
 
 ------------------------------------------------------------
@@ -157,7 +158,7 @@ import Data.AffineSpace
 --   other numeric types.
 newtype Time = Time { unTime :: Rational }
   deriving ( Eq, Ord, Show, Read, Enum, Num, Fractional, Real, RealFrac
-           , AdditiveGroup, InnerSpace
+           , AdditiveGroup
            )
 
 instance Newtype Time Rational where
@@ -167,6 +168,9 @@ instance Newtype Time Rational where
 instance VectorSpace Time where
   type Scalar Time = Rational
   s *^ (Time t) = Time (s * t)
+
+instance InnerSpace Time where
+  (Time a) <.> (Time b) = a * b
 
 -- | Convert any value of a 'Real' type (including @Int@, @Integer@,
 --   @Rational@, @Float@, and @Double@) to a 'Time'.
