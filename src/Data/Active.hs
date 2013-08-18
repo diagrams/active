@@ -54,7 +54,6 @@ class ( AffineSpace t
 
   firstTime :: t -> t -> t
   lastTime  :: t -> t -> t
-
 class (FractionalOf w (Scalar w), VectorSpace w) => Waiting w where
   -- | Convert any value of a 'Real' type (including @Int@, @Integer@,
   --   @Rational@, @Float@, and @Double@) to a 'Duration'.
@@ -159,16 +158,20 @@ end :: Lens' (Era t) (PosInf t)
 end f (Era (s,e)) = (\e' -> Era (s,e')) <$> f e
 
 ------------------------------------------------------------
+-- Type tags for Active
+------------------------------------------------------------
 
 data I -- nfinite
 data C -- losed
 data O -- pen
 
+-- Convert Closed to Open
 type family Open x :: *
 type instance Open I = I
 type instance Open C = O
 type instance Open O = O
 
+-- Intersection of finite + infinite = finite.
 type family Isect x y :: *
 type instance Isect I I = I
 type instance Isect C I = C
@@ -182,7 +185,14 @@ variant of Inf?  But that would probably lead to trouble making it Ord
 and so on...?
 -}
 
--- invariant: l and r are always either I or C, never O
+------------------------------------------------------------
+-- Active_
+------------------------------------------------------------
+
+-- | @Active_ l r t a@ is a time-varying value of type @a@, over the
+--   time type @t@, defined on some particular 'Era'.  @l@ and @r@
+--   track whether the left and right ends of the @Era@ are
+--   respectively infinite (@I@) or finite (@F@).
 data Active_ l r t a = Active_
   { _pEra      :: Era t
   , _runActive :: t -> a
@@ -194,40 +204,69 @@ unsafeConvert_ (Active_ e f) = Active_ e f
 
 makeLenses ''Active_
 
-pPure :: Ord t => a -> Active_ I I t a
-pPure a = Active_ mempty (pure a)
+-- | Create a bi-infinite, constant 'Active_' value.
+pure_ :: Ord t => a -> Active_ I I t a
+pure_ a = Active_ mempty (pure a)
 
-pApp :: Ord t
+-- | \"Apply\" an 'Active_' function to an 'Active_' value, pointwise
+--   in time, taking the intersection of their intervals.  This is
+--   like '<*>' but with a richer indexed type.
+app_ :: Ord t
      => Active_ l1 r1 t (a -> b)
      -> Active_ l2 r2 t a
      -> Active_ (Isect l1 l2) (Isect r1 r2) t b
-pApp (Active_ e1 f1) (Active_ e2 f2) = Active_ (e1 <> e2) (f1 <*> f2)
+app_ (Active_ e1 f1) (Active_ e2 f2) = Active_ (e1 <> e2) (f1 <*> f2)
 
+-- | Parallel composition of 'Active_' values.  The 'Era' of the
+--   result is the intersection of the 'Era's of the inputs.
 par :: (Semigroup a, Ord t)
-    => Active_ l1 r1 t a -> Active_ l2 r2 t a -> Active_ (Isect l1 l2) (Isect r1 r2) t a
+    => Active_ l1 r1 t a -> Active_ l2 r2 t a
+    -> Active_ (Isect l1 l2) (Isect r1 r2) t a
 par (Active_ e1 f1) (Active_ e2 f2) = Active_ (e1 <> e2) (f1 <> f2)
 
--- par p1 p2 = pPure (<>) `pApp` p1 `pApp` p2
+-- par p1 p2 = pure_ (<>) `app_` p1 `app_` p2
 --   for the above to typecheck, would need to introduce a type-level proof
 --   that I is a left identity for Isect.  Doable but not worth it. =)
 --   can also do:
--- par p1 p2 = unsafeConvert_ $ pPure (<>) `pApp` p1 `pApp` p2
+-- par p1 p2 = unsafeConvert_ $ pure_ (<>) `app_` p1 `app_` p2
 
+------------------------------------------------------------
+-- Active
+------------------------------------------------------------
+
+-- | An @Active t a@ is a time-varying value of type @a@, over the
+--   time type @t@, defined on some particular 'Era'.
+--
+--   Note this is an existentially quantified version of 'Active_',
+--   where we do not track the infinite/finite status of the endpoints
+--   in the type.  However, this means that 'Active', unlike
+--   'Active_', can actually be an instance of 'Applicative',
+--   'Semigroup', and 'Monoid'.
 data Active t a where
   Active :: Active_ l r t a -> Active t a
 
+-- | Apply a function at all times.
 instance Functor (Active t) where
   fmap f (Active p) = Active (fmap f p)
 
+-- | 'pure' creates a bi-infinite, constant 'Active' value.  '<*>'
+--   applies a time-varying function to a time-varying value pointwise
+--   in time, with the result being defined on the intersection of the
+--   'Era's of the inputs.
 instance Ord t => Applicative (Active t) where
-  pure  = Active . pPure
-  Active p1 <*> Active p2 = Active (p1 `pApp` p2)
+  pure  = Active . pure_
+  Active p1 <*> Active p2 = Active (p1 `app_` p2)
 
+-- | Parallel composition of 'Active' values.  The result is defined
+--   on the intersection of the 'Era's of the inputs.
 instance (Semigroup a, Ord t) => Semigroup (Active t a) where
   Active p1 <> Active p2 = Active (p1 `par` p2)
 
+-- | The identity is the bi-infinite, constantly 'mempty' value; the
+--   combining operation is parallel composition (see the 'Semigroup'
+--   instance).
 instance (Semigroup a, Monoid a, Ord t) => Monoid (Active t a) where
-  mempty  = Active $ pPure mempty
+  mempty  = Active $ pure_ mempty
   mappend = (<>)
 
 ------------------------------------------------------------
