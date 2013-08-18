@@ -189,10 +189,11 @@ and so on...?
 -- Active_
 ------------------------------------------------------------
 
--- | @Active_ l r t a@ is a time-varying value of type @a@, over the
+-- | An @Active_ l r t a@ is a time-varying value of type @a@, over the
 --   time type @t@, defined on some particular 'Era'.  @l@ and @r@
 --   track whether the left and right ends of the @Era@ are
---   respectively infinite (@I@) or finite (@F@).
+--   respectively infinite (@I@) or finite (@F@).  @Active_@ values
+--   may be combined via parallel composition; see 'par_'.
 data Active_ l r t a = Active_
   { _pEra      :: Era t
   , _runActive :: t -> a
@@ -219,23 +220,24 @@ app_ (Active_ e1 f1) (Active_ e2 f2) = Active_ (e1 <> e2) (f1 <*> f2)
 
 -- | Parallel composition of 'Active_' values.  The 'Era' of the
 --   result is the intersection of the 'Era's of the inputs.
-par :: (Semigroup a, Ord t)
-    => Active_ l1 r1 t a -> Active_ l2 r2 t a
-    -> Active_ (Isect l1 l2) (Isect r1 r2) t a
-par (Active_ e1 f1) (Active_ e2 f2) = Active_ (e1 <> e2) (f1 <> f2)
+par_ :: (Semigroup a, Ord t)
+     => Active_ l1 r1 t a -> Active_ l2 r2 t a
+     -> Active_ (Isect l1 l2) (Isect r1 r2) t a
+par_ (Active_ e1 f1) (Active_ e2 f2) = Active_ (e1 <> e2) (f1 <> f2)
 
--- par p1 p2 = pure_ (<>) `app_` p1 `app_` p2
+-- par_ p1 p2 = pure_ (<>) `app_` p1 `app_` p2
 --   for the above to typecheck, would need to introduce a type-level proof
 --   that I is a left identity for Isect.  Doable but not worth it. =)
 --   can also do:
--- par p1 p2 = unsafeConvert_ $ pure_ (<>) `app_` p1 `app_` p2
+-- par_ p1 p2 = unsafeConvert_ $ pure_ (<>) `app_` p1 `app_` p2
 
 ------------------------------------------------------------
 -- Active
 ------------------------------------------------------------
 
 -- | An @Active t a@ is a time-varying value of type @a@, over the
---   time type @t@, defined on some particular 'Era'.
+--   time type @t@, defined on some particular 'Era'.  @Active@ values
+--   may be combined via parallel composition.
 --
 --   Note this is an existentially quantified version of 'Active_',
 --   where we do not track the infinite/finite status of the endpoints
@@ -260,7 +262,7 @@ instance Ord t => Applicative (Active t) where
 -- | Parallel composition of 'Active' values.  The result is defined
 --   on the intersection of the 'Era's of the inputs.
 instance (Semigroup a, Ord t) => Semigroup (Active t a) where
-  Active p1 <> Active p2 = Active (p1 `par` p2)
+  Active p1 <> Active p2 = Active (p1 `par_` p2)
 
 -- | The identity is the bi-infinite, constantly 'mempty' value; the
 --   combining operation is parallel composition (see the 'Semigroup'
@@ -270,66 +272,83 @@ instance (Semigroup a, Monoid a, Ord t) => Monoid (Active t a) where
   mappend = (<>)
 
 ------------------------------------------------------------
+-- SActive
+------------------------------------------------------------
 
--- Abstractly, SActive_ represents equivalence classes of Active
--- under translation.  Concretely, SActive_ is just a wrapper around
--- Active_, where we are careful not to expose the absolute
+-- | An @SActive l r t a@ is a time-varying value of type @a@, over
+--   the time type @t@, which is invariant under translation: that is,
+--   instead of being defined on an 'Era', an @SActive@ value has
+--   only a (generalized) duration.  Abstractly, @SActive l r t a@
+--   represents equivalence classes of @Active_ l r t a@ values under
+--   translation. However, in addition to @I@ and @C@, @l@ and @r@ may
+--   also be @O@, indicating a finite, \"open\" endpoint (*i.e.* it is
+--   undefined precisely at the endpoint).
+--
+--   @SActive@ values may be combined via sequential composition; see
+--   'seqL' and 'seqR'.  This is why the name is prefixed with @S@:
+--   think of it as \"Sequential Active\".
+newtype SActive l r t a = SActive { _getActive :: Active_ l r t a }
+
+-- Concretely, SActive is just a wrapper around
+-- Active_, but we are careful not to expose the absolute
 -- positioning of the underlying Active_.
-newtype SActive_ l r t a = SActive_ { _getActive :: Active_ l r t a }
 
-data SActive t a where
-  SActive :: SActive_ l r t a -> SActive t a
+-- NOTE that there is no existential wrapper around SActive which
+-- hides l and r (as there is with Active_/Active).  It is sensible to
+-- combine Active values via parallel composition since any
+-- combination of endpoint types may be composed.  However, with
+-- SActive_ that is not the case -- we need to have open+closed or
+-- closed+open.  So if we had an existentially quantified version we
+-- would not even be able to perform sequential composition on it --
+-- it would be pretty useless.
 
--- do not export!
-unsafeConvertS_ :: SActive_ l r t a -> SActive_ l' r' t a
-unsafeConvertS_ (SActive_ a) = SActive_ (unsafeConvert_ a)
+unsafeConvertS :: SActive l r t a -> SActive l' r' t a
+unsafeConvertS (SActive a) = SActive (unsafeConvert_ a)
 
-float_ :: Active_ l r t a -> SActive_ l r t a
-float_ = SActive_
+float_ :: Active_ l r t a -> SActive l r t a
+float_ = SActive
 
-floatR_ :: Active_ l r t a -> SActive_ l (Open r) t a
-floatR_ = openR_ . float_
+floatR_ :: Active_ l r t a -> SActive l (Open r) t a
+floatR_ = openR . float_
 
-floatL_ :: Active_ l r t a -> SActive_ (Open l) r t a
-floatL_ = openL_ . float_
+floatL_ :: Active_ l r t a -> SActive (Open l) r t a
+floatL_ = openL . float_
 
-openR_ :: SActive_ l r t a -> SActive_ l (Open r) t a
-openR_ = unsafeConvertS_
+openR :: SActive l r t a -> SActive l (Open r) t a
+openR = unsafeConvertS
 
-openL_ :: SActive_ l r t a -> SActive_ (Open l) r t a
-openL_ = unsafeConvertS_
+openL :: SActive l r t a -> SActive (Open l) r t a
+openL = unsafeConvertS
 
-closeR_ :: Eq t => a -> SActive_ l O t a -> SActive_ l C t a
-closeR_ = unsafeCloseS_ end
+closeR :: Eq t => a -> SActive l O t a -> SActive l C t a
+closeR = unsafeCloseS end
 
-closeL_ :: Eq t => a -> SActive_ O r t a -> SActive_ C r t a
-closeL_ = unsafeCloseS_ start
+closeL :: Eq t => a -> SActive O r t a -> SActive C r t a
+closeL = unsafeCloseS start
 
--- do not export!
-unsafeCloseS_ :: Eq t
+unsafeCloseS :: Eq t
               => Lens' (Era t) (Inf pn t)
-              -> a -> SActive_ l r t a -> SActive_ l' r' t a
-unsafeCloseS_ endpt a (SActive_ (Active_ e f)) =
+              -> a -> SActive l r t a -> SActive l' r' t a
+unsafeCloseS endpt a (SActive (Active_ e f)) =
   case e ^. endpt of
     -- can we actually make this case impossible??
     Infinity  -> error "close: this should never happen!  An Open endpoint is Infinite!"
-    Finite t' -> SActive_ (Active_ e (\t -> if t == t' then a else f t))
+    Finite t' -> SActive (Active_ e (\t -> if t == t' then a else f t))
 
 seqR :: (AffineSpace t, Deadline t a)
-     => SActive_ l O t a -> SActive_ C r t a -> SActive_ l r t a
+     => SActive l O t a -> SActive C r t a -> SActive l r t a
 seqR = unsafeSeq chooseR
 
 seqL :: (AffineSpace t, Deadline t a)
-     => SActive_ l C t a -> SActive_ O r t a -> SActive_ l r t a
+     => SActive l C t a -> SActive O r t a -> SActive l r t a
 seqL = unsafeSeq chooseL
 
--- do not export!
 unsafeSeq :: (AffineSpace t, Deadline t a)
      => (t -> t -> a -> a -> a)
-     -> SActive_ l r1 t a -> SActive_ l2 r t a -> SActive_ l r t a
-unsafeSeq choice (SActive_ (Active_ (Era (s1, Finite e1)) f1))
-                 (SActive_ (Active_ (Era (Finite s2, e2)) f2))
-  = SActive_ (Active_ (Era (s1, e2 `offsetTime` (e1 .-. s2)))
+     -> SActive l r1 t a -> SActive l2 r t a -> SActive l r t a
+unsafeSeq choice (SActive (Active_ (Era (s1, Finite e1)) f1))
+                 (SActive (Active_ (Era (Finite s2, e2)) f2))
+  = SActive (Active_ (Era (s1, e2 `offsetTime` (e1 .-. s2)))
                       (\t -> choice e1 t (f1 t) (f2 t))
              )
 unsafeSeq _ _ _ = error "seq: impossible"
@@ -338,7 +357,7 @@ offsetTime :: AffineSpace t => Inf p t -> Diff t -> Inf p t
 offsetTime Infinity _ = Infinity
 offsetTime (Finite t) d = Finite (t .+^ d)
 
--- default conversion: left endpoints are closed, right are open
--- (thrown away)
-float :: Active t a -> SActive t a
-float (Active a) = SActive (floatR_ a)
+-- -- default conversion: left endpoints are closed, right are open
+-- -- (thrown away)
+-- float :: Active t a -> SActive t a
+-- float (Active a) = SActive (floatR_ a)
