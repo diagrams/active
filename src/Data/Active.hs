@@ -24,18 +24,10 @@ import           Control.Applicative
 import           Control.Arrow       ((***))
 import           Control.Lens
 import           Data.AffineSpace
+import qualified Data.Map            as M
 import           Data.Monoid.Inf
 import           Data.Semigroup
 import           Data.VectorSpace
-
--- import Control.Arrow ((&&&))
--- import Control.Newtype
-
--- import Data.Array
--- import Data.Maybe
-
--- import Data.Functor.Apply
--- import Data.Monoid (First(..))
 
 ------------------------------------------------------------
 -- Clock
@@ -140,6 +132,16 @@ class Shifty a where
 
   shift :: Diff (ShiftyTime a) -> a -> a
 
+instance Shifty s => Shifty (Maybe s) where
+  type ShiftyTime (Maybe s) = ShiftyTime s
+
+  shift = fmap . shift
+
+instance (Shifty a, Shifty b, ShiftyTime a ~ ShiftyTime b) => Shifty (a,b) where
+  type ShiftyTime (a,b) = ShiftyTime a
+
+  shift d = shift d *** shift d
+
 instance Shifty Time where
   type ShiftyTime Time = Time
 
@@ -161,32 +163,40 @@ instance AffineSpace t => Shifty (Inf pn t) where
 --
 --   @Era@ is abstract. To construct @Era@ values, use 'mkEra'; to
 --   deconstruct, use 'start' and 'end'.
-newtype Era t = Era { _limits :: (NegInf t, PosInf t) }
-  deriving (Show, Eq, Ord, Semigroup, Monoid)
+newtype Era t = Era { _limits :: Maybe (NegInf t, PosInf t) }
+  deriving (Show, Eq, Ord)
+
+instance Ord t => Semigroup (Era t) where
+  Era (Just ls1) <> Era (Just ls2) = Era (Just (ls1 <> ls2))
+  _ <> _                           = Era Nothing
+
+instance Ord t => Monoid (Era t) where
+  mappend = (<>)
+  mempty  = Era (Just mempty)
 
 makeLenses ''Era
 
 -- | Create an 'Era' by specifying (potentially infinite) start and
 -- end times.
 mkEra :: NegInf t -> PosInf t -> Era t
-mkEra s e = Era (s,e)
+mkEra s e = Era (Just (s,e))
 
 -- | Create a finite 'Era' by specifying finite start and end 'Time's.
 mkEra' :: t -> t -> Era t
-mkEra' s e = Era (Finite s, Finite e)
+mkEra' s e = mkEra (Finite s) (Finite e)
 
--- | A lens for accessing the start time of an 'Era'.
-start :: Lens' (Era t) (NegInf t)
-start f (Era (s, e)) = (\s' -> Era (s',e)) <$> f s
+-- | A getter for accessing the start time of an 'Era'.
+start :: Getter (Era t) (Maybe (NegInf t))
+start = limits . to (fmap fst)
 
--- | A lens for accessing the end time of an 'Era'.
-end :: Lens' (Era t) (PosInf t)
-end f (Era (s,e)) = (\e' -> Era (s,e')) <$> f e
+-- | A getter for accessing the end time of an 'Era'.
+end :: Getter (Era t) (Maybe (PosInf t))
+end = limits . to (fmap snd)
 
 instance AffineSpace t => Shifty (Era t) where
   type ShiftyTime (Era t) = t
 
-  shift d = limits %~ (shift d *** shift d)
+  shift = over limits . shift
 
 ------------------------------------------------------------
 -- Type tags for Active
@@ -311,6 +321,9 @@ instance (Semigroup a, Monoid a, Ord t) => Monoid (Active t a) where
 -- SActive
 ------------------------------------------------------------
 
+data Anchor = Start | End | Center
+  deriving (Eq, Ord, Show, Read)
+
 -- | An @SActive l r t a@ is a time-varying value of type @a@, over
 --   the time type @t@, which is invariant under translation: that is,
 --   instead of being defined on an 'Era', an @SActive@ value has
@@ -323,7 +336,11 @@ instance (Semigroup a, Monoid a, Ord t) => Monoid (Active t a) where
 --   @SActive@ values may be combined via sequential composition; see
 --   'seqL' and 'seqR'.  This is why the name is prefixed with @S@:
 --   think of it as \"Sequential Active\".
-newtype SActive l r t a = SActive { _getActive :: Active_ l r t a }
+data SActive l r t a = SActive { _active_ :: Active_ l r t a
+                               , _anchors :: M.Map Anchor t
+                               }
+
+makeLenses ''SActive
 
 -- Concretely, SActive is just a wrapper around
 -- Active_, but we are careful not to expose the absolute
@@ -339,10 +356,10 @@ newtype SActive l r t a = SActive { _getActive :: Active_ l r t a }
 -- it would be pretty useless.
 
 unsafeConvertS :: SActive l r t a -> SActive l' r' t a
-unsafeConvertS (SActive a) = SActive (unsafeConvert_ a)
+unsafeConvertS = active_ %~ unsafeConvert_
 
 float_ :: Active_ l r t a -> SActive l r t a
-float_ = SActive
+float_ = undefined -- SActive
 
 floatR_ :: Active_ l r t a -> SActive l (Open r) t a
 floatR_ = openR . float_
@@ -363,13 +380,14 @@ closeL :: Eq t => a -> SActive O r t a -> SActive C r t a
 closeL = unsafeCloseS start
 
 unsafeCloseS :: Eq t
-              => Lens' (Era t) (Inf pn t)
+              => Getter (Era t) (Maybe (Inf pn t))
               -> a -> SActive l r t a -> SActive l' r' t a
-unsafeCloseS endpt a (SActive (Active_ e f)) =
-  case e ^. endpt of
-    -- can we actually make this case impossible?  should we??
-    Infinity  -> error "close: this should never happen!  An Open endpoint is Infinite!"
-    Finite t' -> SActive (Active_ e (\t -> if t == t' then a else f t))
+unsafeCloseS = undefined
+-- unsafeCloseS endpt a (SActive (Active_ e f) _) =
+--   case e ^. endpt of
+--     -- can we actually make this case impossible?  should we??
+--     Infinity  -> error "close: this should never happen!  An Open endpoint is Infinite!"
+--     Finite t' -> SActive (Active_ e (\t -> if t == t' then a else f t))
 
 seqR :: (AffineSpace t, Deadline t a)
      => SActive l O t a -> SActive C r t a -> SActive l r t a
@@ -382,19 +400,20 @@ seqL = unsafeSeq chooseL
 unsafeSeq :: (AffineSpace t, Deadline t a)
      => (t -> t -> a -> a -> a)
      -> SActive l r1 t a -> SActive l2 r t a -> SActive l r t a
-unsafeSeq choice (SActive (Active_ (Era (s1, Finite e1)) f1))
-                 (SActive (Active_ (Era (Finite s2, e2)) f2))
-  = SActive (Active_ (Era (s1, shift (e1 .-. s2) e2))
-                      (\t -> choice e1 t (f1 t) (f2 t))
-             )
-unsafeSeq _ _ _ = error "seq: impossible"
+unsafeSeq = undefined
+-- unsafeSeq choice (SActive (Active_ (Era (s1, Finite e1)) f1))
+--                  (SActive (Active_ (Era (Finite s2, e2)) f2))
+--   = SActive (Active_ (Era (s1, shift (e1 .-. s2) e2))
+--                       (\t -> choice e1 t (f1 t) (f2 t))
+--              )
+-- unsafeSeq _ _ _ = error "seq: impossible"
 
 instance Deadline t a => Semigroup (SActive C O t a) where
   (<>) = seqR
 
 instance Deadline t a => Monoid (SActive C O t a) where
   mappend = (<>)
-  mempty  = SActive undefined -- XXX what to do here?
+  mempty  = SActive undefined undefined -- XXX what to do here?
                               -- Should we make a special empty Era value?
 
 instance Deadline t a => Semigroup (SActive O C t a) where
@@ -402,7 +421,7 @@ instance Deadline t a => Semigroup (SActive O C t a) where
 
 instance Deadline t a => Monoid (SActive O C t a) where
   mappend = (<>)
-  mempty  = SActive undefined
+  mempty  = SActive undefined undefined
 
 ------------------------------------------------------------
 -- Derived API
