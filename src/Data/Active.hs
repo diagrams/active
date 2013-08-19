@@ -21,7 +21,8 @@
 module Data.Active where
 
 import           Control.Applicative
-import           Control.Lens        (Lens', makeLenses, view, (^.))
+import           Control.Arrow       ((***))
+import           Control.Lens
 import           Data.AffineSpace
 import           Data.Monoid.Inf
 import           Data.Semigroup
@@ -76,7 +77,7 @@ class Clock t => Deadline t a where
   -- at all other times they are identical.
 
 ------------------------------------------------------------
--- Time
+-- Time + Duration
 ------------------------------------------------------------
 
 -- | An abstract type for representing /points in time/.  Note that
@@ -130,6 +131,29 @@ instance Waiting Duration where
 instance Fractional a => FractionalOf Duration a where
   toFractionalOf (Duration d) = fromRational d
 
+--------------------------------------------------
+-- Shifty
+--------------------------------------------------
+
+class Shifty a where
+  type ShiftyTime a :: *
+
+  shift :: Diff (ShiftyTime a) -> a -> a
+
+instance Shifty Time where
+  type ShiftyTime Time = Time
+
+  shift d = (.+^ d)
+
+instance AffineSpace t => Shifty (Inf pn t) where
+  type ShiftyTime (Inf pn t) = t
+
+  shift d = fmap (.+^ d)
+
+------------------------------------------------------------
+-- Era
+------------------------------------------------------------
+
 -- | An @Era@ is a (potentially infinite) span of time.  @Era@s form a
 --   monoid: the combination of two @Era@s is the largest @Era@ which
 --   is contained in both; the identity @Era@ is the bi-infinite @Era@
@@ -137,8 +161,10 @@ instance Fractional a => FractionalOf Duration a where
 --
 --   @Era@ is abstract. To construct @Era@ values, use 'mkEra'; to
 --   deconstruct, use 'start' and 'end'.
-newtype Era t = Era (NegInf t, PosInf t)
+newtype Era t = Era { _limits :: (NegInf t, PosInf t) }
   deriving (Show, Eq, Ord, Semigroup, Monoid)
+
+makeLenses ''Era
 
 -- | Create an 'Era' by specifying (potentially infinite) start and
 -- end times.
@@ -156,6 +182,11 @@ start f (Era (s, e)) = (\s' -> Era (s',e)) <$> f s
 -- | A lens for accessing the end time of an 'Era'.
 end :: Lens' (Era t) (PosInf t)
 end f (Era (s,e)) = (\e' -> Era (s,e')) <$> f e
+
+instance AffineSpace t => Shifty (Era t) where
+  type ShiftyTime (Era t) = t
+
+  shift d = limits %~ (shift d *** shift d)
 
 ------------------------------------------------------------
 -- Type tags for Active
@@ -195,7 +226,7 @@ and so on...?
 --   respectively infinite (@I@) or finite (@F@).  @Active_@ values
 --   may be combined via parallel composition; see 'par_'.
 data Active_ l r t a = Active_
-  { _pEra      :: Era t
+  { _era       :: Era t
   , _runActive :: t -> a
   }
   deriving (Functor)
@@ -230,6 +261,11 @@ par_ (Active_ e1 f1) (Active_ e2 f2) = Active_ (e1 <> e2) (f1 <> f2)
 --   that I is a left identity for Isect.  Doable but not worth it. =)
 --   can also do:
 -- par_ p1 p2 = unsafeConvert_ $ pure_ (<>) `app_` p1 `app_` p2
+
+instance AffineSpace t => Shifty (Active_ l r t a) where
+  type ShiftyTime (Active_ l r t a) = t
+
+  shift = over era . shift
 
 ------------------------------------------------------------
 -- Active
@@ -331,7 +367,7 @@ unsafeCloseS :: Eq t
               -> a -> SActive l r t a -> SActive l' r' t a
 unsafeCloseS endpt a (SActive (Active_ e f)) =
   case e ^. endpt of
-    -- can we actually make this case impossible??
+    -- can we actually make this case impossible?  should we??
     Infinity  -> error "close: this should never happen!  An Open endpoint is Infinite!"
     Finite t' -> SActive (Active_ e (\t -> if t == t' then a else f t))
 
@@ -348,16 +384,32 @@ unsafeSeq :: (AffineSpace t, Deadline t a)
      -> SActive l r1 t a -> SActive l2 r t a -> SActive l r t a
 unsafeSeq choice (SActive (Active_ (Era (s1, Finite e1)) f1))
                  (SActive (Active_ (Era (Finite s2, e2)) f2))
-  = SActive (Active_ (Era (s1, e2 `offsetTime` (e1 .-. s2)))
+  = SActive (Active_ (Era (s1, shift (e1 .-. s2) e2))
                       (\t -> choice e1 t (f1 t) (f2 t))
              )
 unsafeSeq _ _ _ = error "seq: impossible"
 
-offsetTime :: AffineSpace t => Inf p t -> Diff t -> Inf p t
-offsetTime Infinity _ = Infinity
-offsetTime (Finite t) d = Finite (t .+^ d)
+instance Deadline t a => Semigroup (SActive C O t a) where
+  (<>) = seqR
 
--- -- default conversion: left endpoints are closed, right are open
--- -- (thrown away)
--- float :: Active t a -> SActive t a
--- float (Active a) = SActive (floatR_ a)
+instance Deadline t a => Monoid (SActive C O t a) where
+  mappend = (<>)
+  mempty  = SActive undefined -- XXX what to do here?
+                              -- Should we make a special empty Era value?
+
+instance Deadline t a => Semigroup (SActive O C t a) where
+  (<>) = seqL
+
+instance Deadline t a => Monoid (SActive O C t a) where
+  mappend = (<>)
+  mempty  = SActive undefined
+
+------------------------------------------------------------
+-- Derived API
+------------------------------------------------------------
+
+-- Sequence (using seqR) if possible.  If one of the inside boundaries
+-- is infinite, the non-infinite one gets dropped; if both are
+-- infinite the R one gets dropped?
+seq :: Active t a -> Active t a -> Active t a
+seq = undefined
