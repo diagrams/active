@@ -25,9 +25,38 @@ import           Control.Arrow       ((***))
 import           Control.Lens
 import           Data.AffineSpace
 import qualified Data.Map            as M
+import           Data.Maybe          (isNothing)
 import           Data.Monoid.Inf
 import           Data.Semigroup
 import           Data.VectorSpace
+
+------------------------------------------------------------
+-- Type tags for Active
+------------------------------------------------------------
+
+data I -- nfinite
+data C -- losed
+data O -- pen
+
+-- Convert Closed to Open
+type family Open x :: *
+type instance Open I = I
+type instance Open C = O
+type instance Open O = O
+
+-- Intersection of finite + infinite = finite.
+type family Isect x y :: *
+type instance Isect I I = I
+type instance Isect C I = C
+type instance Isect I C = C
+type instance Isect C C = C
+
+{- Ideally, the C/O/I type indices would actually determine what sort
+of Eras could be contained in a Active_, so e.g. we don't need the
+error case in unsafeClose.  How might this work?  Would need a GADT
+variant of Inf?  But that would probably lead to trouble making it Ord
+and so on...?
+-}
 
 ------------------------------------------------------------
 -- Clock
@@ -59,14 +88,9 @@ class (FractionalOf w (Scalar w), VectorSpace w) => Waiting w where
 class Fractional a => FractionalOf v a where
   toFractionalOf :: v -> a
 
-class Clock t => Deadline t a where
+class Clock t => Deadline l r t a where
   -- choose deadline-time time-now (if before deadline) (if after deadline)
-  chooseL :: t -> t -> a -> a -> a
-  chooseR :: t -> t -> a -> a -> a
-
-  -- chooseL takes the lefthand value at the precise deadline time.
-  -- chooseR takes the righthand value.
-  -- at all other times they are identical.
+  choose :: t -> t -> a -> a -> a
 
 ------------------------------------------------------------
 -- Time + Duration
@@ -96,9 +120,11 @@ instance Clock Time where
 instance Fractional a => FractionalOf Time a where
   toFractionalOf (Time d) = fromRational d
 
-instance Deadline Time a where
-  chooseL deadline now a b = if now <= deadline then a else b
-  chooseR deadline now a b = if now <  deadline then a else b
+instance Deadline C O Time a where
+  choose deadline now a b = if now <= deadline then a else b
+
+instance Deadline O C Time a where
+  choose deadline now a b = if now <  deadline then a else b
 
 -- | An abstract type representing /elapsed time/ between two points
 --   in time.  Note that durations can be negative. Literal numeric
@@ -126,6 +152,11 @@ instance Fractional a => FractionalOf Duration a where
 --------------------------------------------------
 -- Shifty
 --------------------------------------------------
+
+-- Note this is a monoid action of durations on timey things.  But we
+-- can't really use the Action type class because we want it to be
+-- polymorphic in both the timey things AND the durations (so we can
+-- do deep embedding stuff and use e.g. JSDuration or whatever).
 
 class Shifty a where
   type ShiftyTime a :: *
@@ -161,35 +192,61 @@ instance AffineSpace t => Shifty (Inf pn t) where
 --   is contained in both; the identity @Era@ is the bi-infinite @Era@
 --   covering all time.
 --
---   @Era@ is abstract. To construct @Era@ values, use 'mkEra'; to
---   deconstruct, use 'start' and 'end'.
+--   There is also a distinguished empty @Era@, which has no duration
+--   and no start or end time.  Note that an @Era@ whose start and end
+--   times coincide is /not/ the empty @Era@, though it has zero
+--   duration.
+--
+--   @Era@ is (intentionally) abstract. To construct @Era@ values, use
+--   'mkEra'; to deconstruct, use 'start' and 'end'.
 newtype Era t = Era { _limits :: Maybe (NegInf t, PosInf t) }
   deriving (Show, Eq, Ord)
 
+  -- We do not export the Era constructor, and maintain the invariant
+  -- that the start time is always <= the end time.
+
+makeLenses ''Era
+
+-- | Two eras intersect to form the largest era which is contained in
+--   both, with the empty era as an annihilator.
 instance Ord t => Semigroup (Era t) where
-  Era (Just ls1) <> Era (Just ls2) = Era (Just (ls1 <> ls2))
+  Era (Just ls1) <> Era (Just ls2) = canonicalizeEra $ Era (Just (ls1 <> ls2))
   _ <> _                           = Era Nothing
 
 instance Ord t => Monoid (Era t) where
   mappend = (<>)
   mempty  = Era (Just mempty)
 
-makeLenses ''Era
+-- Maintain the invariant that s <= e
+canonicalizeEra :: Ord t => Era t -> Era t
+canonicalizeEra (Era (Just (Finite s, Finite e))) | s > e = Era Nothing
+canonicalizeEra era = era
+
+-- | The empty era, which has no duration and no start or end time,
+--   and is an annihilator for '<>'.
+emptyEra :: Era t
+emptyEra = Era Nothing
+
+-- | Check if an era is the empty era.
+eraIsEmpty :: Ord t => Era t -> Bool
+eraIsEmpty (Era e) = isNothing e
 
 -- | Create an 'Era' by specifying (potentially infinite) start and
--- end times.
-mkEra :: NegInf t -> PosInf t -> Era t
-mkEra s e = Era (Just (s,e))
+--   end times.
+mkEra :: Ord t => NegInf t -> PosInf t -> Era t
+mkEra s e = canonicalizeEra $ Era (Just (s,e))
 
 -- | Create a finite 'Era' by specifying finite start and end 'Time's.
-mkEra' :: t -> t -> Era t
+mkEra' :: Ord t => t -> t -> Era t
 mkEra' s e = mkEra (Finite s) (Finite e)
 
--- | A getter for accessing the start time of an 'Era'.
+-- | A getter for accessing the start time of an 'Era', or @Nothing@
+--   if the era is empty.
 start :: Getter (Era t) (Maybe (NegInf t))
 start = limits . to (fmap fst)
 
--- | A getter for accessing the end time of an 'Era'.
+-- | A getter for accessing the end time of an 'Era', or @Nothing@ if
+--   the era is empty.
 end :: Getter (Era t) (Maybe (PosInf t))
 end = limits . to (fmap snd)
 
@@ -197,34 +254,6 @@ instance AffineSpace t => Shifty (Era t) where
   type ShiftyTime (Era t) = t
 
   shift = over limits . shift
-
-------------------------------------------------------------
--- Type tags for Active
-------------------------------------------------------------
-
-data I -- nfinite
-data C -- losed
-data O -- pen
-
--- Convert Closed to Open
-type family Open x :: *
-type instance Open I = I
-type instance Open C = O
-type instance Open O = O
-
--- Intersection of finite + infinite = finite.
-type family Isect x y :: *
-type instance Isect I I = I
-type instance Isect C I = C
-type instance Isect I C = C
-type instance Isect C C = C
-
-{- Ideally, the C/O/I type indices would actually determine what sort
-of Eras could be contained in a Active_, so e.g. we don't need the
-error case in unsafeClose.  How might this work?  Would need a GADT
-variant of Inf?  But that would probably lead to trouble making it Ord
-and so on...?
--}
 
 ------------------------------------------------------------
 -- Active_
@@ -241,10 +270,10 @@ data Active_ l r t a = Active_
   }
   deriving (Functor)
 
+makeLenses ''Active_
+
 unsafeConvert_ :: Active_ l r t a -> Active_ l' r' t a
 unsafeConvert_ (Active_ e f) = Active_ e f
-
-makeLenses ''Active_
 
 -- | Create a bi-infinite, constant 'Active_' value.
 pure_ :: Ord t => a -> Active_ I I t a
@@ -358,13 +387,37 @@ makeLenses ''SActive
 unsafeConvertS :: SActive l r t a -> SActive l' r' t a
 unsafeConvertS = active_ %~ unsafeConvert_
 
-float_ :: Active_ l r t a -> SActive l r t a
-float_ = undefined -- SActive
+float_ :: (AffineSpace t, VectorSpace (Diff t)) => Active_ l r t a -> SActive l r t a
+float_ a_ = addDefaultAnchors $ SActive a_ M.empty
 
-floatR_ :: Active_ l r t a -> SActive l (Open r) t a
+addDefaultAnchors :: (AffineSpace t, VectorSpace (Diff t)) => SActive l r t a -> SActive l r t a
+addDefaultAnchors (SActive a m) = SActive a (M.union m (defaultAnchors (a^.era)))
+
+defaultAnchors :: (AffineSpace t, VectorSpace (Diff t)) => Era t -> M.Map Anchor t
+defaultAnchors (Era Nothing)      = M.empty
+defaultAnchors (Era (Just (s,e))) = M.unions [startAnchor s, endAnchor e]
+  where
+    startAnchor (Finite s') = M.singleton Start s'
+    startAnchor _           = M.empty
+    endAnchor   (Finite e') = M.singleton End e'
+    endAnchor   _           = M.empty
+
+addCenterAnchor :: (Num t, AffineSpace t, VectorSpace (Diff t), Fractional (Scalar (Diff t)))
+                => SActive l r t a -> SActive l r t a
+addCenterAnchor (SActive a m) = SActive a (M.union m (centerAnchor (a^.era)))
+
+centerAnchor :: (Num t, AffineSpace t, VectorSpace (Diff t), Fractional (Scalar (Diff t)))
+             => Era t -> M.Map Anchor t
+centerAnchor (Era Nothing) = M.empty
+centerAnchor (Era (Just ls)) = case ls of
+  (Infinity, Infinity) -> M.singleton Center 0
+  (Finite s, Finite e) -> M.singleton Center (alerp s e 0.5)
+  _                    -> M.empty
+
+floatR_ :: (AffineSpace t, VectorSpace (Diff t)) => Active_ l r t a -> SActive l (Open r) t a
 floatR_ = openR . float_
 
-floatL_ :: Active_ l r t a -> SActive (Open l) r t a
+floatL_ :: (AffineSpace t, VectorSpace (Diff t)) => Active_ l r t a -> SActive (Open l) r t a
 floatL_ = openL . float_
 
 openR :: SActive l r t a -> SActive l (Open r) t a
@@ -382,53 +435,30 @@ closeL = unsafeCloseS start
 unsafeCloseS :: Eq t
               => Getter (Era t) (Maybe (Inf pn t))
               -> a -> SActive l r t a -> SActive l' r' t a
-unsafeCloseS = undefined
--- unsafeCloseS endpt a (SActive (Active_ e f) _) =
---   case e ^. endpt of
---     -- can we actually make this case impossible?  should we??
---     Infinity  -> error "close: this should never happen!  An Open endpoint is Infinite!"
---     Finite t' -> SActive (Active_ e (\t -> if t == t' then a else f t))
+unsafeCloseS endpt a s@(SActive (Active_ e f) m) =
+  case e ^. endpt of
+    -- can we actually make this case impossible?  should we??
+    Nothing          -> s
+    Just Infinity    -> error "close: this should never happen!  An Open endpoint is Infinite!"
+    Just (Finite t') -> SActive (Active_ e (\t -> if t == t' then a else f t)) m
 
-seqR :: (AffineSpace t, Deadline t a)
-     => SActive l O t a -> SActive C r t a -> SActive l r t a
-seqR = unsafeSeq chooseR
-
-seqL :: (AffineSpace t, Deadline t a)
-     => SActive l C t a -> SActive O r t a -> SActive l r t a
-seqL = unsafeSeq chooseL
-
-unsafeSeq :: (AffineSpace t, Deadline t a)
-     => (t -> t -> a -> a -> a)
-     -> SActive l r1 t a -> SActive l2 r t a -> SActive l r t a
-unsafeSeq = undefined
--- unsafeSeq choice (SActive (Active_ (Era (s1, Finite e1)) f1))
+(...) :: (AffineSpace t, Deadline r1 l2 t a)
+    => SActive l1 r1 t a -> SActive l2 r2 t a -> SActive l r t a
+(...) = undefined
+-- (SActive (Active_ (Era (s1, Finite e1)) f1))
 --                  (SActive (Active_ (Era (Finite s2, e2)) f2))
 --   = SActive (Active_ (Era (s1, shift (e1 .-. s2) e2))
---                       (\t -> choice e1 t (f1 t) (f2 t))
+--                       (\t -> choose e1 t (f1 t) (f2 t))
 --              )
--- unsafeSeq _ _ _ = error "seq: impossible"
 
-instance Deadline t a => Semigroup (SActive C O t a) where
-  (<>) = seqR
+instance Deadline r l t a => Semigroup (SActive l r t a) where
+  (<>) = (...)
 
-instance Deadline t a => Monoid (SActive C O t a) where
+instance Deadline r l t a => Monoid (SActive l r t a) where
   mappend = (<>)
-  mempty  = SActive undefined undefined -- XXX what to do here?
-                              -- Should we make a special empty Era value?
-
-instance Deadline t a => Semigroup (SActive O C t a) where
-  (<>) = seqL
-
-instance Deadline t a => Monoid (SActive O C t a) where
-  mappend = (<>)
-  mempty  = SActive undefined undefined
+  mempty  = SActive (Active_ emptyEra (const undefined)) M.empty
 
 ------------------------------------------------------------
 -- Derived API
 ------------------------------------------------------------
 
--- Sequence (using seqR) if possible.  If one of the inside boundaries
--- is infinite, the non-infinite one gets dropped; if both are
--- infinite the R one gets dropped?
-seq :: Active t a -> Active t a -> Active t a
-seq = undefined
