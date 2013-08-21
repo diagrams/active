@@ -6,6 +6,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE RankNTypes                 #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeFamilies               #-}
 
@@ -88,9 +89,11 @@ class (FractionalOf w (Scalar w), VectorSpace w) => Waiting w where
 class Fractional a => FractionalOf v a where
   toFractionalOf :: v -> a
 
+data Proxy a = Proxy
+
 class Clock t => Deadline l r t a where
   -- choose deadline-time time-now (if before deadline) (if after deadline)
-  choose :: t -> t -> a -> a -> a
+  choose :: Proxy l -> Proxy r -> t -> t -> a -> a -> a
 
 ------------------------------------------------------------
 -- Time + Duration
@@ -121,10 +124,10 @@ instance Fractional a => FractionalOf Time a where
   toFractionalOf (Time d) = fromRational d
 
 instance Deadline C O Time a where
-  choose deadline now a b = if now <= deadline then a else b
+  choose _ _ deadline now a b = if now <= deadline then a else b
 
 instance Deadline O C Time a where
-  choose deadline now a b = if now <  deadline then a else b
+  choose _ _ deadline now a b = if now <  deadline then a else b
 
 -- | An abstract type representing /elapsed time/ between two points
 --   in time.  Note that durations can be negative. Literal numeric
@@ -172,6 +175,16 @@ instance (Shifty a, Shifty b, ShiftyTime a ~ ShiftyTime b) => Shifty (a,b) where
   type ShiftyTime (a,b) = ShiftyTime a
 
   shift d = shift d *** shift d
+
+instance (AffineSpace t) => Shifty (t -> a) where
+  type ShiftyTime (t -> a) = t
+
+  shift d f = f . (.-^ d)
+
+instance AffineSpace t => Shifty (M.Map k t) where
+  type ShiftyTime (M.Map k t) = t
+
+  shift d = fmap (.+^ d)
 
 instance Shifty Time where
   type ShiftyTime Time = Time
@@ -301,10 +314,10 @@ par_ (Active_ e1 f1) (Active_ e2 f2) = Active_ (e1 <> e2) (f1 <> f2)
 --   can also do:
 -- par_ p1 p2 = unsafeConvert_ $ pure_ (<>) `app_` p1 `app_` p2
 
-instance AffineSpace t => Shifty (Active_ l r t a) where
+instance (Shifty a, AffineSpace t, t ~ ShiftyTime a) => Shifty (Active_ l r t a) where
   type ShiftyTime (Active_ l r t a) = t
 
-  shift = over era . shift
+  shift d = (runActive %~ shift d) . (era %~ shift d)
 
 ------------------------------------------------------------
 -- Active
@@ -346,11 +359,16 @@ instance (Semigroup a, Monoid a, Ord t) => Monoid (Active t a) where
   mempty  = Active $ pure_ mempty
   mappend = (<>)
 
+instance (Shifty a, AffineSpace t, t ~ ShiftyTime a) => Shifty (Active t a) where
+  type ShiftyTime (Active t a) = t
+
+  shift d (Active a) = Active (shift d a)
+
 ------------------------------------------------------------
 -- SActive
 ------------------------------------------------------------
 
-data Anchor = Start | End | Center
+data Anchor = Start | End | Fixed
   deriving (Eq, Ord, Show, Read)
 
 -- | An @SActive l r t a@ is a time-varying value of type @a@, over
@@ -366,8 +384,10 @@ data Anchor = Start | End | Center
 --   'seqL' and 'seqR'.  This is why the name is prefixed with @S@:
 --   think of it as \"Sequential Active\".
 data SActive l r t a = SActive { _active_ :: Active_ l r t a
-                               , _anchors :: M.Map Anchor t
+                               , _anchors :: AnchorMap t
                                }
+
+type AnchorMap t = M.Map Anchor t
 
 makeLenses ''SActive
 
@@ -393,7 +413,7 @@ float_ a_ = addDefaultAnchors $ SActive a_ M.empty
 addDefaultAnchors :: (AffineSpace t, VectorSpace (Diff t)) => SActive l r t a -> SActive l r t a
 addDefaultAnchors (SActive a m) = SActive a (M.union m (defaultAnchors (a^.era)))
 
-defaultAnchors :: (AffineSpace t, VectorSpace (Diff t)) => Era t -> M.Map Anchor t
+defaultAnchors :: (AffineSpace t, VectorSpace (Diff t)) => Era t -> AnchorMap t
 defaultAnchors (Era Nothing)      = M.empty
 defaultAnchors (Era (Just (s,e))) = M.unions [startAnchor s, endAnchor e]
   where
@@ -401,18 +421,6 @@ defaultAnchors (Era (Just (s,e))) = M.unions [startAnchor s, endAnchor e]
     startAnchor _           = M.empty
     endAnchor   (Finite e') = M.singleton End e'
     endAnchor   _           = M.empty
-
-addCenterAnchor :: (Num t, AffineSpace t, VectorSpace (Diff t), Fractional (Scalar (Diff t)))
-                => SActive l r t a -> SActive l r t a
-addCenterAnchor (SActive a m) = SActive a (M.union m (centerAnchor (a^.era)))
-
-centerAnchor :: (Num t, AffineSpace t, VectorSpace (Diff t), Fractional (Scalar (Diff t)))
-             => Era t -> M.Map Anchor t
-centerAnchor (Era Nothing) = M.empty
-centerAnchor (Era (Just ls)) = case ls of
-  (Infinity, Infinity) -> M.singleton Center 0
-  (Finite s, Finite e) -> M.singleton Center (alerp s e 0.5)
-  _                    -> M.empty
 
 floatR_ :: (AffineSpace t, VectorSpace (Diff t)) => Active_ l r t a -> SActive l (Open r) t a
 floatR_ = openR . float_
@@ -437,19 +445,34 @@ unsafeCloseS :: Eq t
               -> a -> SActive l r t a -> SActive l' r' t a
 unsafeCloseS endpt a s@(SActive (Active_ e f) m) =
   case e ^. endpt of
+    Nothing          -> unsafeConvertS s
     -- can we actually make this case impossible?  should we??
-    Nothing          -> s
     Just Infinity    -> error "close: this should never happen!  An Open endpoint is Infinite!"
     Just (Finite t') -> SActive (Active_ e (\t -> if t == t' then a else f t)) m
 
-(...) :: (AffineSpace t, Deadline r1 l2 t a)
-    => SActive l1 r1 t a -> SActive l2 r2 t a -> SActive l r t a
-(...) = undefined
--- (SActive (Active_ (Era (s1, Finite e1)) f1))
---                  (SActive (Active_ (Era (Finite s2, e2)) f2))
---   = SActive (Active_ (Era (s1, shift (e1 .-. s2) e2))
---                       (\t -> choose e1 t (f1 t) (f2 t))
---              )
+-- ugggggghhhh
+(...) :: forall l1 r1 l2 r2 t a. (AffineSpace t, Deadline r1 l2 t a)
+    => SActive l1 r1 t a -> SActive l2 r2 t a -> SActive l1 r2 t a
+SActive (Active_ (Era Nothing) _) _ ... sa2 = unsafeConvertS sa2
+sa1 ... SActive (Active_ (Era Nothing) _) _ = unsafeConvertS sa1
+(...)
+  (SActive (Active_ (Era (Just (s1, Finite e1))) f1) m1)
+  (SActive (Active_ (Era (Just (Finite s2, e2))) f2) m2)
+  = SActive (Active_ (Era (Just (s1, shift d e2)))
+                     (\t -> choose (Proxy :: Proxy r1) (Proxy :: Proxy l2)
+                              e1 t (f1 t) (shift d f2 t))
+            )
+            (combineAnchors m1 (shift d m2))
+  where
+    d = e1 .-. s2
+_ ... _ = error "... : impossible"
+
+combineAnchors :: AnchorMap t -> AnchorMap t -> AnchorMap t
+combineAnchors = M.unionWithKey select
+  where
+    select Start s _ = s
+    select Fixed f _ = f
+    select End   _ e = e
 
 instance Deadline r l t a => Semigroup (SActive l r t a) where
   (<>) = (...)
