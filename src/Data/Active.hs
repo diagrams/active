@@ -1,3 +1,5 @@
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE DeriveFunctor              #-}
 {-# LANGUAGE EmptyDataDecls             #-}
 {-# LANGUAGE FlexibleContexts           #-}
@@ -5,6 +7,7 @@
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE PolyKinds                  #-}
 {-# LANGUAGE RankNTypes                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TemplateHaskell            #-}
@@ -25,28 +28,30 @@ import           Control.Applicative
 import           Control.Arrow       ((***))
 import           Control.Lens
 import           Data.AffineSpace
+import           Data.Foldable       (Foldable(..))
 import qualified Data.Map            as M
 import           Data.Maybe          (isNothing)
-import           Data.Monoid.Inf
 import           Data.Semigroup
+import           Data.Traversable    (Traversable, fmapDefault, foldMapDefault)
 import           Data.VectorSpace
 
 ------------------------------------------------------------
--- Type tags for Active
+-- Endpoints
 ------------------------------------------------------------
 
-data I -- nfinite
-data C -- losed
-data O -- pen
+data EndpointType
+  = I -- nfinite
+  | C -- losed
+  | O -- pen
 
 -- Convert Closed to Open
-type family Open x :: *
+type family Open (x :: EndpointType) :: EndpointType
 type instance Open I = I
 type instance Open C = O
 type instance Open O = O
 
 -- Intersection of finite + infinite = finite.
-type family Isect x y :: *
+type family Isect (x :: EndpointType) (y :: EndpointType) :: EndpointType
 type instance Isect I I = I
 type instance Isect C I = C
 type instance Isect I C = C
@@ -58,6 +63,35 @@ error case in unsafeClose.  How might this work?  Would need a GADT
 variant of Inf?  But that would probably lead to trouble making it Ord
 and so on...?
 -}
+
+data Endpoint :: EndpointType -> * -> * where
+  Infinity ::      Endpoint I t
+  Finite   :: t -> Endpoint C t
+
+deriving instance Show t => Show (Endpoint e t)
+deriving instance Eq t   => Eq   (Endpoint e t)
+
+instance Functor (Endpoint e) where
+  fmap = fmapDefault
+
+instance Foldable (Endpoint e) where
+  foldMap = foldMapDefault
+
+instance Traversable (Endpoint e) where
+  traverse _ Infinity   = pure Infinity
+  traverse f (Finite t) = Finite <$> f t
+
+endpointCmp :: (t -> t -> t) -> Endpoint e1 t -> Endpoint e2 t -> Endpoint (Isect e1 e2) t
+endpointCmp _   Infinity    Infinity    = Infinity
+endpointCmp _   (Finite t1) Infinity    = Finite t1
+endpointCmp _   Infinity    (Finite t2) = Finite t2
+endpointCmp cmp (Finite t1) (Finite t2) = Finite (cmp t1 t2)
+
+endpointMin :: Ord t => Endpoint e1 t -> Endpoint e2 t -> Endpoint (Isect e1 e2) t
+endpointMin = endpointCmp min
+
+endpointMax :: Ord t => Endpoint e1 t -> Endpoint e2 t -> Endpoint (Isect e1 e2) t
+endpointMax = endpointCmp max
 
 ------------------------------------------------------------
 -- Clock
@@ -77,6 +111,7 @@ class ( AffineSpace t
 
   firstTime :: t -> t -> t
   lastTime  :: t -> t -> t
+
 class (FractionalOf w (Scalar w), VectorSpace w) => Waiting w where
   -- | Convert any value of a 'Real' type (including @Int@, @Integer@,
   --   @Rational@, @Float@, and @Double@) to a 'Duration'.
@@ -91,7 +126,7 @@ class Fractional a => FractionalOf v a where
 
 data Proxy a = Proxy
 
-class Clock t => Deadline l r t a where
+class Clock t => Deadline (l :: EndpointType) (r :: EndpointType) t a where
   -- choose deadline-time time-now (if before deadline) (if after deadline)
   choose :: Proxy l -> Proxy r -> t -> t -> a -> a -> a
 
@@ -191,8 +226,8 @@ instance Shifty Time where
 
   shift d = (.+^ d)
 
-instance AffineSpace t => Shifty (Inf pn t) where
-  type ShiftyTime (Inf pn t) = t
+instance AffineSpace t => Shifty (Endpoint e t) where
+  type ShiftyTime (Endpoint e t) = t
 
   shift d = fmap (.+^ d)
 
@@ -212,61 +247,69 @@ instance AffineSpace t => Shifty (Inf pn t) where
 --
 --   @Era@ is (intentionally) abstract. To construct @Era@ values, use
 --   'mkEra'; to deconstruct, use 'start' and 'end'.
-newtype Era t = Era { _limits :: Maybe (NegInf t, PosInf t) }
-  deriving (Show, Eq, Ord)
+data Era :: EndpointType -> EndpointType -> * -> * where
+  EmptyEra :: Era C C t
+  Era      :: Endpoint l t -> Endpoint r t -> Era l r t
 
   -- We do not export the Era constructor, and maintain the invariant
   -- that the start time is always <= the end time.
 
-makeLenses ''Era
+deriving instance Show t => Show (Era l r t)
+deriving instance Eq   t => Eq   (Era l r t)
+
 
 -- | Two eras intersect to form the largest era which is contained in
 --   both, with the empty era as an annihilator.
-instance Ord t => Semigroup (Era t) where
-  Era (Just ls1) <> Era (Just ls2) = canonicalizeEra $ Era (Just (ls1 <> ls2))
-  _ <> _                           = Era Nothing
-
-instance Ord t => Monoid (Era t) where
-  mappend = (<>)
-  mempty  = Era (Just mempty)
+eraIsect :: Ord t => Era l1 r1 t -> Era l2 r2 t -> Era (Isect l1 l2) (Isect r1 r2) t
+eraIsect (Era l1 r1) (Era l2 r2) = canonicalizeEra $ Era (endpointMax l1 l2) (endpointMin r1 r2)
+eraIsect EmptyEra (Era Infinity Infinity)     = EmptyEra
+eraIsect EmptyEra (Era (Finite _) Infinity)   = EmptyEra
+eraIsect EmptyEra (Era Infinity (Finite _))   = EmptyEra
+eraIsect EmptyEra (Era (Finite _) (Finite _)) = EmptyEra
+eraIsect (Era Infinity Infinity)     EmptyEra = EmptyEra
+eraIsect (Era (Finite _) Infinity)   EmptyEra = EmptyEra
+eraIsect (Era Infinity (Finite _))   EmptyEra = EmptyEra
+eraIsect (Era (Finite _) (Finite _)) EmptyEra = EmptyEra
+  -- ugh, all the above cases are actually needed to make the type checker happy
 
 -- Maintain the invariant that s <= e
-canonicalizeEra :: Ord t => Era t -> Era t
-canonicalizeEra (Era (Just (Finite s, Finite e))) | s > e = Era Nothing
+canonicalizeEra :: Ord t => Era l r t -> Era l r t
+canonicalizeEra (Era (Finite s) (Finite e)) | s > e = EmptyEra
 canonicalizeEra era = era
 
 -- | The empty era, which has no duration and no start or end time,
---   and is an annihilator for '<>'.
-emptyEra :: Era t
-emptyEra = Era Nothing
+--   and is an annihilator for 'eraIsect'.
+emptyEra :: Era C C t
+emptyEra = EmptyEra
 
 -- | Check if an era is the empty era.
-eraIsEmpty :: Ord t => Era t -> Bool
-eraIsEmpty (Era e) = isNothing e
+eraIsEmpty :: Ord t => Era l r t -> Bool
+eraIsEmpty EmptyEra = True
+eraIsEmpty _        = False
 
 -- | Create an 'Era' by specifying (potentially infinite) start and
 --   end times.
-mkEra :: Ord t => NegInf t -> PosInf t -> Era t
-mkEra s e = canonicalizeEra $ Era (Just (s,e))
+mkEra :: Ord t => Endpoint l t -> Endpoint r t -> Era l r t
+mkEra s e = canonicalizeEra $ Era s e
 
 -- | Create a finite 'Era' by specifying finite start and end 'Time's.
-mkEra' :: Ord t => t -> t -> Era t
+mkEra' :: Ord t => t -> t -> Era C C t
 mkEra' s e = mkEra (Finite s) (Finite e)
 
 -- | A getter for accessing the start time of an 'Era', or @Nothing@
 --   if the era is empty.
-start :: Getter (Era t) (Maybe (NegInf t))
-start = limits . to (fmap fst)
+start :: Getter (Era l r t) (Maybe (Endpoint l t))
+start = undefined
 
 -- | A getter for accessing the end time of an 'Era', or @Nothing@ if
 --   the era is empty.
-end :: Getter (Era t) (Maybe (PosInf t))
-end = limits . to (fmap snd)
+end :: Getter (Era l r t) (Maybe (Endpoint r t))
+end = undefined
 
-instance AffineSpace t => Shifty (Era t) where
-  type ShiftyTime (Era t) = t
+instance AffineSpace t => Shifty (Era l r t) where
+  type ShiftyTime (Era l r t) = t
 
-  shift = over limits . shift
+  shift = undefined
 
 ------------------------------------------------------------
 -- Active_
@@ -278,15 +321,12 @@ instance AffineSpace t => Shifty (Era t) where
 --   respectively infinite (@I@) or finite (@F@).  @Active_@ values
 --   may be combined via parallel composition; see 'par_'.
 data Active_ l r t a = Active_
-  { _era       :: Era t
+  { _era       :: Era l r t
   , _runActive :: t -> a
   }
   deriving (Functor)
 
 makeLenses ''Active_
-
-unsafeConvert_ :: Active_ l r t a -> Active_ l' r' t a
-unsafeConvert_ (Active_ e f) = Active_ e f
 
 -- | Create a bi-infinite, constant 'Active_' value.
 pure_ :: Ord t => a -> Active_ I I t a
@@ -404,18 +444,15 @@ makeLenses ''SActive
 -- would not even be able to perform sequential composition on it --
 -- it would be pretty useless.
 
-unsafeConvertS :: SActive l r t a -> SActive l' r' t a
-unsafeConvertS = active_ %~ unsafeConvert_
-
 float_ :: (AffineSpace t, VectorSpace (Diff t)) => Active_ l r t a -> SActive l r t a
 float_ a_ = addDefaultAnchors $ SActive a_ M.empty
 
 addDefaultAnchors :: (AffineSpace t, VectorSpace (Diff t)) => SActive l r t a -> SActive l r t a
 addDefaultAnchors (SActive a m) = SActive a (M.union m (defaultAnchors (a^.era)))
 
-defaultAnchors :: (AffineSpace t, VectorSpace (Diff t)) => Era t -> AnchorMap t
-defaultAnchors (Era Nothing)      = M.empty
-defaultAnchors (Era (Just (s,e))) = M.unions [startAnchor s, endAnchor e]
+defaultAnchors :: (AffineSpace t, VectorSpace (Diff t)) => Era l r t -> AnchorMap t
+defaultAnchors EmptyEra      = M.empty
+defaultAnchors (Era s e) = M.unions [startAnchor s, endAnchor e]
   where
     startAnchor (Finite s') = M.singleton Start s'
     startAnchor _           = M.empty
@@ -440,25 +477,26 @@ closeR = unsafeCloseS end
 closeL :: Eq t => a -> SActive O r t a -> SActive C r t a
 closeL = unsafeCloseS start
 
-unsafeCloseS :: Eq t
-              => Getter (Era t) (Maybe (Inf pn t))
-              -> a -> SActive l r t a -> SActive l' r' t a
-unsafeCloseS endpt a s@(SActive (Active_ e f) m) =
-  case e ^. endpt of
-    Nothing          -> unsafeConvertS s
-    -- can we actually make this case impossible?  should we??
-    Just Infinity    -> error "close: this should never happen!  An Open endpoint is Infinite!"
-    Just (Finite t') -> SActive (Active_ e (\t -> if t == t' then a else f t)) m
+unsafeCloseS = undefined
+-- unsafeCloseS :: Eq t
+--               => Getter (Era l r t) (Maybe (Endpoint l t))
+--               -> a -> SActive l r t a -> SActive l' r' t a
+-- unsafeCloseS endpt a s@(SActive (Active_ e f) m) =
+--   case e ^. endpt of
+--     Nothing          -> unsafeConvertS s
+--     -- can we actually make this case impossible?  should we??
+--     Just Infinity    -> error "close: this should never happen!  An Open endpoint is Infinite!"
+--     Just (Finite t') -> SActive (Active_ e (\t -> if t == t' then a else f t)) m
 
 -- ugggggghhhh
 (...) :: forall l1 r1 l2 r2 t a. (AffineSpace t, Deadline r1 l2 t a)
     => SActive l1 r1 t a -> SActive l2 r2 t a -> SActive l1 r2 t a
-SActive (Active_ (Era Nothing) _) _ ... sa2 = unsafeConvertS sa2
-sa1 ... SActive (Active_ (Era Nothing) _) _ = unsafeConvertS sa1
+SActive (Active_ EmptyEra _) _ ... sa2 = unsafeConvertS sa2
+sa1 ... SActive (Active_ EmptyEra _) _ = unsafeConvertS sa1
 (...)
-  (SActive (Active_ (Era (Just (s1, Finite e1))) f1) m1)
-  (SActive (Active_ (Era (Just (Finite s2, e2))) f2) m2)
-  = SActive (Active_ (Era (Just (s1, shift d e2)))
+  (SActive (Active_ (Era s1 (Finite e1)) f1) m1)
+  (SActive (Active_ (Era (Finite s2) e2) f2) m2)
+  = SActive (Active_ (Era s1 (shift d e2))
                      (\t -> choose (Proxy :: Proxy r1) (Proxy :: Proxy l2)
                               e1 t (f1 t) (shift d f2 t))
             )
@@ -479,9 +517,9 @@ instance Deadline r l t a => Semigroup (SActive l r t a) where
 
 instance Deadline r l t a => Monoid (SActive l r t a) where
   mappend = (<>)
-  mempty  = SActive (Active_ emptyEra (const undefined)) M.empty
+  mempty  = SActive (Active_ undefined (const undefined)) M.empty
+    -- XXX what to do here
 
 ------------------------------------------------------------
 -- Derived API
 ------------------------------------------------------------
-
