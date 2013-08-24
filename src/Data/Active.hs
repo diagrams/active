@@ -495,17 +495,23 @@ makeLenses ''SActive
 -- it would be pretty useless.
 
 floatEra :: Era l r t -> SEra l r t
-floatEra EmptyEra  = EmptyEra -- XXX ??
+floatEra EmptyEra = error "Floating an empty era is not allowed!"
+                    -- rule this out statically?  Would need to track
+                    -- empty/nonempty in the types.
+
 floatEra (Era s e) = Era s e
 
 
 float_ :: (AffineSpace t, VectorSpace (Diff t)) => Active_ Era l r t a -> SActive l r t a
-float_ a_ = addDefaultAnchors $ SActive a_ M.empty
+float_ a_ = addDefaultAnchors $ SActive (float'_ a_) M.empty
+  where
+    float'_ :: Active_ Era l r t a -> Active_ SEra l r t a
+    float'_ (Active_ e f) = Active_ (floatEra e) f
 
 addDefaultAnchors :: (AffineSpace t, VectorSpace (Diff t)) => SActive l r t a -> SActive l r t a
 addDefaultAnchors (SActive a m) = SActive a (M.union m (defaultAnchors (a^.era)))
 
-defaultAnchors :: (AffineSpace t, VectorSpace (Diff t)) => Era l r t -> AnchorMap t
+defaultAnchors :: (AffineSpace t, VectorSpace (Diff t)) => SEra l r t -> AnchorMap t
 defaultAnchors EmptyEra      = M.empty
 defaultAnchors (Era s e) = M.unions [startAnchor s, endAnchor e]
   where
