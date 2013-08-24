@@ -56,6 +56,12 @@ type instance Open I = I
 type instance Open C = O
 type instance Open O = O
 
+-- Convert Open to Closed
+type family Close (x :: EndpointType) :: EndpointType
+type instance Close I = I
+type instance Close C = C
+type instance Close O = C
+
 -- Intersection of finite + infinite = finite.
 type family Isect (x :: EndpointType) (y :: EndpointType) :: EndpointType
 type instance Isect I I = I
@@ -153,10 +159,10 @@ instance Traversable (Endpoint e) where
   traverse _ Infinity   = pure Infinity
   traverse f (Finite t) = Finite <$> f t
 
-endpointCmp :: (t -> t -> t) -> Endpoint e1 t -> Endpoint e2 t -> Endpoint (Isect e1 e2) t
-endpointCmp _   Infinity     Infinity     = Infinity
-endpointCmp _   (Finite t1) Infinity     = Finite t1
-endpointCmp _   Infinity     (Finite t2) = Finite t2
+endpointCmp :: (NotOpen e1, NotOpen e2) => (t -> t -> t) -> Endpoint e1 t -> Endpoint e2 t -> Endpoint (Isect e1 e2) t
+endpointCmp _   Infinity    Infinity    = Infinity
+endpointCmp _   (Finite t1) Infinity    = Finite t1
+endpointCmp _   Infinity    (Finite t2) = Finite t2
 endpointCmp cmp (Finite t1) (Finite t2) = Finite (cmp t1 t2)
 
 endpointMin :: Ord t => Endpoint e1 t -> Endpoint e2 t -> Endpoint (Isect e1 e2) t
@@ -358,14 +364,13 @@ allTime = Era Infinity Infinity
 eraIsEmpty :: Ord t => Era f l r t -> Bool
 eraIsEmpty EmptyEra = True
 eraIsEmpty _        = False
+  -- XXX this is wrong now, e.g. what happens if we have a one-point
+  -- closed floating era and then call openR on it?
 
 -- | Create a fixed 'Era' by specifying (potentially infinite) start
 --   and end times.
-mkFixedEra :: Ord t => Endpoint l t -> Endpoint r t -> Era Fixed l r t
+mkFixedEra :: (NotOpen l, NotOpen r, Ord t) => Endpoint l t -> Endpoint r t -> Era Fixed l r t
 mkFixedEra s e = canonicalizeFixedEra $ Era s e
--- XXX need more constraints here?
-
--- XXX what to do for floating eras?
 
 -- | Create a finite fixed 'Era' by specifying finite start and end 'Time's.
 mkFixedEra' :: Ord t => t -> t -> Era Fixed C C t
@@ -425,12 +430,32 @@ instance AffineSpace t => Shifty (Era Fixed l r t) where
 data SomeEra :: EraType -> * -> * where
   SomeEra :: Era f l r t -> SomeEra f t
 
-withEra :: SomeEra f t -> (Era f l r t -> x) -> x
+withEra :: SomeEra f t -> (forall l r. Era f l r t -> x) -> x
 withEra (SomeEra e) k = k e
 
 floatEra :: Era Fixed l r t -> SomeEra Floating t
 floatEra EmptyEra = SomeEra EmptyEra
 floatEra (Era s e) = SomeEra (Era s e)
+
+openREra :: Era Floating l r t -> Era Floating l (Open r) t
+openREra EmptyEra           = EmptyEra
+openREra (Era s Infinity)   = Era s Infinity
+openREra (Era s (Finite e)) = Era s (Finite e)
+
+openLEra :: Era Floating l r t -> Era Floating (Open l) r t
+openLEra EmptyEra           = EmptyEra
+openLEra (Era Infinity e)   = Era Infinity e
+openLEra (Era (Finite s) e) = Era (Finite s) e
+
+closeREra :: Era Floating l r t -> Era Floating l (Close r) t
+closeREra EmptyEra           = EmptyEra
+closeREra (Era s Infinity)   = Era s Infinity
+closeREra (Era s (Finite e)) = Era s (Finite e)
+
+closeLEra :: Era Floating l r t -> Era Floating (Close l) r t
+closeLEra EmptyEra           = EmptyEra
+closeLEra (Era Infinity e)   = Era Infinity e
+closeLEra (Era (Finite s) e) = Era (Finite s) e
 
 ------------------------------------------------------------
 -- Active
@@ -491,6 +516,12 @@ instance (Shifty a, AffineSpace t, t ~ ShiftyTime a) => Shifty (Active Fixed l r
 data Active' f t a where
   Active' :: Active f l r t a -> Active' f t a
 
+withActive :: Active' f t a -> (forall l r. Active f l r t a -> x) -> x
+withActive (Active' a) k = k a
+
+onActive' :: (forall l r. Active f l r t a -> Active f l' r' t a) -> Active' f t a -> Active' f t a
+onActive' f (Active' a) = Active' (f a)
+
 -- | Apply a function at all times.
 instance Functor (Active' f t) where
   fmap f (Active' p) = Active' (fmap f p)
@@ -505,14 +536,14 @@ instance Ord t => Applicative (Active' Fixed t) where
 
 -- | Parallel composition of 'Active' values.  The result is defined
 --   on the intersection of the 'Era's of the inputs.
-instance (Semigroup a, Ord t) => Semigroup (Active' f a) where
+instance (Semigroup a, Ord t) => Semigroup (Active' Fixed t a) where
   Active' p1 <> Active' p2 = Active' (p1 `parA` p2)
 
 -- | The identity is the bi-infinite, constantly 'mempty' value; the
 --   combining operation is parallel composition (see the 'Semigroup'
 --   instance).
-instance (Semigroup a, Monoid a, Ord t) => Monoid (Active' Fixed a) where
-  mempty  = Active $ pureA mempty
+instance (Semigroup a, Monoid a, Ord t) => Monoid (Active' Fixed t a) where
+  mempty  = Active' $ pureA mempty
   mappend = (<>)
 
 instance (Shifty a, AffineSpace t, t ~ ShiftyTime a) => Shifty (Active' Fixed t a) where
@@ -521,7 +552,7 @@ instance (Shifty a, AffineSpace t, t ~ ShiftyTime a) => Shifty (Active' Fixed t 
   shift d (Active' a) = Active' (shift d a)
 
 ------------------------------------------------------------
--- SActive
+-- Anchors
 ------------------------------------------------------------
 
 -- data Anchor = Start | End | Anchor
@@ -529,69 +560,59 @@ instance (Shifty a, AffineSpace t, t ~ ShiftyTime a) => Shifty (Active' Fixed t 
 
 -- type AnchorMap t = M.Map Anchor t
 
--- Concretely, SActive is just a wrapper around
--- Active, but we are careful not to expose the absolute
--- positioning of the underlying Active.
+-- addDefaultAnchors :: (AffineSpace t, VectorSpace (Diff t)) => SActive l r t a -> SActive l r t a
+-- addDefaultAnchors (SActive a m) = SActive a (M.union m (defaultAnchors (a^.era)))
 
--- NOTE that there is no existential wrapper around SActive which
--- hides l and r (as there is with Active/Active).  It is sensible to
--- combine Active values via parallel composition since any
--- combination of endpoint types may be composed.  However, with
--- SActive that is not the case -- we need to have open+closed or
--- closed+open.  So if we had an existentially quantified version we
--- would not even be able to perform sequential composition on it --
--- it would be pretty useless.
+-- defaultAnchors :: (AffineSpace t, VectorSpace (Diff t)) => SEra l r t -> AnchorMap t
+-- defaultAnchors EmptyEra      = M.empty
+-- defaultAnchors (Era s e) = M.unions [startAnchor s, endAnchor e]
+--   where
+--     startAnchor (Finite s') = M.singleton Start s'
+--     startAnchor _           = M.empty
+--     endAnchor   (Finite e') = M.singleton End e'
+--     endAnchor   _           = M.empty
 
-float_ :: (AffineSpace t, VectorSpace (Diff t)) => Active Era l r t a -> SActive l r t a
-float_ a_ = addDefaultAnchors $ SActive (float'_ a_) M.empty
+-- combineAnchors :: AnchorMap t -> AnchorMap t -> AnchorMap t
+-- combineAnchors = M.unionWithKey select
+--   where
+--     select Start s _ = s
+--     select Fixed f _ = f
+--     select End   _ e = e
+
+------------------------------------------------------------
+
+float :: (AffineSpace t, VectorSpace (Diff t)) => Active Fixed l r t a -> Active' Floating t a
+float (Active e f) = withEra (floatEra e) $ \e' -> Active' (Active e' f)
+
+floatR :: (AffineSpace t, VectorSpace (Diff t)) => Active Fixed l r t a -> Active' Floating t a
+floatR a = withActive (float a) $ Active' . openR
+
+floatL :: (AffineSpace t, VectorSpace (Diff t)) => Active Fixed l r t a -> Active' Floating t a
+floatL a = withActive (float a) $ Active' . openL
+
+openR :: Active Floating l r t a -> Active Floating l (Open r) t a
+openR (Active e f) = Active (openREra e) f
+
+openL :: Active Floating l r t a -> Active Floating (Open l) r t a
+openL (Active e f) = Active (openLEra e) f
+
+closeR :: Eq t => a -> Active Floating l O t a -> Active Floating l C t a
+closeR a (Active e f) = Active (closeREra e) f'
   where
-    float'_ :: Active Era l r t a -> Active SEra l r t a
-    float'_ (Active e f) = Active (floatEra e) f
+    f' = case e of
+           EmptyEra           -> f
+           (Era _ (Finite y)) -> (\t -> if t == y then a else f t)
 
-addDefaultAnchors :: (AffineSpace t, VectorSpace (Diff t)) => SActive l r t a -> SActive l r t a
-addDefaultAnchors (SActive a m) = SActive a (M.union m (defaultAnchors (a^.era)))
-
-defaultAnchors :: (AffineSpace t, VectorSpace (Diff t)) => SEra l r t -> AnchorMap t
-defaultAnchors EmptyEra      = M.empty
-defaultAnchors (Era s e) = M.unions [startAnchor s, endAnchor e]
+closeL :: Eq t => a -> Active Floating O r t a -> Active Floating C r t a
+closeL a (Active e f) = Active (closeLEra e) f'
   where
-    startAnchor (Finite s') = M.singleton Start s'
-    startAnchor _           = M.empty
-    endAnchor   (Finite e') = M.singleton End e'
-    endAnchor   _           = M.empty
-
-floatR_ :: (AffineSpace t, VectorSpace (Diff t)) => Active Era l r t a -> SActive l (Open r) t a
-floatR_ = openR . float_
-
-floatL_ :: (AffineSpace t, VectorSpace (Diff t)) => Active Era l r t a -> SActive (Open l) r t a
-floatL_ = openL . float_
-
-openR :: SActive l r t a -> SActive l (Open r) t a
-openR = undefined -- unsafeConvertS
-
-openL :: SActive l r t a -> SActive (Open l) r t a
-openL = undefined -- unsafeConvertS
-
-closeR :: Eq t => a -> SActive l O t a -> SActive l C t a
-closeR = undefined -- unsafeCloseS end
-
-closeL :: Eq t => a -> SActive O r t a -> SActive C r t a
-closeL = undefined -- unsafeCloseS start
-
-unsafeCloseS = undefined
--- unsafeCloseS :: Eq t
---               => Getter (Era l r t) (Maybe (Endpoint l t))
---               -> a -> SActive l r t a -> SActive l' r' t a
--- unsafeCloseS endpt a s@(SActive (Active e f) m) =
---   case e ^. endpt of
---     Nothing          -> unsafeConvertS s
---     -- can we actually make this case impossible?  should we??
---     Just Infinity    -> error "close: this should never happen!  An Open endpoint is Infinite!"
---     Just (Finite t') -> SActive (Active e (\t -> if t == t' then a else f t)) m
+    f' = case e of
+           EmptyEra           -> f
+           (Era (Finite x) _) -> (\t -> if t == x then a else f t)
 
 -- ugggggghhhh
 -- (...) :: forall l1 r1 l2 r2 t a. (AffineSpace t, Deadline r1 l2 t a)
---     => SActive l1 r1 t a -> SActive l2 r2 t a -> SActive l1 r2 t a
+--     => Active Floating l1 r1 t a -> Active Floating l2 r2 t a -> Active Floating l1 r2 t a
 -- SActive (Active EmptyEra _) _ ... sa2 = unsafeConvertS sa2
 -- sa1 ... SActive (Active EmptyEra _) _ = unsafeConvertS sa1
 -- (...)
@@ -606,20 +627,13 @@ unsafeCloseS = undefined
 --     d = e1 .-. s2
 -- _ ... _ = error "... : impossible"
 
-combineAnchors :: AnchorMap t -> AnchorMap t -> AnchorMap t
-combineAnchors = M.unionWithKey select
-  where
-    select Start s _ = s
-    select Fixed f _ = f
-    select End   _ e = e
-
-instance Deadline r l t a => Semigroup (SActive l r t a) where
+instance Deadline r l t a => Semigroup (Active Floating l r t a) where
   (<>) = undefined -- (...)
 
-instance Deadline r l t a => Monoid (SActive l r t a) where
+instance Deadline r l t a => Monoid (Active Floating l r t a) where
   mappend = (<>)
-  mempty  = SActive (Active undefined (const undefined)) M.empty
-    -- XXX what to do here
+  mempty  = Active emptyFloatingEra undefined
+    -- need to prove (or assume as an axiom) that Compat is commutative
 
 ------------------------------------------------------------
 -- Derived API
