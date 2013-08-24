@@ -63,6 +63,22 @@ type instance Open I = I
 type instance Open C = O
 type instance Open O = O
 
+lemma_F_FOpen
+  :: forall x r.
+     IsFinite x => Proxy x -> (IsFinite (Open x) => r) -> r
+lemma_F_FOpen P r
+  = case isFinite :: IsFinitePf x of
+      IsFiniteC -> r
+      IsFiniteO -> r
+
+lemma_F_FClose
+  :: forall x r.
+     IsFinite x => Proxy x -> (IsFinite (Close x) => r) -> r
+lemma_F_FClose P r
+  = case isFinite :: IsFinitePf x of
+      IsFiniteC -> r
+      IsFiniteO -> r
+
 -- Convert Open to Closed
 type family Close (x :: EndpointType) :: EndpointType
 type instance Close I = I
@@ -508,25 +524,29 @@ floatEra :: forall l r t. Era Fixed l r t -> Era' Floating t
 floatEra EmptyEra  = Era' (EmptyEra :: Era Floating C O t)
 floatEra (Era s e) = Era' (Era s e)
 
-openREra :: Era Floating l r t -> Era Floating l (Open r) t
+openREra :: forall l r t. Era Floating l r t -> Era Floating l (Open r) t
 openREra EmptyEra           = EmptyEra       -- XXX this is wrong!
 openREra (Era s Infinity)   = Era s Infinity
-openREra (Era s (Finite e)) = Era s (Finite e)
+openREra (Era s (Finite e)) = lemma_F_FOpen (P :: Proxy r)
+                            $ Era s (Finite e)
 
-openLEra :: Era Floating l r t -> Era Floating (Open l) r t
+openLEra :: forall l r t. Era Floating l r t -> Era Floating (Open l) r t
 openLEra EmptyEra           = EmptyEra
 openLEra (Era Infinity e)   = Era Infinity e
-openLEra (Era (Finite s) e) = Era (Finite s) e
+openLEra (Era (Finite s) e) = lemma_F_FOpen (P :: Proxy l)
+                            $ Era (Finite s) e
 
-closeREra :: Era Floating l r t -> Era Floating l (Close r) t
+closeREra :: forall l r t. Era Floating l r t -> Era Floating l (Close r) t
 closeREra EmptyEra           = EmptyEra
 closeREra (Era s Infinity)   = Era s Infinity
-closeREra (Era s (Finite e)) = Era s (Finite e)
+closeREra (Era s (Finite e)) = lemma_F_FClose (P :: Proxy r)
+                             $ Era s (Finite e)
 
-closeLEra :: Era Floating l r t -> Era Floating (Close l) r t
+closeLEra :: forall l r t. Era Floating l r t -> Era Floating (Close l) r t
 closeLEra EmptyEra           = EmptyEra
 closeLEra (Era Infinity e)   = Era Infinity e
-closeLEra (Era (Finite s) e) = Era (Finite s) e
+closeLEra (Era (Finite s) e) = lemma_F_FClose (P :: Proxy l)
+                             $ Era (Finite s) e
 
 ------------------------------------------------------------
 -- Active
