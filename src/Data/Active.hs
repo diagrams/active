@@ -492,7 +492,7 @@ eraSeq era1 era2 =
 instance AffineSpace t => Shifty (Era Fixed l r t) where
   type ShiftyTime (Era Fixed l r t) = t
 
-  shift = undefined
+  shift d (Era s e) = Era (shift d s) (shift d e)
 
 ------------------------------------------------------------
 -- Existential Eras
