@@ -40,6 +40,12 @@ import           Data.Traversable    (Traversable, fmapDefault, foldMapDefault)
 import           Data.VectorSpace
 
 ------------------------------------------------------------
+-- Misc
+------------------------------------------------------------
+
+data Proxy a = P
+
+------------------------------------------------------------
 -- EndpointTypes
 ------------------------------------------------------------
 
@@ -86,6 +92,13 @@ instance Compat C O where
 instance Compat O C where
   compat = CompatOC
 
+lemma_Compat_comm
+  :: forall r l x. Compat r l => Proxy r -> Proxy l -> (Compat l r => x) -> x
+lemma_Compat_comm P P x
+  = case (compat :: CompatPf r l) of
+      CompatOC -> x
+      CompatCO -> x
+
 -- Proofs that endpoints are Closed
 
 data IsCPf :: EndpointType -> * where
@@ -112,8 +125,36 @@ instance IsFinite C where
 instance IsFinite O where
   isFinite = IsFiniteO
 
+lemma_isectFI_F
+  :: forall e r.
+     (NotOpen e, IsFinite e)
+  => Proxy e -> (IsFinite (Isect e I) => r) -> r
+lemma_isectFI_F P r
+  = case isFinite :: IsFinitePf e of
+      IsFiniteC -> r
+      -- IsFiniteO case is impossible because of NotOpen assumption
+
+lemma_isectIF_F
+  :: forall e r.
+     (NotOpen e, IsFinite e)
+  => Proxy e -> (IsFinite (Isect I e) => r) -> r
+lemma_isectIF_F P r
+  = case isFinite :: IsFinitePf e of
+      IsFiniteC -> r
+      -- IsFiniteO case is impossible because of NotOpen assumption
+
+lemma_isectFF_F
+  :: forall e1 e2 r.
+     (NotOpen e1, NotOpen e2, IsFinite e1, IsFinite e2)
+  => Proxy e1 -> Proxy e2 -> (IsFinite (Isect e1 e2) => r) -> r
+lemma_isectFF_F P P r
+  = case (isFinite :: IsFinitePf e1, isFinite :: IsFinitePf e2) of
+      (IsFiniteC, IsFiniteC) -> r
+      -- IsFiniteO cases are impossible because of NotOpen assumptions
+
 -- Proofs that endpoints are not Open
 
+-- XXX turn this into   O -> forall a. a ?
 data NotOpenPf :: EndpointType -> * where
   NotOpenI :: NotOpenPf I
   NotOpenC :: NotOpenPf C
@@ -159,16 +200,24 @@ instance Traversable (Endpoint e) where
   traverse _ Infinity   = pure Infinity
   traverse f (Finite t) = Finite <$> f t
 
-endpointCmp :: (NotOpen e1, NotOpen e2) => (t -> t -> t) -> Endpoint e1 t -> Endpoint e2 t -> Endpoint (Isect e1 e2) t
+endpointCmp :: forall e1 e2 t. (NotOpen e1, NotOpen e2) => (t -> t -> t) -> Endpoint e1 t -> Endpoint e2 t -> Endpoint (Isect e1 e2) t
 endpointCmp _   Infinity    Infinity    = Infinity
-endpointCmp _   (Finite t1) Infinity    = Finite t1
-endpointCmp _   Infinity    (Finite t2) = Finite t2
-endpointCmp cmp (Finite t1) (Finite t2) = Finite (cmp t1 t2)
+endpointCmp _   (Finite t1) Infinity    = lemma_isectFI_F (P :: Proxy e1)
+                                        $ Finite t1
+endpointCmp _   Infinity    (Finite t2) = lemma_isectIF_F (P :: Proxy e2)
+                                        $ Finite t2
+endpointCmp cmp (Finite t1) (Finite t2) = lemma_isectFF_F (P :: Proxy e1)
+                                                          (P :: Proxy e2)
+                                        $ Finite (cmp t1 t2)
 
-endpointMin :: Ord t => Endpoint e1 t -> Endpoint e2 t -> Endpoint (Isect e1 e2) t
+endpointMin
+  :: (Ord t, NotOpen e1, NotOpen e2)
+  => Endpoint e1 t -> Endpoint e2 t -> Endpoint (Isect e1 e2) t
 endpointMin = endpointCmp min
 
-endpointMax :: Ord t => Endpoint e1 t -> Endpoint e2 t -> Endpoint (Isect e1 e2) t
+endpointMax
+  :: (Ord t, NotOpen e1, NotOpen e2)
+  => Endpoint e1 t -> Endpoint e2 t -> Endpoint (Isect e1 e2) t
 endpointMax = endpointCmp max
 
 ------------------------------------------------------------
@@ -201,8 +250,6 @@ class (FractionalOf w (Scalar w), VectorSpace w) => Waiting w where
 
 class Fractional a => FractionalOf v a where
   toFractionalOf :: v -> a
-
-data Proxy a = Proxy
 
 class (Clock t, Compat l r) => Deadline (l :: EndpointType) (r :: EndpointType) t a where
   -- choose deadline-time time-now (if before deadline) (if after deadline)
@@ -316,6 +363,19 @@ instance AffineSpace t => Shifty (Endpoint e t) where
 data EraType = Fixed | Floating
   deriving (Eq, Ord, Show)
 
+data IsEraTypePf :: EraType -> * where
+  IsEraTypeFixed    :: IsEraTypePf Fixed
+  IsEraTypeFloating :: IsEraTypePf Floating
+
+class IsEraType (f :: EraType) where
+  isEraType :: IsEraTypePf f
+
+instance IsEraType Fixed where
+  isEraType = IsEraTypeFixed
+
+instance IsEraType Floating where
+  isEraType = IsEraTypeFloating
+
 type family   EmptyConstraints (et :: EraType)
                 :: EndpointType -> EndpointType -> Constraint
 type instance EmptyConstraints Fixed    = AreC
@@ -325,6 +385,13 @@ type family   EraConstraints (et :: EraType)
                 :: EndpointType -> EndpointType -> Constraint
 type instance EraConstraints Fixed    = AreNotOpen
 type instance EraConstraints Floating = NoConstraints
+
+lemma_EraConstraints_II
+  :: forall f r. IsEraType f => Proxy f -> (EraConstraints f I I => r) -> r
+lemma_EraConstraints_II P r
+  = case isEraType :: IsEraTypePf f of
+      IsEraTypeFixed    -> r
+      IsEraTypeFloating -> r
 
 -- | An @Era@ is a (potentially infinite) span of time.  @Era@s form a
 --   monoid: the combination of two @Era@s is the largest @Era@ which
@@ -357,8 +424,9 @@ emptyFloatingEra :: Compat l r => Era Floating l r t
 emptyFloatingEra = EmptyEra
 
 -- | The era of ALL TIME
-allTime :: Era f I I t
-allTime = Era Infinity Infinity
+allTime :: forall f t. IsEraType f => Era f I I t
+allTime = lemma_EraConstraints_II (P :: Proxy f)
+        $ Era Infinity Infinity
 
 -- | Check if an era is the empty era.
 eraIsEmpty :: Ord t => Era f l r t -> Bool
@@ -433,12 +501,12 @@ data SomeEra :: EraType -> * -> * where
 withEra :: SomeEra f t -> (forall l r. Era f l r t -> x) -> x
 withEra (SomeEra e) k = k e
 
-floatEra :: Era Fixed l r t -> SomeEra Floating t
-floatEra EmptyEra = SomeEra EmptyEra
+floatEra :: forall l r t. Era Fixed l r t -> SomeEra Floating t
+floatEra EmptyEra  = SomeEra (EmptyEra :: Era Floating C O t)
 floatEra (Era s e) = SomeEra (Era s e)
 
 openREra :: Era Floating l r t -> Era Floating l (Open r) t
-openREra EmptyEra           = EmptyEra
+openREra EmptyEra           = EmptyEra       -- XXX this is wrong!
 openREra (Era s Infinity)   = Era s Infinity
 openREra (Era s (Finite e)) = Era s (Finite e)
 
@@ -472,7 +540,7 @@ data Active f l r t a = Active
 makeLenses ''Active
 
 -- | Create a bi-infinite, constant 'Active' value.
-pureA :: Ord t => a -> Active f I I t a
+pureA :: (IsEraType f, Ord t) => a -> Active f I I t a
 pureA a = Active allTime (pure a)
 
 -- | \"Apply\" a fixed 'Active' function to a fixed 'Active' value, pointwise
@@ -632,8 +700,8 @@ instance Deadline r l t a => Semigroup (Active Floating l r t a) where
 
 instance Deadline r l t a => Monoid (Active Floating l r t a) where
   mappend = (<>)
-  mempty  = Active emptyFloatingEra undefined
-    -- need to prove (or assume as an axiom) that Compat is commutative
+  mempty  = lemma_Compat_comm (P :: Proxy r) (P :: Proxy l)
+          $ Active emptyFloatingEra undefined
 
 ------------------------------------------------------------
 -- Derived API
