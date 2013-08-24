@@ -33,11 +33,9 @@ import           Control.Lens
 import           Prelude             hiding (Floating)
 import           Data.AffineSpace
 import           Data.Foldable       (Foldable(..))
-import           Data.Functor        ((<$))
 import qualified Data.Map            as M
-import           Data.Maybe          (isNothing)
 import           Data.Semigroup
-import           Data.Traversable    (Traversable, fmapDefault, foldMapDefault)
+import           Data.Traversable    (fmapDefault, foldMapDefault)
 import           Data.VectorSpace
 
 ------------------------------------------------------------
@@ -485,7 +483,7 @@ end f er@(Era _ e) = er <$ f (Just e)
 -- | Two fixed eras intersect to form the largest fixed era which is contained in
 --   both, with the empty era as an annihilator.
 eraIsect :: forall l1 r1 l2 r2 t. Ord t => Era Fixed l1 r1 t -> Era Fixed l2 r2 t -> Era Fixed (Isect l1 l2) (Isect r1 r2) t
-eraIsect (Era l1 r1) (Era l2 r2) = canonicalizeFixedEra $ Era (endpointMax l1 l2) (endpointMin r1 r2)
+eraIsect (Era l1 r1) (Era l2 r2) = undefined -- canonicalizeFixedEra $ Era (endpointMax l1 l2) (endpointMin r1 r2)
 eraIsect EmptyEra EmptyEra = case (areC :: (IsCPf l1, IsCPf r1), areC :: (IsCPf l2, IsCPf r2)) of ((IsCPf, IsCPf), (IsCPf, IsCPf)) -> EmptyEra
 -- XXX redo this
 -- eraIsect EmptyEra (Era Infinity Infinity)     = case (areC :: AreCPf l1 r1) of AreCPf -> EmptyEra
@@ -500,7 +498,7 @@ eraIsect EmptyEra EmptyEra = case (areC :: (IsCPf l1, IsCPf r1), areC :: (IsCPf 
 
 -- Maintain the invariant that s <= e
 canonicalizeFixedEra :: Ord t => Era Fixed l r t -> Era Fixed l r t
-canonicalizeFixedEra (Era (Finite s) (Finite e)) | s > e = EmptyEra
+canonicalizeFixedEra (Era (Finite s) (Finite e)) | s > e = undefined -- EmptyEra
 canonicalizeFixedEra era = era
 
 eraSeq :: forall l1 r1 l2 r2 t.
@@ -517,6 +515,7 @@ eraSeq era1 era2 =
 instance AffineSpace t => Shifty (Era Fixed l r t) where
   type ShiftyTime (Era Fixed l r t) = t
 
+  shift _ EmptyEra  = EmptyEra
   shift d (Era s e) = Era (shift d s) (shift d e)
 
 ------------------------------------------------------------
@@ -730,7 +729,6 @@ closeL a (Active e f) = Active (closeLEra e) f'
            EmptyEra           -> f
            (Era (Finite x) _) -> (\t -> if t == x then a else f t)
 
--- ugggggghhhh
 -- (...) :: forall l1 r1 l2 r2 t a. (AffineSpace t, Deadline r1 l2 t a)
 --     => Active Floating l1 r1 t a -> Active Floating l2 r2 t a -> Active Floating l1 r2 t a
 -- SActive (Active EmptyEra _) _ ... sa2 = unsafeConvertS sa2
