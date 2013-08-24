@@ -494,6 +494,11 @@ makeLenses ''SActive
 -- would not even be able to perform sequential composition on it --
 -- it would be pretty useless.
 
+floatEra :: Era l r t -> SEra l r t
+floatEra EmptyEra  = EmptyEra -- XXX ??
+floatEra (Era s e) = Era s e
+
+
 float_ :: (AffineSpace t, VectorSpace (Diff t)) => Active_ Era l r t a -> SActive l r t a
 float_ a_ = addDefaultAnchors $ SActive a_ M.empty
 
