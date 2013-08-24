@@ -33,6 +33,7 @@ import           Control.Lens
 import           Prelude             hiding (Floating)
 import           Data.AffineSpace
 import           Data.Foldable       (Foldable(..))
+import           Data.Functor        ((<$))
 import qualified Data.Map            as M
 import           Data.Maybe          (isNothing)
 import           Data.Semigroup
@@ -447,12 +448,14 @@ mkFixedEra' s e = mkFixedEra (Finite s) (Finite e)
 -- | A getter for accessing the start time of a fixed 'Era', or @Nothing@
 --   if the era is empty.
 start :: Getter (Era Fixed l r t) (Maybe (Endpoint l t))
-start = undefined
+start f EmptyEra     = EmptyEra <$ f Nothing
+start f er@(Era s _) = er <$ f (Just s)
 
 -- | A getter for accessing the end time of an 'Era', or @Nothing@ if
 --   the era is empty.
 end :: Getter (Era Fixed l r t) (Maybe (Endpoint r t))
-end = undefined
+end f EmptyEra     = EmptyEra <$ f Nothing
+end f er@(Era _ e) = er <$ f (Just e)
 
 -- | Two fixed eras intersect to form the largest fixed era which is contained in
 --   both, with the empty era as an annihilator.
