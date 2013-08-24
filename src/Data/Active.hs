@@ -114,6 +114,21 @@ lemma_Compat_comm P P x
       CompatOC -> x
       CompatCO -> x
 
+lemma_Compat_trans3
+  :: forall l1 r1 l2 r2 x.
+     (Compat l1 r1, Compat r1 l2, Compat l2 r2)
+  => Proxy l1 -> Proxy r1 -> Proxy l2 -> Proxy r2
+  -> (Compat l1 r2 => x)
+  -> x
+lemma_Compat_trans3 P P P P x
+  = case ( compat :: CompatPf l1 r1
+         , compat :: CompatPf r1 l2
+         , compat :: CompatPf l2 r2
+         ) of
+      (CompatCO, CompatOC, CompatCO) -> x
+      (CompatOC, CompatCO, CompatOC) -> x
+      -- other cases can't happen
+
 -- Proofs that endpoints are Closed
 
 data IsCPf :: EndpointType -> * where
@@ -728,6 +743,14 @@ closeL a (Active e f) = Active (closeLEra e) f'
     f' = case e of
            EmptyEra           -> f
            (Era (Finite x) _) -> (\t -> if t == x then a else f t)
+
+(...) :: forall l1 r1 l2 r2 t a.
+         (AffineSpace t, Deadline r1 l2 t a)
+      => Active Floating l1 r1 t a -> Active Floating l2 r2 t a
+      -> Active Floating l1 r2 t a
+Active EmptyEra f ... Active EmptyEra _
+  = lemma_Compat_trans3 (P :: Proxy l1) (P :: Proxy r1) (P :: Proxy l2) (P :: Proxy r2)
+  $ Active EmptyEra f
 
 -- (...) :: forall l1 r1 l2 r2 t a. (AffineSpace t, Deadline r1 l2 t a)
 --     => Active Floating l1 r1 t a -> Active Floating l2 r2 t a -> Active Floating l1 r2 t a
