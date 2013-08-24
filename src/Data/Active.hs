@@ -169,6 +169,15 @@ lemma_isectFF_F P P r
       (IsFiniteC, IsFiniteC) -> r
       -- IsFiniteO cases are impossible because of NotOpen assumptions
 
+lemma_Compat_Finite
+  :: forall l r x.
+     (Compat l r)
+  => Proxy l -> Proxy r -> ((IsFinite l, IsFinite r) => x) -> x
+lemma_Compat_Finite P P x
+  = case compat :: CompatPf l r of
+      CompatCO -> x
+      CompatOC -> x
+
 -- Proofs that endpoints are not Open
 
 -- XXX turn this into   O -> forall a. a ?
@@ -524,26 +533,46 @@ floatEra :: forall l r t. Era Fixed l r t -> Era' Floating t
 floatEra EmptyEra  = Era' (EmptyEra :: Era Floating C O t)
 floatEra (Era s e) = Era' (Era s e)
 
+-- One might think the EmptyEra cases below (marked with XXX) ought to
+-- result in an EmptyEra. In fact, this would be wrong (as the type
+-- error makes clear (given sufficient amounts of vigorous
+-- squinting)).  If we have an empty floating era, it must have one
+-- closed and one open endpoint; opening the closed endpoint would
+-- result not in a closed era, but in a zero-duration era with two
+-- open endpoints, a bizarre abomination which should never be allowed
+-- (to see why, imagine sequentially composing it with an Era on
+-- either side, and consider what happens to the values at their
+-- endpoints).  But I cannot see how to disallow this statically.
+
 openREra :: forall l r t. Era Floating l r t -> Era Floating l (Open r) t
-openREra EmptyEra           = EmptyEra       -- XXX this is wrong!
+openREra EmptyEra           = undefined       -- XXX (see note above)
 openREra (Era s Infinity)   = Era s Infinity
 openREra (Era s (Finite e)) = lemma_F_FOpen (P :: Proxy r)
                             $ Era s (Finite e)
 
 openLEra :: forall l r t. Era Floating l r t -> Era Floating (Open l) r t
-openLEra EmptyEra           = EmptyEra
+openLEra EmptyEra           = undefined       -- XXX (see note above)
 openLEra (Era Infinity e)   = Era Infinity e
 openLEra (Era (Finite s) e) = lemma_F_FOpen (P :: Proxy l)
                             $ Era (Finite s) e
 
-closeREra :: forall l r t. Era Floating l r t -> Era Floating l (Close r) t
-closeREra EmptyEra           = EmptyEra
+-- The Num t constraint is sort of a hack, but we need to create a
+-- non-empty era.  It doesn't matter WHAT t value we choose (since the
+-- Era is Floating) but we need to choose one.  Alternatively, we
+-- could make another Era constructor for point eras, but that seems
+-- like it would be a lot of work...
+closeREra :: forall l r t. Num t => Era Floating l r t -> Era Floating l (Close r) t
+closeREra EmptyEra           = lemma_Compat_Finite (P :: Proxy l) (P :: Proxy r)
+                             $ lemma_F_FClose (P :: Proxy r)
+                             $ Era (Finite 0) (Finite 0) :: Era Floating l (Close r) t
 closeREra (Era s Infinity)   = Era s Infinity
 closeREra (Era s (Finite e)) = lemma_F_FClose (P :: Proxy r)
                              $ Era s (Finite e)
 
-closeLEra :: forall l r t. Era Floating l r t -> Era Floating (Close l) r t
-closeLEra EmptyEra           = EmptyEra
+closeLEra :: forall l r t. Num t => Era Floating l r t -> Era Floating (Close l) r t
+closeLEra EmptyEra           = lemma_Compat_Finite (P :: Proxy l) (P :: Proxy r)
+                             $ lemma_F_FClose (P :: Proxy l)
+			     $ Era (Finite 0) (Finite 0) :: Era Floating (Close l) r t
 closeLEra (Era Infinity e)   = Era Infinity e
 closeLEra (Era (Finite s) e) = lemma_F_FClose (P :: Proxy l)
                              $ Era (Finite s) e
@@ -687,14 +716,14 @@ openR (Active e f) = Active (openREra e) f
 openL :: Active Floating l r t a -> Active Floating (Open l) r t a
 openL (Active e f) = Active (openLEra e) f
 
-closeR :: Eq t => a -> Active Floating l O t a -> Active Floating l C t a
+closeR :: (Eq t, Num t) => a -> Active Floating l O t a -> Active Floating l C t a
 closeR a (Active e f) = Active (closeREra e) f'
   where
     f' = case e of
            EmptyEra           -> f
            (Era _ (Finite y)) -> (\t -> if t == y then a else f t)
 
-closeL :: Eq t => a -> Active Floating O r t a -> Active Floating C r t a
+closeL :: (Eq t, Num t) => a -> Active Floating O r t a -> Active Floating C r t a
 closeL a (Active e f) = Active (closeLEra e) f'
   where
     f' = case e of
