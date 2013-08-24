@@ -498,15 +498,15 @@ instance AffineSpace t => Shifty (Era Fixed l r t) where
 -- Existential Eras
 ------------------------------------------------------------
 
-data SomeEra :: EraType -> * -> * where
-  SomeEra :: Era f l r t -> SomeEra f t
+data Era' :: EraType -> * -> * where
+  Era' :: Era f l r t -> Era' f t
 
-withEra :: SomeEra f t -> (forall l r. Era f l r t -> x) -> x
-withEra (SomeEra e) k = k e
+withEra :: Era' f t -> (forall l r. Era f l r t -> x) -> x
+withEra (Era' e) k = k e
 
-floatEra :: forall l r t. Era Fixed l r t -> SomeEra Floating t
-floatEra EmptyEra  = SomeEra (EmptyEra :: Era Floating C O t)
-floatEra (Era s e) = SomeEra (Era s e)
+floatEra :: forall l r t. Era Fixed l r t -> Era' Floating t
+floatEra EmptyEra  = Era' (EmptyEra :: Era Floating C O t)
+floatEra (Era s e) = Era' (Era s e)
 
 openREra :: Era Floating l r t -> Era Floating l (Open r) t
 openREra EmptyEra           = EmptyEra       -- XXX this is wrong!
