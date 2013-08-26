@@ -27,313 +27,17 @@ module Data.Active where
 
 import           GHC.Exts            (Constraint)
 
+import           Data.Active.Endpoint
+
 import           Control.Applicative
 import           Control.Arrow       ((***))
 import           Control.Lens
 import           Prelude             hiding (Floating)
 import           Data.AffineSpace
-import           Data.Foldable       (Foldable(..))
 import qualified Data.Map            as M
+import           Data.Proxy
 import           Data.Semigroup
-import           Data.Traversable    (fmapDefault, foldMapDefault)
 import           Data.VectorSpace
-
-------------------------------------------------------------
--- Misc
-------------------------------------------------------------
-
-data Proxy a = P
-
-------------------------------------------------------------
--- EndpointTypes
-------------------------------------------------------------
-
-data EndpointType
-  = I -- nfinite
-  | C -- losed
-  | O -- pen
-
--- Some functions on (promoted) EndpointTypes:
-
--- Convert Closed to Open
-type family Open (x :: EndpointType) :: EndpointType
-type instance Open I = I
-type instance Open C = O
-type instance Open O = O
-
-lemma_F_FOpen
-  :: forall x r.
-     IsFinite x => Proxy x -> (IsFinite (Open x) => r) -> r
-lemma_F_FOpen P r
-  = case isFinite :: IsFinitePf x of
-      IsFiniteC -> r
-      IsFiniteO -> r
-
-lemma_F_FClose
-  :: forall x r.
-     IsFinite x => Proxy x -> (IsFinite (Close x) => r) -> r
-lemma_F_FClose P r
-  = case isFinite :: IsFinitePf x of
-      IsFiniteC -> r
-      IsFiniteO -> r
-
--- Convert Open to Closed
-type family Close (x :: EndpointType) :: EndpointType
-type instance Close I = I
-type instance Close C = C
-type instance Close O = C
-
--- Intersection of finite + infinite = finite.
-type family Isect (x :: EndpointType) (y :: EndpointType) :: EndpointType
-type instance Isect I I = I
-type instance Isect C I = C
-type instance Isect I C = C
-type instance Isect C C = C
-
--- Some proof objects about EndpointTypes:
-
--- Proofs that finite endpoints are compatible (O/C or C/O)
-
-data CompatPf (e1 :: EndpointType) (e2 :: EndpointType) where
-  CompatCO :: CompatPf C O
-  CompatOC :: CompatPf O C
-
-class Compat (e1 :: EndpointType) (e2 :: EndpointType) where
-  compat :: CompatPf e1 e2
-
-instance Compat C O where
-  compat = CompatCO
-
-instance Compat O C where
-  compat = CompatOC
-
-lemma_Compat_comm
-  :: forall r l x. Compat r l => Proxy r -> Proxy l -> (Compat l r => x) -> x
-lemma_Compat_comm P P x
-  = case (compat :: CompatPf r l) of
-      CompatOC -> x
-      CompatCO -> x
-
-lemma_Compat_trans2
-  :: forall l1 r1 l2 x.
-     (Compat l1 r1, Compat r1 l2)
-  => Proxy l1 -> Proxy r1 -> Proxy l2
-  -> (l1 ~ l2 => x) -> x
-lemma_Compat_trans2 P P P x
-  = case (compat :: CompatPf l1 r1, compat :: CompatPf r1 l2) of
-      (CompatCO, CompatOC) -> x
-      (CompatOC, CompatCO) -> x
-      -- other cases can't happen
-
-lemma_Compat_trans3
-  :: forall l1 r1 l2 r2 x.
-     (Compat l1 r1, Compat r1 l2, Compat l2 r2)
-  => Proxy l1 -> Proxy r1 -> Proxy l2 -> Proxy r2
-  -> (Compat l1 r2 => x)
-  -> x
-lemma_Compat_trans3 l1 r1 l2 P x
-  = lemma_Compat_trans2 l1 r1 l2
-  $ case compat :: CompatPf l2 r2 of
-      CompatOC -> x
-      CompatCO -> x
-
--- Proofs that endpoints are Closed
-
-data IsCPf :: EndpointType -> * where
-  IsCPf :: IsCPf C
-
-class AreC (l :: EndpointType) (r :: EndpointType) where
-  areC :: (IsCPf l, IsCPf r)
-
-instance AreC C C where
-  areC = (IsCPf, IsCPf)
-
-lemma_areC_isC
-  :: forall e1 e2 r.
-     (AreC e1 e2)
-  => Proxy e1 -> Proxy e2
-  -> ((e1 ~ C, e2 ~ C) => r) -> r
-lemma_areC_isC P P r
-  = case areC :: (IsCPf e1, IsCPf e2) of
-      (IsCPf, IsCPf) -> r
-
--- Proofs that endpoints are finite
-
-data IsFinitePf :: EndpointType -> * where
-  IsFiniteC :: IsFinitePf C
-  IsFiniteO :: IsFinitePf O
-
-class IsFinite (e :: EndpointType) where
-  isFinite :: IsFinitePf e
-
-instance IsFinite C where
-  isFinite = IsFiniteC
-
-instance IsFinite O where
-  isFinite = IsFiniteO
-
-lemma_isectFI_F
-  :: forall e r.
-     (NotOpen e, IsFinite e)
-  => Proxy e -> (IsFinite (Isect e I) => r) -> r
-lemma_isectFI_F P r
-  = case isFinite :: IsFinitePf e of
-      IsFiniteC -> r
-      -- IsFiniteO case is impossible because of NotOpen assumption
-
-lemma_isectIF_F
-  :: forall e r.
-     (NotOpen e, IsFinite e)
-  => Proxy e -> (IsFinite (Isect I e) => r) -> r
-lemma_isectIF_F P r
-  = case isFinite :: IsFinitePf e of
-      IsFiniteC -> r
-      -- IsFiniteO case is impossible because of NotOpen assumption
-
-lemma_isectFF_F
-  :: forall e1 e2 r.
-     (NotOpen e1, NotOpen e2, IsFinite e1, IsFinite e2)
-  => Proxy e1 -> Proxy e2 -> (IsFinite (Isect e1 e2) => r) -> r
-lemma_isectFF_F P P r
-  = case (isFinite :: IsFinitePf e1, isFinite :: IsFinitePf e2) of
-      (IsFiniteC, IsFiniteC) -> r
-      -- IsFiniteO cases are impossible because of NotOpen assumptions
-
-lemma_Compat_Finite
-  :: forall l r x.
-     (Compat l r)
-  => Proxy l -> Proxy r -> ((IsFinite l, IsFinite r) => x) -> x
-lemma_Compat_Finite P P x
-  = case compat :: CompatPf l r of
-      CompatCO -> x
-      CompatOC -> x
-
--- Proofs that endpoints are not Open
-
--- XXX turn this into   O -> forall a. a ?
-data NotOpenPf :: EndpointType -> * where
-  NotOpenI :: NotOpenPf I
-  NotOpenC :: NotOpenPf C
-
-class NotOpen (e :: EndpointType) where
-  notOpen :: NotOpenPf e
-
-instance NotOpen I where
-  notOpen = NotOpenI
-
-instance NotOpen C where
-  notOpen = NotOpenC
-
-class AreNotOpen (e1 :: EndpointType) (e2 :: EndpointType) where
-  areNotOpen :: (NotOpenPf e1, NotOpenPf e2)
-
-instance (NotOpen e1, NotOpen e2) => AreNotOpen e1 e2 where
-  areNotOpen = (notOpen, notOpen)
-
-lemma_areNotOpen__notOpen
-  :: forall e1 e2 r.
-     AreNotOpen e1 e2
-  => Proxy e1 -> Proxy e2
-  -> ((NotOpen e1, NotOpen e2) => r) -> r
-lemma_areNotOpen__notOpen P P r
-  = case areNotOpen :: (NotOpenPf e1, NotOpenPf e2) of
-      (NotOpenI, NotOpenI) -> r
-      (NotOpenI, NotOpenC) -> r
-      (NotOpenC, NotOpenI) -> r
-      (NotOpenC, NotOpenC) -> r
-
-lemma_isect_notOpen
-  :: forall e1 e2 r.
-     (NotOpen e1, NotOpen e2)
-  => Proxy e1 -> Proxy e2
-  -> (NotOpen (Isect e1 e2) => r) -> r
-lemma_isect_notOpen P P r
-  = case (notOpen :: NotOpenPf e1, notOpen :: NotOpenPf e2) of
-      (NotOpenI, NotOpenI) -> r
-      (NotOpenI, NotOpenC) -> r
-      (NotOpenC, NotOpenI) -> r
-      (NotOpenC, NotOpenC) -> r
-
-lemma_isect_C_notOpen
-  :: forall e r.
-     (NotOpen e)
-  => Proxy e
-  -> (Isect C e ~ C => r) -> r
-lemma_isect_C_notOpen P r
-  = case notOpen :: NotOpenPf e of
-      NotOpenI -> r
-      NotOpenC -> r
-
-lemma_isect_notOpen_C
-  :: forall e r.
-     (NotOpen e)
-  => Proxy e
-  -> (Isect e C ~ C => r) -> r
-lemma_isect_notOpen_C P r
-  = case notOpen :: NotOpenPf e of
-      NotOpenI -> r
-      NotOpenC -> r
-
-lemma_notOpen_isFinite__C
-  :: forall e r.
-     (NotOpen e, IsFinite e)
-  => Proxy e
-  -> (e ~ C => r) -> r
-lemma_notOpen_isFinite__C P r
-  = case (notOpen :: NotOpenPf e, isFinite :: IsFinitePf e) of
-      (NotOpenC, IsFiniteC) -> r
-      -- other cases can't happen, since e would have to equal two
-      -- different things
-
--- For expressing no constraints
-
-class NoConstraints (e1 :: EndpointType) (e2 :: EndpointType)
-instance NoConstraints e1 e2
-
-------------------------------------------------------------
--- Endpoints
-------------------------------------------------------------
-
-data Endpoint :: EndpointType -> * -> * where
-  Infinity ::                    Endpoint I t
-  Finite   :: IsFinite e => t -> Endpoint e t
-
-deriving instance Show t => Show (Endpoint e t)
-deriving instance Eq t   => Eq   (Endpoint e t)
-
-instance Functor (Endpoint e) where
-  fmap = fmapDefault
-
-instance Foldable (Endpoint e) where
-  foldMap = foldMapDefault
-
-instance Traversable (Endpoint e) where
-  traverse _ Infinity   = pure Infinity
-  traverse f (Finite t) = Finite <$> f t
-
-endpointCmp
-  :: forall e1 e2 t.
-     (NotOpen e1, NotOpen e2)
-  => (t -> t -> t)
-  -> Endpoint e1 t -> Endpoint e2 t -> Endpoint (Isect e1 e2) t
-endpointCmp _   Infinity    Infinity    = Infinity
-endpointCmp _   (Finite t1) Infinity    = lemma_isectFI_F (P :: Proxy e1)
-                                        $ Finite t1
-endpointCmp _   Infinity    (Finite t2) = lemma_isectIF_F (P :: Proxy e2)
-                                        $ Finite t2
-endpointCmp cmp (Finite t1) (Finite t2) = lemma_isectFF_F (P :: Proxy e1)
-                                                          (P :: Proxy e2)
-                                        $ Finite (cmp t1 t2)
-
-endpointMin
-  :: (Ord t, NotOpen e1, NotOpen e2)
-  => Endpoint e1 t -> Endpoint e2 t -> Endpoint (Isect e1 e2) t
-endpointMin = endpointCmp min
-
-endpointMax
-  :: (Ord t, NotOpen e1, NotOpen e2)
-  => Endpoint e1 t -> Endpoint e2 t -> Endpoint (Isect e1 e2) t
-endpointMax = endpointCmp max
 
 ------------------------------------------------------------
 -- Clock
@@ -503,7 +207,7 @@ type instance EraConstraints Floating = NoConstraints
 
 lemma_EraConstraints_II
   :: forall f r. IsEraType f => Proxy f -> (EraConstraints f I I => r) -> r
-lemma_EraConstraints_II P r
+lemma_EraConstraints_II Proxy r
   = case isEraType :: IsEraTypePf f of
       IsEraTypeFixed    -> r
       IsEraTypeFloating -> r
@@ -540,7 +244,7 @@ emptyFloatingEra = EmptyEra
 
 -- | The era of ALL TIME
 allTime :: forall f t. IsEraType f => Era f I I t
-allTime = lemma_EraConstraints_II (P :: Proxy f)
+allTime = lemma_EraConstraints_II (Proxy :: Proxy f)
         $ Era Infinity Infinity
 
 -- | Check if an era is the empty era.
@@ -580,33 +284,33 @@ eraIsect
   -> Era Fixed (Isect l1 l2) (Isect r1 r2) t
 
 eraIsect (Era l1 r1) (Era l2 r2)
-  =                     lemma_areNotOpen__notOpen (P :: Proxy l1) (P :: Proxy r1)
-                      $ lemma_areNotOpen__notOpen (P :: Proxy l2) (P :: Proxy r2)
-                      $ lemma_isect_notOpen       (P :: Proxy l1) (P :: Proxy l2)
-                      $ lemma_isect_notOpen       (P :: Proxy r1) (P :: Proxy r2)
+  =                     lemma_areNotOpen__notOpen (Proxy :: Proxy l1) (Proxy :: Proxy r1)
+                      $ lemma_areNotOpen__notOpen (Proxy :: Proxy l2) (Proxy :: Proxy r2)
+                      $ lemma_isect_notOpen       (Proxy :: Proxy l1) (Proxy :: Proxy l2)
+                      $ lemma_isect_notOpen       (Proxy :: Proxy r1) (Proxy :: Proxy r2)
 
   $ canonicalizeFixedEra
   $ Era (endpointMax l1 l2) (endpointMin r1 r2)
 
 eraIsect EmptyEra EmptyEra
-  =                     lemma_areC_isC (P :: Proxy l1) (P :: Proxy r1)
-                      $ lemma_areC_isC (P :: Proxy l2) (P :: Proxy r2)
+  =                     lemma_areC_isC (Proxy :: Proxy l1) (Proxy :: Proxy r1)
+                      $ lemma_areC_isC (Proxy :: Proxy l2) (Proxy :: Proxy r2)
 
   $ EmptyEra
 
 eraIsect EmptyEra (Era {})
-  =                     lemma_areC_isC            (P :: Proxy l1) (P :: Proxy r1)
-                      $ lemma_areNotOpen__notOpen (P :: Proxy l2) (P :: Proxy r2)
-                      $ lemma_isect_C_notOpen     (P :: Proxy l2)
-                      $ lemma_isect_C_notOpen     (P :: Proxy r2)
+  =                     lemma_areC_isC            (Proxy :: Proxy l1) (Proxy :: Proxy r1)
+                      $ lemma_areNotOpen__notOpen (Proxy :: Proxy l2) (Proxy :: Proxy r2)
+                      $ lemma_isect_C_notOpen     (Proxy :: Proxy l2)
+                      $ lemma_isect_C_notOpen     (Proxy :: Proxy r2)
 
   $ EmptyEra
 
 eraIsect (Era {}) EmptyEra
-  =                     lemma_areNotOpen__notOpen (P :: Proxy l1) (P :: Proxy r1)
-                      $ lemma_areC_isC            (P :: Proxy l2) (P :: Proxy r2)
-                      $ lemma_isect_notOpen_C     (P :: Proxy l1)
-                      $ lemma_isect_notOpen_C     (P :: Proxy r1)
+  =                     lemma_areNotOpen__notOpen (Proxy :: Proxy l1) (Proxy :: Proxy r1)
+                      $ lemma_areC_isC            (Proxy :: Proxy l2) (Proxy :: Proxy r2)
+                      $ lemma_isect_notOpen_C     (Proxy :: Proxy l1)
+                      $ lemma_isect_notOpen_C     (Proxy :: Proxy r1)
   $ EmptyEra
 
 
@@ -614,9 +318,9 @@ eraIsect (Era {}) EmptyEra
 canonicalizeFixedEra :: forall l r t. Ord t => Era Fixed l r t -> Era Fixed l r t
 canonicalizeFixedEra (Era (Finite s) (Finite e))
   | s > e
-  =                     lemma_areNotOpen__notOpen (P :: Proxy l) (P :: Proxy r)
-                      $ lemma_notOpen_isFinite__C (P :: Proxy l)
-                      $ lemma_notOpen_isFinite__C                (P :: Proxy r)
+  =                     lemma_areNotOpen__notOpen (Proxy :: Proxy l) (Proxy :: Proxy r)
+                      $ lemma_notOpen_isFinite__C (Proxy :: Proxy l)
+                      $ lemma_notOpen_isFinite__C                (Proxy :: Proxy r)
   $ EmptyEra
 canonicalizeFixedEra era = era
 
@@ -626,15 +330,15 @@ eraSeq
   => Era Floating l1 r1 t -> Era Floating l2 r2 t
   -> Era Floating l1 r2 t
 eraSeq EmptyEra EmptyEra
-  = lemma_Compat_trans3 (P :: Proxy l1) (P :: Proxy r1) (P :: Proxy l2) (P :: Proxy r2)
+  = lemma_Compat_trans3 (Proxy :: Proxy l1) (Proxy :: Proxy r1) (Proxy :: Proxy l2) (Proxy :: Proxy r2)
   $ EmptyEra
 
 eraSeq EmptyEra e@(Era _ _)
-  = lemma_Compat_trans2 (P :: Proxy l1) (P :: Proxy r1) (P :: Proxy l2)
+  = lemma_Compat_trans2 (Proxy :: Proxy l1) (Proxy :: Proxy r1) (Proxy :: Proxy l2)
   $ e
 
 eraSeq e@(Era _ _) EmptyEra
-  = lemma_Compat_trans2 (P :: Proxy r1) (P :: Proxy l2) (P :: Proxy r2)
+  = lemma_Compat_trans2 (Proxy :: Proxy r1) (Proxy :: Proxy l2) (Proxy :: Proxy r2)
   $ e
 
 -- We know e1 and s2 are Finite because of Compat r1 l2 constraint
@@ -683,13 +387,13 @@ floatEra (Era s e) = Era' (Era s e)
 openREra :: forall l r t. Era Floating l r t -> Era Floating l (Open r) t
 openREra EmptyEra           = undefined       -- XXX (see note above)
 openREra (Era s Infinity)   = Era s Infinity
-openREra (Era s (Finite e)) = lemma_F_FOpen (P :: Proxy r)
+openREra (Era s (Finite e)) = lemma_F_FOpen (Proxy :: Proxy r)
                             $ Era s (Finite e)
 
 openLEra :: forall l r t. Era Floating l r t -> Era Floating (Open l) r t
 openLEra EmptyEra           = undefined       -- XXX (see note above)
 openLEra (Era Infinity e)   = Era Infinity e
-openLEra (Era (Finite s) e) = lemma_F_FOpen (P :: Proxy l)
+openLEra (Era (Finite s) e) = lemma_F_FOpen (Proxy :: Proxy l)
                             $ Era (Finite s) e
 
 -- The Num t constraint is sort of a hack, but we need to create a
@@ -698,25 +402,25 @@ openLEra (Era (Finite s) e) = lemma_F_FOpen (P :: Proxy l)
 -- could make another Era constructor for point eras, but that seems
 -- like it would be a lot of work...
 closeREra :: forall l r t. Num t => Era Floating l r t -> Era Floating l (Close r) t
-closeREra EmptyEra           = lemma_Compat_Finite (P :: Proxy l) (P :: Proxy r)
-                             $ lemma_F_FClose (P :: Proxy r)
+closeREra EmptyEra           = lemma_Compat_Finite (Proxy :: Proxy l) (Proxy :: Proxy r)
+                             $ lemma_F_FClose (Proxy :: Proxy r)
   $ Era (Finite 0) (Finite 0) :: Era Floating l (Close r) t
 
 closeREra (Era s Infinity)
   = Era s Infinity
 
-closeREra (Era s (Finite e)) = lemma_F_FClose (P :: Proxy r)
+closeREra (Era s (Finite e)) = lemma_F_FClose (Proxy :: Proxy r)
   $ Era s (Finite e)
 
 closeLEra :: forall l r t. Num t => Era Floating l r t -> Era Floating (Close l) r t
-closeLEra EmptyEra           = lemma_Compat_Finite (P :: Proxy l) (P :: Proxy r)
-                             $ lemma_F_FClose (P :: Proxy l)
+closeLEra EmptyEra           = lemma_Compat_Finite (Proxy :: Proxy l) (Proxy :: Proxy r)
+                             $ lemma_F_FClose (Proxy :: Proxy l)
   $ Era (Finite 0) (Finite 0) :: Era Floating (Close l) r t
 
 closeLEra (Era Infinity e)
   = Era Infinity e
 
-closeLEra (Era (Finite s) e) = lemma_F_FClose (P :: Proxy l)
+closeLEra (Era (Finite s) e) = lemma_F_FClose (Proxy :: Proxy l)
   $ Era (Finite s) e
 
 ------------------------------------------------------------
@@ -877,7 +581,7 @@ closeL a (Active e f) = Active (closeLEra e) f'
       => Active Floating l1 r1 t a -> Active Floating l2 r2 t a
       -> Active Floating l1 r2 t a
 Active EmptyEra f ... Active EmptyEra _
-  = lemma_Compat_trans3 (P :: Proxy l1) (P :: Proxy r1) (P :: Proxy l2) (P :: Proxy r2)
+  = lemma_Compat_trans3 (Proxy :: Proxy l1) (Proxy :: Proxy r1) (Proxy :: Proxy l2) (Proxy :: Proxy r2)
   $ Active EmptyEra f
 
 -- XXX more cases go here
@@ -903,7 +607,7 @@ instance Deadline r l t a => Semigroup (Active Floating l r t a) where
 
 instance Deadline r l t a => Monoid (Active Floating l r t a) where
   mappend = (<>)
-  mempty  = lemma_Compat_comm (P :: Proxy r) (P :: Proxy l)
+  mempty  = lemma_Compat_comm (Proxy :: Proxy r) (Proxy :: Proxy l)
           $ Active emptyFloatingEra undefined   -- XXX ?
 
 ------------------------------------------------------------
