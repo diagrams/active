@@ -589,27 +589,17 @@ closeL a (Active e f) = Active (closeLEra e) f'
          (AffineSpace t, Deadline r1 l2 t a)
       => Active Floating l1 r1 t a -> Active Floating l2 r2 t a
       -> Active Floating l1 r2 t a
-Active EmptyEra f ... Active EmptyEra _
-  = lemma_Compat_trans3 (Proxy :: Proxy l1) (Proxy :: Proxy r1) (Proxy :: Proxy l2) (Proxy :: Proxy r2)
-  $ Active EmptyEra f
+Active era1@EmptyEra f ... Active era2@EmptyEra _ = Active (eraSeq era1 era2) f
 
--- XXX more cases go here
+Active era1@EmptyEra _ ... Active era2@(Era {}) f = Active (eraSeq era1 era2) f
 
--- (...) :: forall l1 r1 l2 r2 t a. (AffineSpace t, Deadline r1 l2 t a)
---     => Active Floating l1 r1 t a -> Active Floating l2 r2 t a -> Active Floating l1 r2 t a
--- SActive (Active EmptyEra _) _ ... sa2 = unsafeConvertS sa2
--- sa1 ... SActive (Active EmptyEra _) _ = unsafeConvertS sa1
--- (...)
---   (SActive (Active (Era s1 (Finite e1)) f1) m1)
---   (SActive (Active (Era (Finite s2) e2) f2) m2)
---   = SActive (Active (Era s1 (shift d e2))
---                      (\t -> choose (Proxy :: Proxy r1) (Proxy :: Proxy l2)
---                               e1 t (f1 t) (shift d f2 t))
---             )
---             (combineAnchors m1 (shift d m2))
---   where
---     d = e1 .-. s2
--- _ ... _ = error "... : impossible"
+Active era1@(Era {}) f ... Active era2@EmptyEra _ = Active (eraSeq era1 era2) f
+
+-- Know e1 and s2 are Finite because of Deadline constraint
+Active era1@(Era _ (Finite e1)) f1 ... Active era2@(Era (Finite s2) _) f2
+  = Active (eraSeq era1 era2)
+           (\t -> choose (Proxy :: Proxy r1) (Proxy :: Proxy l2)
+                    e1 t (f1 t) (shift (e1 .-. s2) f2 t))
 
 instance Deadline r l t a => Semigroup (Active Floating l r t a) where
   (<>) = (...)
