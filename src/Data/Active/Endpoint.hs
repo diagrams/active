@@ -25,6 +25,25 @@ data EndpointType
   | C -- losed
   | O -- pen
 
+-- data SingEndpointType :: EndpointType -> * where
+--   SI :: SingEndpointType I
+--   SC :: SingEndpointType C
+--   SO :: SingEndpointType O
+
+-- deriving instance Show (SingEndpointType e)
+
+-- class SingEndpointTypeI (e :: EndpointType) where
+--   endpointTypeI :: SingEndpointType e
+
+-- instance SingEndpointTypeI I where
+--   endpointTypeI = SI
+
+-- instance SingEndpointTypeI C where
+--   endpointTypeI = SC
+
+-- instance SingEndpointTypeI O where
+--   endpointTypeI = SO
+
 -- Some functions on (promoted) EndpointTypes:
 
 -- Convert Closed to Open
@@ -34,17 +53,17 @@ type instance Open C = O
 type instance Open O = O
 
 lemma_F_FOpen
-  :: forall x r.
-     IsFinite x => Proxy x -> (IsFinite (Open x) => r) -> r
-lemma_F_FOpen Proxy r
+  :: forall p x r.
+     IsFinite x => p x -> (IsFinite (Open x) => r) -> r
+lemma_F_FOpen _ r
   = case isFinite :: IsFinitePf x of
       IsFiniteC -> r
       IsFiniteO -> r
 
 lemma_F_FClose
-  :: forall x r.
-     IsFinite x => Proxy x -> (IsFinite (Close x) => r) -> r
-lemma_F_FClose Proxy r
+  :: forall p x r.
+     IsFinite x => p x -> (IsFinite (Close x) => r) -> r
+lemma_F_FClose _ r
   = case isFinite :: IsFinitePf x of
       IsFiniteC -> r
       IsFiniteO -> r
@@ -80,30 +99,30 @@ instance Compat O C where
   compat = CompatOC
 
 lemma_Compat_comm
-  :: forall r l x. Compat r l => Proxy r -> Proxy l -> (Compat l r => x) -> x
-lemma_Compat_comm Proxy Proxy x
+  :: forall p r l x. Compat r l => p r -> p l -> (Compat l r => x) -> x
+lemma_Compat_comm _ _ x
   = case (compat :: CompatPf r l) of
       CompatOC -> x
       CompatCO -> x
 
 lemma_Compat_trans2
-  :: forall l1 r1 l2 x.
+  :: forall p l1 r1 l2 x.
      (Compat l1 r1, Compat r1 l2)
-  => Proxy l1 -> Proxy r1 -> Proxy l2
+  => p l1 -> p r1 -> p l2
   -> (l1 ~ l2 => x) -> x
-lemma_Compat_trans2 Proxy Proxy Proxy x
+lemma_Compat_trans2 _ _ _ x
   = case (compat :: CompatPf l1 r1, compat :: CompatPf r1 l2) of
       (CompatCO, CompatOC) -> x
       (CompatOC, CompatCO) -> x
       -- other cases can't happen
 
 lemma_Compat_trans3
-  :: forall l1 r1 l2 r2 x.
+  :: forall p l1 r1 l2 r2 x.
      (Compat l1 r1, Compat r1 l2, Compat l2 r2)
-  => Proxy l1 -> Proxy r1 -> Proxy l2 -> Proxy r2
+  => p l1 -> p r1 -> p l2 -> p r2
   -> (Compat l1 r2 => x)
   -> x
-lemma_Compat_trans3 l1 r1 l2 Proxy x
+lemma_Compat_trans3 l1 r1 l2 _ x
   = lemma_Compat_trans2 l1 r1 l2
   $ case compat :: CompatPf l2 r2 of
       CompatOC -> x
@@ -121,11 +140,11 @@ instance AreC C C where
   areC = (IsCPf, IsCPf)
 
 lemma_areC_isC
-  :: forall e1 e2 r.
+  :: forall p e1 e2 r.
      (AreC e1 e2)
-  => Proxy e1 -> Proxy e2
+  => p e1 -> p e2
   -> ((e1 ~ C, e2 ~ C) => r) -> r
-lemma_areC_isC Proxy Proxy r
+lemma_areC_isC _ _ r
   = case areC :: (IsCPf e1, IsCPf e2) of
       (IsCPf, IsCPf) -> r
 
@@ -145,37 +164,37 @@ instance IsFinite O where
   isFinite = IsFiniteO
 
 lemma_isectFI_F
-  :: forall e r.
+  :: forall p e r.
      (NotOpen e, IsFinite e)
-  => Proxy e -> (IsFinite (Isect e I) => r) -> r
-lemma_isectFI_F Proxy r
+  => p e -> (IsFinite (Isect e I) => r) -> r
+lemma_isectFI_F _ r
   = case isFinite :: IsFinitePf e of
       IsFiniteC -> r
       -- IsFiniteO case is impossible because of NotOpen assumption
 
 lemma_isectIF_F
-  :: forall e r.
+  :: forall p e r.
      (NotOpen e, IsFinite e)
-  => Proxy e -> (IsFinite (Isect I e) => r) -> r
-lemma_isectIF_F Proxy r
+  => p e -> (IsFinite (Isect I e) => r) -> r
+lemma_isectIF_F _ r
   = case isFinite :: IsFinitePf e of
       IsFiniteC -> r
       -- IsFiniteO case is impossible because of NotOpen assumption
 
 lemma_isectFF_F
-  :: forall e1 e2 r.
+  :: forall p e1 e2 r.
      (NotOpen e1, NotOpen e2, IsFinite e1, IsFinite e2)
-  => Proxy e1 -> Proxy e2 -> (IsFinite (Isect e1 e2) => r) -> r
-lemma_isectFF_F Proxy Proxy r
+  => p e1 -> p e2 -> (IsFinite (Isect e1 e2) => r) -> r
+lemma_isectFF_F _ _ r
   = case (isFinite :: IsFinitePf e1, isFinite :: IsFinitePf e2) of
       (IsFiniteC, IsFiniteC) -> r
       -- IsFiniteO cases are impossible because of NotOpen assumptions
 
 lemma_Compat_Finite
-  :: forall l r x.
+  :: forall p l r x.
      (Compat l r)
-  => Proxy l -> Proxy r -> ((IsFinite l, IsFinite r) => x) -> x
-lemma_Compat_Finite Proxy Proxy x
+  => p l -> p r -> ((IsFinite l, IsFinite r) => x) -> x
+lemma_Compat_Finite _ _ x
   = case compat :: CompatPf l r of
       CompatCO -> x
       CompatOC -> x
@@ -203,11 +222,11 @@ instance (NotOpen e1, NotOpen e2) => AreNotOpen e1 e2 where
   areNotOpen = (notOpen, notOpen)
 
 lemma_areNotOpen__notOpen
-  :: forall e1 e2 r.
+  :: forall p e1 e2 r.
      AreNotOpen e1 e2
-  => Proxy e1 -> Proxy e2
+  => p e1 -> p e2
   -> ((NotOpen e1, NotOpen e2) => r) -> r
-lemma_areNotOpen__notOpen Proxy Proxy r
+lemma_areNotOpen__notOpen _ _ r
   = case areNotOpen :: (NotOpenPf e1, NotOpenPf e2) of
       (NotOpenI, NotOpenI) -> r
       (NotOpenI, NotOpenC) -> r
@@ -215,11 +234,11 @@ lemma_areNotOpen__notOpen Proxy Proxy r
       (NotOpenC, NotOpenC) -> r
 
 lemma_isect_notOpen
-  :: forall e1 e2 r.
+  :: forall p e1 e2 r.
      (NotOpen e1, NotOpen e2)
-  => Proxy e1 -> Proxy e2
+  => p e1 -> p e2
   -> (NotOpen (Isect e1 e2) => r) -> r
-lemma_isect_notOpen Proxy Proxy r
+lemma_isect_notOpen _ _ r
   = case (notOpen :: NotOpenPf e1, notOpen :: NotOpenPf e2) of
       (NotOpenI, NotOpenI) -> r
       (NotOpenI, NotOpenC) -> r
@@ -227,31 +246,31 @@ lemma_isect_notOpen Proxy Proxy r
       (NotOpenC, NotOpenC) -> r
 
 lemma_isect_C_notOpen
-  :: forall e r.
+  :: forall p e r.
      (NotOpen e)
-  => Proxy e
+  => p e
   -> (Isect C e ~ C => r) -> r
-lemma_isect_C_notOpen Proxy r
+lemma_isect_C_notOpen _ r
   = case notOpen :: NotOpenPf e of
       NotOpenI -> r
       NotOpenC -> r
 
 lemma_isect_notOpen_C
-  :: forall e r.
+  :: forall p e r.
      (NotOpen e)
-  => Proxy e
+  => p e
   -> (Isect e C ~ C => r) -> r
-lemma_isect_notOpen_C Proxy r
+lemma_isect_notOpen_C _ r
   = case notOpen :: NotOpenPf e of
       NotOpenI -> r
       NotOpenC -> r
 
 lemma_notOpen_isFinite__C
-  :: forall e r.
+  :: forall p e r.
      (NotOpen e, IsFinite e)
-  => Proxy e
+  => p e
   -> (e ~ C => r) -> r
-lemma_notOpen_isFinite__C Proxy r
+lemma_notOpen_isFinite__C _ r
   = case (notOpen :: NotOpenPf e, isFinite :: IsFinitePf e) of
       (NotOpenC, IsFiniteC) -> r
       -- other cases can't happen, since e would have to equal two
@@ -306,4 +325,3 @@ endpointMax
   :: (Ord t, NotOpen e1, NotOpen e2)
   => Endpoint e1 t -> Endpoint e2 t -> Endpoint (Isect e1 e2) t
 endpointMax = endpointCmp max
-

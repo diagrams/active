@@ -367,11 +367,14 @@ withEras
   :: Era' f t -> Era' f t
   -> (forall l1 r1 l2 r2. Era f l1 r1 t -> Era f l2 r2 t -> x)
   -> x
-withEras (Era' e1) (Era' e2) k = k e1 e2
+withEras e1 e2 k = withEra e1 $ \e1' -> withEra e2 $ \e2' -> k e1' e2'
+
+wrapEra :: forall f l r t. Era f l r t -> Era' f t
+wrapEra = Era'
 
 floatEra :: forall l r t. Era Fixed l r t -> Era' Floating t
-floatEra EmptyEra  = Era' (EmptyEra :: Era Floating C O t)
-floatEra (Era s e) = Era' (Era s e)
+floatEra EmptyEra  = wrapEra (EmptyEra :: Era Floating C O t)
+floatEra (Era s e) = wrapEra (Era s e)
 
 -- One might think the EmptyEra cases below (marked with XXX) ought to
 -- result in an EmptyEra. In fact, this would be wrong (as the type
@@ -547,13 +550,19 @@ instance (Shifty a, AffineSpace t, t ~ ShiftyTime a) => Shifty (Active' Fixed t 
 
 ------------------------------------------------------------
 
-float :: (AffineSpace t, VectorSpace (Diff t)) => Active Fixed l r t a -> Active' Floating t a
+float
+  :: ( AffineSpace t, VectorSpace (Diff t) )
+  => Active Fixed l r t a -> Active' Floating t a
 float (Active e f) = withEra (floatEra e) $ \e' -> Active' (Active e' f)
 
-floatR :: (AffineSpace t, VectorSpace (Diff t)) => Active Fixed l r t a -> Active' Floating t a
+floatR
+  :: ( AffineSpace t, VectorSpace (Diff t) )
+  => Active Fixed l r t a -> Active' Floating t a
 floatR a = withActive (float a) $ Active' . openR
 
-floatL :: (AffineSpace t, VectorSpace (Diff t)) => Active Fixed l r t a -> Active' Floating t a
+floatL
+  :: ( AffineSpace t, VectorSpace (Diff t) )
+  => Active Fixed l r t a -> Active' Floating t a
 floatL a = withActive (float a) $ Active' . openL
 
 openR :: Active Floating l r t a -> Active Floating l (Open r) t a
