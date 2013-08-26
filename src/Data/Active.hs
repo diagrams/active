@@ -114,20 +114,28 @@ lemma_Compat_comm P P x
       CompatOC -> x
       CompatCO -> x
 
+lemma_Compat_trans2
+  :: forall l1 r1 l2 x.
+     (Compat l1 r1, Compat r1 l2)
+  => Proxy l1 -> Proxy r1 -> Proxy l2
+  -> (l1 ~ l2 => x) -> x
+lemma_Compat_trans2 P P P x
+  = case (compat :: CompatPf l1 r1, compat :: CompatPf r1 l2) of
+      (CompatCO, CompatOC) -> x
+      (CompatOC, CompatCO) -> x
+      -- other cases can't happen
+
 lemma_Compat_trans3
   :: forall l1 r1 l2 r2 x.
      (Compat l1 r1, Compat r1 l2, Compat l2 r2)
   => Proxy l1 -> Proxy r1 -> Proxy l2 -> Proxy r2
   -> (Compat l1 r2 => x)
   -> x
-lemma_Compat_trans3 P P P P x
-  = case ( compat :: CompatPf l1 r1
-         , compat :: CompatPf r1 l2
-         , compat :: CompatPf l2 r2
-         ) of
-      (CompatCO, CompatOC, CompatCO) -> x
-      (CompatOC, CompatCO, CompatOC) -> x
-      -- other cases can't happen
+lemma_Compat_trans3 l1 r1 l2 P x
+  = lemma_Compat_trans2 l1 r1 l2
+  $ case compat :: CompatPf l2 r2 of
+      CompatOC -> x
+      CompatCO -> x
 
 -- Proofs that endpoints are Closed
 
@@ -608,16 +616,26 @@ canonicalizeFixedEra (Era (Finite s) (Finite e))
   $ EmptyEra
 canonicalizeFixedEra era = era
 
-eraSeq :: forall l1 r1 l2 r2 t.
-  Compat r1 l2 => Era Floating l1 r1 t -> Era Floating l2 r2 t -> Era Floating l1 r2 t
-eraSeq era1 era2 =
-  case (compat :: CompatPf r1 l2) of
-    CompatOC -> case era1 of
-      EmptyEra -> case (compat :: CompatPf l1 r1) of
-        CompatCO -> case era2 of
-          EmptyEra -> EmptyEra
-          _        -> era2
-    -- XXX a ton of other cases go here.
+eraSeq
+  :: forall l1 r1 l2 r2 t.
+    (Compat r1 l2, AffineSpace t)
+  => Era Floating l1 r1 t -> Era Floating l2 r2 t
+  -> Era Floating l1 r2 t
+eraSeq EmptyEra EmptyEra
+  = lemma_Compat_trans3 (P :: Proxy l1) (P :: Proxy r1) (P :: Proxy l2) (P :: Proxy r2)
+  $ EmptyEra
+
+eraSeq EmptyEra e@(Era _ _)
+  = lemma_Compat_trans2 (P :: Proxy l1) (P :: Proxy r1) (P :: Proxy l2)
+  $ e
+
+eraSeq e@(Era _ _) EmptyEra
+  = lemma_Compat_trans2 (P :: Proxy r1) (P :: Proxy l2) (P :: Proxy r2)
+  $ e
+
+-- We know e1 and s2 are Finite because of Compat r1 l2 constraint
+eraSeq (Era s1 (Finite e1)) (Era (Finite s2) e2)
+  = Era s1 (shift (e1 .-. s2) e2)
 
 instance AffineSpace t => Shifty (Era Fixed l r t) where
   type ShiftyTime (Era Fixed l r t) = t
