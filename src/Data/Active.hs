@@ -266,6 +266,17 @@ lemma_isect_notOpen_C P r
       NotOpenI -> r
       NotOpenC -> r
 
+lemma_notOpen_isFinite__C
+  :: forall e r.
+     (NotOpen e, IsFinite e)
+  => Proxy e
+  -> (e ~ C => r) -> r
+lemma_notOpen_isFinite__C P r
+  = case (notOpen :: NotOpenPf e, isFinite :: IsFinitePf e) of
+      (NotOpenC, IsFiniteC) -> r
+      -- other cases can't happen, since e would have to equal two
+      -- different things
+
 -- For expressing no constraints
 
 class NoConstraints (e1 :: EndpointType) (e2 :: EndpointType)
@@ -588,8 +599,13 @@ eraIsect (Era {}) EmptyEra
 
 
 -- Maintain the invariant that s <= e
-canonicalizeFixedEra :: Ord t => Era Fixed l r t -> Era Fixed l r t
-canonicalizeFixedEra (Era (Finite s) (Finite e)) | s > e = undefined -- EmptyEra
+canonicalizeFixedEra :: forall l r t. Ord t => Era Fixed l r t -> Era Fixed l r t
+canonicalizeFixedEra (Era (Finite s) (Finite e))
+  | s > e
+  =                     lemma_areNotOpen__notOpen (P :: Proxy l) (P :: Proxy r)
+                      $ lemma_notOpen_isFinite__C (P :: Proxy l)
+                      $ lemma_notOpen_isFinite__C                (P :: Proxy r)
+  $ EmptyEra
 canonicalizeFixedEra era = era
 
 eraSeq :: forall l1 r1 l2 r2 t.
