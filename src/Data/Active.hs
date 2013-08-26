@@ -25,7 +25,7 @@
 
 module Data.Active where
 
-import GHC.Exts
+import           GHC.Exts            (Constraint)
 
 import           Control.Applicative
 import           Control.Arrow       ((***))
@@ -140,6 +140,15 @@ class AreC (l :: EndpointType) (r :: EndpointType) where
 instance AreC C C where
   areC = (IsCPf, IsCPf)
 
+lemma_areC_isC
+  :: forall e1 e2 r.
+     (AreC e1 e2)
+  => Proxy e1 -> Proxy e2
+  -> ((e1 ~ C, e2 ~ C) => r) -> r
+lemma_areC_isC P P r
+  = case areC :: (IsCPf e1, IsCPf e2) of
+      (IsCPf, IsCPf) -> r
+
 -- Proofs that endpoints are finite
 
 data IsFinitePf :: EndpointType -> * where
@@ -212,6 +221,50 @@ class AreNotOpen (e1 :: EndpointType) (e2 :: EndpointType) where
 
 instance (NotOpen e1, NotOpen e2) => AreNotOpen e1 e2 where
   areNotOpen = (notOpen, notOpen)
+
+lemma_areNotOpen__notOpen
+  :: forall e1 e2 r.
+     AreNotOpen e1 e2
+  => Proxy e1 -> Proxy e2
+  -> ((NotOpen e1, NotOpen e2) => r) -> r
+lemma_areNotOpen__notOpen P P r
+  = case areNotOpen :: (NotOpenPf e1, NotOpenPf e2) of
+      (NotOpenI, NotOpenI) -> r
+      (NotOpenI, NotOpenC) -> r
+      (NotOpenC, NotOpenI) -> r
+      (NotOpenC, NotOpenC) -> r
+
+lemma_isect_notOpen
+  :: forall e1 e2 r.
+     (NotOpen e1, NotOpen e2)
+  => Proxy e1 -> Proxy e2
+  -> (NotOpen (Isect e1 e2) => r) -> r
+lemma_isect_notOpen P P r
+  = case (notOpen :: NotOpenPf e1, notOpen :: NotOpenPf e2) of
+      (NotOpenI, NotOpenI) -> r
+      (NotOpenI, NotOpenC) -> r
+      (NotOpenC, NotOpenI) -> r
+      (NotOpenC, NotOpenC) -> r
+
+lemma_isect_C_notOpen
+  :: forall e r.
+     (NotOpen e)
+  => Proxy e
+  -> (Isect C e ~ C => r) -> r
+lemma_isect_C_notOpen P r
+  = case notOpen :: NotOpenPf e of
+      NotOpenI -> r
+      NotOpenC -> r
+
+lemma_isect_notOpen_C
+  :: forall e r.
+     (NotOpen e)
+  => Proxy e
+  -> (Isect e C ~ C => r) -> r
+lemma_isect_notOpen_C P r
+  = case notOpen :: NotOpenPf e of
+      NotOpenI -> r
+      NotOpenC -> r
 
 -- For expressing no constraints
 
@@ -497,19 +550,42 @@ end f er@(Era _ e) = er <$ f (Just e)
 
 -- | Two fixed eras intersect to form the largest fixed era which is contained in
 --   both, with the empty era as an annihilator.
-eraIsect :: forall l1 r1 l2 r2 t. Ord t => Era Fixed l1 r1 t -> Era Fixed l2 r2 t -> Era Fixed (Isect l1 l2) (Isect r1 r2) t
-eraIsect (Era l1 r1) (Era l2 r2) = undefined -- canonicalizeFixedEra $ Era (endpointMax l1 l2) (endpointMin r1 r2)
-eraIsect EmptyEra EmptyEra = case (areC :: (IsCPf l1, IsCPf r1), areC :: (IsCPf l2, IsCPf r2)) of ((IsCPf, IsCPf), (IsCPf, IsCPf)) -> EmptyEra
--- XXX redo this
--- eraIsect EmptyEra (Era Infinity Infinity)     = case (areC :: AreCPf l1 r1) of AreCPf -> EmptyEra
--- eraIsect EmptyEra (Era (Finite _) Infinity)   = case (areC :: AreCPf l1 r1) of AreCPf -> EmptyEra
--- eraIsect EmptyEra (Era Infinity (Finite _))   = case (areC :: AreCPf l1 r1) of AreCPf -> EmptyEra
--- eraIsect EmptyEra (Era (Finite _) (Finite _)) = case (areC :: AreCPf l1 r1) of AreCPf -> EmptyEra
--- eraIsect (Era Infinity Infinity)     EmptyEra = case (areC :: AreCPf l2 r2) of AreCPf -> EmptyEra
--- eraIsect (Era (Finite _) Infinity)   EmptyEra = case (areC :: AreCPf l2 r2) of AreCPf -> EmptyEra
--- eraIsect (Era Infinity (Finite _))   EmptyEra = case (areC :: AreCPf l2 r2) of AreCPf -> EmptyEra
--- eraIsect (Era (Finite _) (Finite _)) EmptyEra = case (areC :: AreCPf l2 r2) of AreCPf -> EmptyEra
-  -- ugh, all the above cases are actually needed to make the type checker happy
+eraIsect
+  :: forall l1 r1 l2 r2 t.
+     Ord t
+  => Era Fixed l1 r1 t -> Era Fixed l2 r2 t
+  -> Era Fixed (Isect l1 l2) (Isect r1 r2) t
+
+eraIsect (Era l1 r1) (Era l2 r2)
+  =                     lemma_areNotOpen__notOpen (P :: Proxy l1) (P :: Proxy r1)
+                      $ lemma_areNotOpen__notOpen (P :: Proxy l2) (P :: Proxy r2)
+                      $ lemma_isect_notOpen       (P :: Proxy l1) (P :: Proxy l2)
+                      $ lemma_isect_notOpen       (P :: Proxy r1) (P :: Proxy r2)
+
+  $ canonicalizeFixedEra
+  $ Era (endpointMax l1 l2) (endpointMin r1 r2)
+
+eraIsect EmptyEra EmptyEra
+  =                     lemma_areC_isC (P :: Proxy l1) (P :: Proxy r1)
+                      $ lemma_areC_isC (P :: Proxy l2) (P :: Proxy r2)
+
+  $ EmptyEra
+
+eraIsect EmptyEra (Era {})
+  =                     lemma_areC_isC            (P :: Proxy l1) (P :: Proxy r1)
+                      $ lemma_areNotOpen__notOpen (P :: Proxy l2) (P :: Proxy r2)
+                      $ lemma_isect_C_notOpen     (P :: Proxy l2)
+                      $ lemma_isect_C_notOpen     (P :: Proxy r2)
+
+  $ EmptyEra
+
+eraIsect (Era {}) EmptyEra
+  =                     lemma_areNotOpen__notOpen (P :: Proxy l1) (P :: Proxy r1)
+                      $ lemma_areC_isC            (P :: Proxy l2) (P :: Proxy r2)
+                      $ lemma_isect_notOpen_C     (P :: Proxy l1)
+                      $ lemma_isect_notOpen_C     (P :: Proxy r1)
+  $ EmptyEra
+
 
 -- Maintain the invariant that s <= e
 canonicalizeFixedEra :: Ord t => Era Fixed l r t -> Era Fixed l r t
