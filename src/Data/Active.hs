@@ -311,7 +311,11 @@ instance Traversable (Endpoint e) where
   traverse _ Infinity   = pure Infinity
   traverse f (Finite t) = Finite <$> f t
 
-endpointCmp :: forall e1 e2 t. (NotOpen e1, NotOpen e2) => (t -> t -> t) -> Endpoint e1 t -> Endpoint e2 t -> Endpoint (Isect e1 e2) t
+endpointCmp
+  :: forall e1 e2 t.
+     (NotOpen e1, NotOpen e2)
+  => (t -> t -> t)
+  -> Endpoint e1 t -> Endpoint e2 t -> Endpoint (Isect e1 e2) t
 endpointCmp _   Infinity    Infinity    = Infinity
 endpointCmp _   (Finite t1) Infinity    = lemma_isectFI_F (P :: Proxy e1)
                                         $ Finite t1
@@ -650,8 +654,16 @@ instance AffineSpace t => Shifty (Era Fixed l r t) where
 data Era' :: EraType -> * -> * where
   Era' :: Era f l r t -> Era' f t
 
+deriving instance Show t => Show (Era' f t)
+
 withEra :: Era' f t -> (forall l r. Era f l r t -> x) -> x
 withEra (Era' e) k = k e
+
+withEras
+  :: Era' f t -> Era' f t
+  -> (forall l1 r1 l2 r2. Era f l1 r1 t -> Era f l2 r2 t -> x)
+  -> x
+withEras (Era' e1) (Era' e2) k = k e1 e2
 
 floatEra :: forall l r t. Era Fixed l r t -> Era' Floating t
 floatEra EmptyEra  = Era' (EmptyEra :: Era Floating C O t)
@@ -688,18 +700,24 @@ openLEra (Era (Finite s) e) = lemma_F_FOpen (P :: Proxy l)
 closeREra :: forall l r t. Num t => Era Floating l r t -> Era Floating l (Close r) t
 closeREra EmptyEra           = lemma_Compat_Finite (P :: Proxy l) (P :: Proxy r)
                              $ lemma_F_FClose (P :: Proxy r)
-                             $ Era (Finite 0) (Finite 0) :: Era Floating l (Close r) t
-closeREra (Era s Infinity)   = Era s Infinity
+  $ Era (Finite 0) (Finite 0) :: Era Floating l (Close r) t
+
+closeREra (Era s Infinity)
+  = Era s Infinity
+
 closeREra (Era s (Finite e)) = lemma_F_FClose (P :: Proxy r)
-                             $ Era s (Finite e)
+  $ Era s (Finite e)
 
 closeLEra :: forall l r t. Num t => Era Floating l r t -> Era Floating (Close l) r t
 closeLEra EmptyEra           = lemma_Compat_Finite (P :: Proxy l) (P :: Proxy r)
                              $ lemma_F_FClose (P :: Proxy l)
-			     $ Era (Finite 0) (Finite 0) :: Era Floating (Close l) r t
-closeLEra (Era Infinity e)   = Era Infinity e
+  $ Era (Finite 0) (Finite 0) :: Era Floating (Close l) r t
+
+closeLEra (Era Infinity e)
+  = Era Infinity e
+
 closeLEra (Era (Finite s) e) = lemma_F_FClose (P :: Proxy l)
-                             $ Era (Finite s) e
+  $ Era (Finite s) e
 
 ------------------------------------------------------------
 -- Active
@@ -862,6 +880,8 @@ Active EmptyEra f ... Active EmptyEra _
   = lemma_Compat_trans3 (P :: Proxy l1) (P :: Proxy r1) (P :: Proxy l2) (P :: Proxy r2)
   $ Active EmptyEra f
 
+-- XXX more cases go here
+
 -- (...) :: forall l1 r1 l2 r2 t a. (AffineSpace t, Deadline r1 l2 t a)
 --     => Active Floating l1 r1 t a -> Active Floating l2 r2 t a -> Active Floating l1 r2 t a
 -- SActive (Active EmptyEra _) _ ... sa2 = unsafeConvertS sa2
@@ -879,12 +899,12 @@ Active EmptyEra f ... Active EmptyEra _
 -- _ ... _ = error "... : impossible"
 
 instance Deadline r l t a => Semigroup (Active Floating l r t a) where
-  (<>) = undefined -- (...)
+  (<>) = (...)
 
 instance Deadline r l t a => Monoid (Active Floating l r t a) where
   mappend = (<>)
   mempty  = lemma_Compat_comm (P :: Proxy r) (P :: Proxy l)
-          $ Active emptyFloatingEra undefined
+          $ Active emptyFloatingEra undefined   -- XXX ?
 
 ------------------------------------------------------------
 -- Derived API
