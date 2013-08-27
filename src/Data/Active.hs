@@ -402,9 +402,9 @@ withEras e1 e2 k = withEra e1 $ \e1' -> withEra e2 $ \e2' -> k e1' e2'
 wrapEra :: forall f l r t. Era f l r t -> Era' f t
 wrapEra = Era'
 
-floatEra :: forall l r t. Era Fixed l r t -> Era' Floating t
-floatEra EmptyEra  = wrapEra (EmptyEra :: Era Floating C O t)
-floatEra (Era s e) = wrapEra (Era s e)
+floatEra :: forall l r t. Era Fixed l r t -> Maybe (Era Floating l r t)
+floatEra EmptyEra  = Nothing
+floatEra (Era s e) = Just (Era s e)
 
 -- One might think the EmptyEra cases below (marked with XXX) ought to
 -- result in an EmptyEra. In fact, this would be wrong (as the type
@@ -582,18 +582,18 @@ instance (Shifty a, AffineSpace t, t ~ ShiftyTime a) => Shifty (Active' Fixed t 
 
 float
   :: ( AffineSpace t, VectorSpace (Diff t) )
-  => Active Fixed l r t a -> Active' Floating t a
-float (Active e f) = withEra (floatEra e) $ \e' -> Active' (Active e' f)
+  => Active Fixed l r t a -> Maybe (Active Floating l r t a)
+float (Active e f) = Active <$> floatEra e <*> Just f
 
 floatR
   :: ( AffineSpace t, VectorSpace (Diff t) )
-  => Active Fixed l r t a -> Active' Floating t a
-floatR a = withActive (float a) $ Active' . openR
+  => Active Fixed l r t a -> Maybe (Active Floating l (Open r) t a)
+floatR a = openR <$> float a
 
 floatL
   :: ( AffineSpace t, VectorSpace (Diff t) )
-  => Active Fixed l r t a -> Active' Floating t a
-floatL a = withActive (float a) $ Active' . openL
+  => Active Fixed l r t a -> Maybe (Active Floating (Open l) r t a)
+floatL a = openL <$> float a
 
 openR :: Active Floating l r t a -> Active Floating l (Open r) t a
 openR (Active e f) = Active (openREra e) f
