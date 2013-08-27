@@ -205,12 +205,32 @@ type family   EraConstraints (et :: EraType)
 type instance EraConstraints Fixed    = AreNotOpen
 type instance EraConstraints Floating = NoConstraints
 
+lemma_EmptyConstraints_comm
+  :: forall p1 p2 f l r x.
+     (IsEraType f, EmptyConstraints f l r)
+  => p1 f -> p2 l -> p2 r
+  -> (EmptyConstraints f r l => x) -> x
+lemma_EmptyConstraints_comm _ l r x
+  = case isEraType :: IsEraTypePf f of
+      IsEraTypeFixed    -> lemma_areC_isC l r    $ x
+      IsEraTypeFloating -> lemma_Compat_comm l r $ x
+
 lemma_EraConstraints_II
-  :: forall f r. IsEraType f => Proxy f -> (EraConstraints f I I => r) -> r
-lemma_EraConstraints_II Proxy r
+  :: forall p f r. IsEraType f => p f -> (EraConstraints f I I => r) -> r
+lemma_EraConstraints_II _ r
   = case isEraType :: IsEraTypePf f of
       IsEraTypeFixed    -> r
       IsEraTypeFloating -> r
+
+lemma_EraConstraints_comm
+  :: forall p1 p2 f l r x.
+     (IsEraType f, EraConstraints f l r)
+  => p1 f -> p2 l -> p2 r
+  -> (EraConstraints f r l => x) -> x
+lemma_EraConstraints_comm _ l r x
+  = case isEraType :: IsEraTypePf f of
+      IsEraTypeFixed    -> lemma_areNotOpen__notOpen l r $ x
+      IsEraTypeFloating -> x
 
 -- | An @Era@ is a (potentially infinite) span of time.  @Era@s form a
 --   monoid: the combination of two @Era@s is the largest @Era@ which
@@ -350,6 +370,16 @@ instance AffineSpace t => Shifty (Era Fixed l r t) where
 
   shift _ EmptyEra  = EmptyEra
   shift d (Era s e) = Era (shift d s) (shift d e)
+
+reverseEra
+  :: forall f l r t. (IsFinite l, IsFinite r, IsEraType f)
+  => Era f l r t -> Era f r l t
+reverseEra EmptyEra
+  = lemma_EmptyConstraints_comm (Proxy :: Proxy f) (Proxy :: Proxy l) (Proxy :: Proxy r)
+  $ EmptyEra
+reverseEra (Era (Finite s) (Finite e))
+  = lemma_EraConstraints_comm (Proxy :: Proxy f) (Proxy :: Proxy l) (Proxy :: Proxy r)
+  $ Era (Finite s) (Finite e)
 
 ------------------------------------------------------------
 -- Existential Eras
@@ -614,3 +644,10 @@ instance Deadline r l t a => Monoid (Active Floating l r t a) where
 ------------------------------------------------------------
 -- Derived API
 ------------------------------------------------------------
+
+rev :: (AffineSpace t, IsEraType f, IsFinite l, IsFinite r)
+    => Active f l r t a -> Active f r l t a
+rev (Active EmptyEra f) = Active (reverseEra EmptyEra) f
+rev (Active er@(Era (Finite s) (Finite e)) f) = Active (reverseEra er) f'
+  where
+    f' t = f (e .+^ (s .-. t))
