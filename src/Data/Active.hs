@@ -607,7 +607,9 @@ instance Deadline r l t a => Semigroup (Active Floating l r t a) where
 instance Deadline r l t a => Monoid (Active Floating l r t a) where
   mappend = (<>)
   mempty  = lemma_Compat_comm (Proxy :: Proxy r) (Proxy :: Proxy l)
-          $ Active emptyFloatingEra undefined   -- XXX ?
+          $ Active emptyFloatingEra (const undefined)
+            -- OK to use 'undefined' above since this function can
+            -- never be called.
 
 ------------------------------------------------------------
 -- Derived API
