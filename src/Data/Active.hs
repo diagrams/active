@@ -35,6 +35,7 @@ import           Control.Lens
 import           Control.Monad       ((>=>))
 import           Data.AffineSpace
 import qualified Data.Map            as M
+import           Data.Maybe          (fromJust)
 import           Data.Proxy
 import           Data.Semigroup
 import           Data.VectorSpace
@@ -581,19 +582,13 @@ instance (Shifty a, AffineSpace t, t ~ ShiftyTime a) => Shifty (Active' Fixed t 
 
 ------------------------------------------------------------
 
-float
-  :: ( AffineSpace t, VectorSpace (Diff t) )
-  => Active Fixed l r t a -> Maybe (Active Floating l r t a)
+float :: Active Fixed l r t a -> Maybe (Active Floating l r t a)
 float (Active e f) = Active <$> floatEra e <*> Just f
 
-floatR
-  :: ( AffineSpace t, VectorSpace (Diff t) )
-  => Active Fixed l r t a -> Maybe (Active Floating l (Open r) t a)
+floatR :: Active Fixed l r t a -> Maybe (Active Floating l (Open r) t a)
 floatR = float >=> openR
 
-floatL
-  :: ( AffineSpace t, VectorSpace (Diff t) )
-  => Active Fixed l r t a -> Maybe (Active Floating (Open l) r t a)
+floatL :: Active Fixed l r t a -> Maybe (Active Floating (Open l) r t a)
 floatL = float >=> openL
 
 openR :: Active Floating l r t a -> Maybe (Active Floating l (Open r) t a)
@@ -642,12 +637,36 @@ instance Deadline r l t a => Monoid (Active Floating l r t a) where
             -- OK to use 'undefined' above since this function can
             -- never be called.
 
+anchorStart
+  :: forall l r t a. (IsFinite l, AreNotOpen l r, AffineSpace t)
+  => t -> Active Floating l r t a -> Active Fixed l r t a
+anchorStart t (Active (Era (Finite s) e) f)
+  = Active (Era (Finite t) (shift d e)) (shift d f)
+  where d = t .-. s
+
+  -- EmptyEra case can't happen because of AreNotOpen l r constraint.
+  -- Era Infinity _  case can't happen because of IsFinite l constraint.
+
+anchorEnd
+  :: forall l r t a. (IsFinite r, AreNotOpen l r, AffineSpace t)
+  => t -> Active Floating l r t a -> Active Fixed l r t a
+anchorEnd t (Active (Era s (Finite e)) f)
+  = Active (Era (shift d s) (Finite t)) (shift d f)
+  where d = t .-. e
+
+  -- EmptyEra case can't happen because of AreNotOpen l r constraint.
+  -- Era _ Infinity  case can't happen because of IsFinite r constraint.
+
 ------------------------------------------------------------
 -- Derived API
 ------------------------------------------------------------
 
 interval :: Ord t => t -> t -> Active Fixed C C t ()
 interval s e = Active (mkFixedEra' s e) (const ())
+
+-- XXX should check if duration is <= 0?
+spell :: (AffineSpace t, Ord t, Num t) => Diff t -> Active Floating C C t ()
+spell dur = fromJust . float $ interval 0 (0 .+^ dur)
 
 rev :: (AffineSpace t, IsEraType f, IsFinite l, IsFinite r)
     => Active f l r t a -> Active f r l t a
