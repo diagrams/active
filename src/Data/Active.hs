@@ -645,6 +645,9 @@ instance Deadline r l t a => Monoid (Active Floating l r t a) where
 -- Derived API
 ------------------------------------------------------------
 
+interval :: Ord t => t -> t -> Active Fixed C C t ()
+interval s e = Active (mkFixedEra' s e) (const ())
+
 rev :: (AffineSpace t, IsEraType f, IsFinite l, IsFinite r)
     => Active f l r t a -> Active f r l t a
 rev (Active EmptyEra f) = Active (reverseEra EmptyEra) f
