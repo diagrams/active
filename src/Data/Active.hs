@@ -32,12 +32,13 @@ import           Data.Active.Endpoint
 import           Control.Applicative
 import           Control.Arrow       ((***))
 import           Control.Lens
-import           Prelude             hiding (Floating)
+import           Control.Monad       ((>=>))
 import           Data.AffineSpace
 import qualified Data.Map            as M
 import           Data.Proxy
 import           Data.Semigroup
 import           Data.VectorSpace
+import           Prelude             hiding (Floating)
 
 ------------------------------------------------------------
 -- Clock
@@ -417,17 +418,17 @@ floatEra (Era s e) = Just (Era s e)
 -- either side, and consider what happens to the values at their
 -- endpoints).  But I cannot see how to disallow this statically.
 
-openREra :: forall l r t. Era Floating l r t -> Era Floating l (Open r) t
-openREra EmptyEra           = undefined       -- XXX (see note above)
-openREra (Era s Infinity)   = Era s Infinity
+openREra :: forall l r t. Era Floating l r t -> Maybe (Era Floating l (Open r) t)
+openREra EmptyEra           = Nothing
+openREra (Era s Infinity)   = Just $ Era s Infinity
 openREra (Era s (Finite e)) = lemma_F_FOpen (Proxy :: Proxy r)
-                            $ Era s (Finite e)
+                            $ Just $ Era s (Finite e)
 
-openLEra :: forall l r t. Era Floating l r t -> Era Floating (Open l) r t
-openLEra EmptyEra           = undefined       -- XXX (see note above)
-openLEra (Era Infinity e)   = Era Infinity e
+openLEra :: forall l r t. Era Floating l r t -> Maybe (Era Floating (Open l) r t)
+openLEra EmptyEra           = Nothing
+openLEra (Era Infinity e)   = Just $ Era Infinity e
 openLEra (Era (Finite s) e) = lemma_F_FOpen (Proxy :: Proxy l)
-                            $ Era (Finite s) e
+                            $ Just $ Era (Finite s) e
 
 -- The Num t constraint is sort of a hack, but we need to create a
 -- non-empty era.  It doesn't matter WHAT t value we choose (since the
@@ -588,18 +589,18 @@ float (Active e f) = Active <$> floatEra e <*> Just f
 floatR
   :: ( AffineSpace t, VectorSpace (Diff t) )
   => Active Fixed l r t a -> Maybe (Active Floating l (Open r) t a)
-floatR a = openR <$> float a
+floatR = float >=> openR
 
 floatL
   :: ( AffineSpace t, VectorSpace (Diff t) )
   => Active Fixed l r t a -> Maybe (Active Floating (Open l) r t a)
-floatL a = openL <$> float a
+floatL = float >=> openL
 
-openR :: Active Floating l r t a -> Active Floating l (Open r) t a
-openR (Active e f) = Active (openREra e) f
+openR :: Active Floating l r t a -> Maybe (Active Floating l (Open r) t a)
+openR (Active e f) = Active <$> openREra e <*> Just f
 
-openL :: Active Floating l r t a -> Active Floating (Open l) r t a
-openL (Active e f) = Active (openLEra e) f
+openL :: Active Floating l r t a -> Maybe (Active Floating (Open l) r t a)
+openL (Active e f) = Active <$> openLEra e <*> Just f
 
 closeR :: (Eq t, Num t) => a -> Active Floating l O t a -> Active Floating l C t a
 closeR a (Active e f) = Active (closeREra e) f'
