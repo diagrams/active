@@ -34,6 +34,7 @@ import           Control.Arrow       ((***))
 import           Control.Lens        (makeLenses, view, Getter, (%~))
 import           Control.Monad       ((>=>))
 import           Data.AffineSpace
+import           Data.Array
 import qualified Data.Map            as M
 import           Data.Maybe          (fromJust)
 import           Data.Proxy
@@ -521,8 +522,8 @@ instance (Shifty a, Clock t, t ~ ShiftyTime a) => Shifty (Active Fixed l r t a) 
 
   shift d = (activeFun %~ shift d) . (era %~ shift d)
 
-emptyFloatAR :: Active Floating C O t a
-emptyFloatAR = Active emptyFloatingEra (const undefined)
+emptyFloatA :: Compat l r => Active Floating l r t a
+emptyFloatA = Active emptyFloatingEra (const undefined)
 
 ------------------------------------------------------------
 -- Active
@@ -705,6 +706,9 @@ interval s e = Active (mkFixedEra' s e) (const ())
 (...) :: Ord t => t -> t -> Active Fixed C C t ()
 (...) = interval
 
+ui :: (Num t, Ord t) => Active Fixed C C t t
+ui = timeValued (0 ... 1)
+
 timeValued :: Active Fixed l r t a -> Active Fixed l r t t
 timeValued = mapTimed const
 
@@ -750,3 +754,43 @@ snapshot :: (IsEraType f, Ord t)
 snapshot t (Active er f)
   | er `contains` t = Just $ pureA (f t)
   | otherwise       = Nothing
+
+clamp :: Active f C C t a -> Active f I I t a
+clamp (Active (Era (Finite s) (Finite e)) f)
+  = undefined
+--    Active (Era Infinity Infinity) undefined  -- XXX something to do
+                                                -- with Clock or
+                                                -- Deadline?
+
+clampBefore :: Active f C r t a -> Active f I r t a
+clampBefore = undefined
+
+clampAfter :: Active f l C t a -> Active f l I t a
+clampAfter = undefined
+
+pad :: a -> Active f C C t a -> Active f I I t a
+pad = undefined
+
+padBefore :: a -> Active f C r t a -> Active f I r t a
+padBefore = undefined
+
+padAfter :: a -> Active f l C t a -> Active f l I t a
+padAfter = undefined
+
+
+movie :: (Deadline r l t a, Compat l r)
+      => [Active Floating l r t a] -> Active Floating l r t a
+movie = foldr (<<>>) emptyFloatA
+  -- XXX use a balanced fold?
+
+
+discrete :: (Clock t, Ord t, Num t, FractionalOf t Rational) => [a] -> Active Fixed C C t a
+discrete [] = error "Data.Active.discrete must be called with a non-empty list."
+discrete xs = f <$> ui
+  where
+    f t
+      | toFractionalOf t <= (0 :: Rational) = arr ! 0
+      | toFractionalOf t >= (1 :: Rational) = arr ! (n-1)
+      | otherwise = arr ! floor (toFractionalOf t * fromIntegral n :: Rational)
+    n   = length xs
+    arr = listArray (0, n-1) xs
