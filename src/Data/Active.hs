@@ -31,7 +31,7 @@ import           Data.Active.Endpoint
 
 import           Control.Applicative
 import           Control.Arrow       ((***))
-import           Control.Lens
+import           Control.Lens        (makeLenses, view, Getter, (%~))
 import           Control.Monad       ((>=>))
 import           Data.AffineSpace
 import qualified Data.Map            as M
@@ -172,7 +172,7 @@ instance Shifty Time where
 
   shift d = (.+^ d)
 
-instance AffineSpace t => Shifty (Endpoint e t) where
+instance Clock t => Shifty (Endpoint e t) where
   type ShiftyTime (Endpoint e t) = t
 
   shift d = fmap (.+^ d)
@@ -276,6 +276,14 @@ eraIsEmpty _        = False
   -- XXX this is wrong now, e.g. what happens if we have a one-point
   -- closed floating era and then call openR on it?
 
+contains :: forall l r t. Ord t => Era Fixed l r t -> t -> Bool
+contains EmptyEra _  = False
+contains (Era s e) t = endpt s (<=) && endpt e (>=)
+  where
+    endpt :: forall e. Endpoint e t -> (t -> t -> Bool) -> Bool
+    endpt Infinity _     = True
+    endpt (Finite p) cmp = p `cmp` t
+
 -- | Create a fixed 'Era' by specifying (potentially infinite) start
 --   and end times.
 mkFixedEra :: (NotOpen l, NotOpen r, Ord t) => Endpoint l t -> Endpoint r t -> Era Fixed l r t
@@ -348,7 +356,7 @@ canonicalizeFixedEra era = era
 
 eraSeq
   :: forall l1 r1 l2 r2 t.
-    (Compat r1 l2, AffineSpace t)
+    (Compat r1 l2, Clock t)
   => Era Floating l1 r1 t -> Era Floating l2 r2 t
   -> Era Floating l1 r2 t
 eraSeq EmptyEra EmptyEra
@@ -367,7 +375,7 @@ eraSeq e@(Era _ _) EmptyEra
 eraSeq (Era s1 (Finite e1)) (Era (Finite s2) e2)
   = Era s1 (shift (e1 .-. s2) e2)
 
-instance AffineSpace t => Shifty (Era Fixed l r t) where
+instance Clock t => Shifty (Era Fixed l r t) where
   type ShiftyTime (Era Fixed l r t) = t
 
   shift _ EmptyEra  = EmptyEra
@@ -466,11 +474,23 @@ closeLEra (Era (Finite s) e) = lemma_F_FClose (Proxy :: Proxy l)
 --   time type @t@, defined on an 'Era' of type @f@.
 data Active f l r t a = Active
   { _era       :: Era f l r t
-  , _runActive :: t -> a
+  , _activeFun :: t -> a
   }
   deriving (Functor)
 
 makeLenses ''Active
+
+-- XXX should only export era and activeFun as an accessors for Active
+-- Fixed.
+
+fixed :: Active Fixed l r t a -> Active Fixed l r t a
+fixed = id
+
+floating :: Active Floating l r t a -> Active Floating l r t a
+floating = id
+
+mapTimed :: (t -> a -> b) -> Active Fixed l r t a -> Active Fixed l r t b
+mapTimed g (Active e f) = Active e (\t -> g t (f t))
 
 -- | Create a bi-infinite, constant 'Active' value.
 pureA :: (IsEraType f, Ord t) => a -> Active f I I t a
@@ -496,10 +516,13 @@ parA (Active e1 f1) (Active e2 f2) = Active (eraIsect e1 e2) (f1 <> f2)
 --   for the above to typecheck, would need to introduce a type-level proof
 --   that I is a left identity for Isect.  Doable but probably not worth it. =)
 
-instance (Shifty a, AffineSpace t, t ~ ShiftyTime a) => Shifty (Active Fixed l r t a) where
+instance (Shifty a, Clock t, t ~ ShiftyTime a) => Shifty (Active Fixed l r t a) where
   type ShiftyTime (Active Fixed l r t a) = t
 
-  shift d = (runActive %~ shift d) . (era %~ shift d)
+  shift d = (activeFun %~ shift d) . (era %~ shift d)
+
+emptyFloatAR :: Active Floating C O t a
+emptyFloatAR = Active emptyFloatingEra (const undefined)
 
 ------------------------------------------------------------
 -- Active
@@ -547,7 +570,7 @@ instance (Semigroup a, Monoid a, Ord t) => Monoid (Active' Fixed t a) where
   mempty  = Active' $ pureA mempty
   mappend = (<>)
 
-instance (Shifty a, AffineSpace t, t ~ ShiftyTime a) => Shifty (Active' Fixed t a) where
+instance (Shifty a, Clock t, t ~ ShiftyTime a) => Shifty (Active' Fixed t a) where
   type ShiftyTime (Active' Fixed t a) = t
 
   shift d (Active' a) = Active' (shift d a)
@@ -561,10 +584,10 @@ instance (Shifty a, AffineSpace t, t ~ ShiftyTime a) => Shifty (Active' Fixed t 
 
 -- type AnchorMap t = M.Map Anchor t
 
--- addDefaultAnchors :: (AffineSpace t, VectorSpace (Diff t)) => SActive l r t a -> SActive l r t a
+-- addDefaultAnchors :: (Clock t) => SActive l r t a -> SActive l r t a
 -- addDefaultAnchors (SActive a m) = SActive a (M.union m (defaultAnchors (a^.era)))
 
--- defaultAnchors :: (AffineSpace t, VectorSpace (Diff t)) => SEra l r t -> AnchorMap t
+-- defaultAnchors :: (Clock t) => SEra l r t -> AnchorMap t
 -- defaultAnchors EmptyEra      = M.empty
 -- defaultAnchors (Era s e) = M.unions [startAnchor s, endAnchor e]
 --   where
@@ -585,8 +608,20 @@ instance (Shifty a, AffineSpace t, t ~ ShiftyTime a) => Shifty (Active' Fixed t 
 float :: Active Fixed l r t a -> Maybe (Active Floating l r t a)
 float (Active e f) = Active <$> floatEra e <*> Just f
 
+-- unsafe because this should not be called on an Active with en empty era
+-- basically  fromJust . float  with a better error message.
+unsafeFloat :: Active Fixed l r t a -> Active Floating l r t a
+unsafeFloat a = case float a of
+                  Nothing -> error "unsafeFloat called on empty era"
+                  Just a' -> a'
+
 floatR :: Active Fixed l r t a -> Maybe (Active Floating l (Open r) t a)
 floatR = float >=> openR
+
+unsafeFloatR :: Active Fixed l r t a -> Active Floating l (Open r) t a
+unsafeFloatR a = case floatR a of
+                   Nothing -> error "unsafeFloatR on empty era"
+                   Just a' -> a'
 
 floatL :: Active Fixed l r t a -> Maybe (Active Floating (Open l) r t a)
 floatL = float >=> openL
@@ -611,24 +646,24 @@ closeL a (Active e f) = Active (closeLEra e) f'
            EmptyEra           -> f
            (Era (Finite x) _) -> (\t -> if t == x then a else f t)
 
-(...) :: forall l1 r1 l2 r2 t a.
-         (AffineSpace t, Deadline r1 l2 t a)
+(<<>>) :: forall l1 r1 l2 r2 t a.
+         (Clock t, Deadline r1 l2 t a)
       => Active Floating l1 r1 t a -> Active Floating l2 r2 t a
       -> Active Floating l1 r2 t a
-Active era1@EmptyEra f ... Active era2@EmptyEra _ = Active (eraSeq era1 era2) f
+Active era1@EmptyEra f <<>> Active era2@EmptyEra _ = Active (eraSeq era1 era2) f
 
-Active era1@EmptyEra _ ... Active era2@(Era {}) f = Active (eraSeq era1 era2) f
+Active era1@EmptyEra _ <<>> Active era2@(Era {}) f = Active (eraSeq era1 era2) f
 
-Active era1@(Era {}) f ... Active era2@EmptyEra _ = Active (eraSeq era1 era2) f
+Active era1@(Era {}) f <<>> Active era2@EmptyEra _ = Active (eraSeq era1 era2) f
 
 -- Know e1 and s2 are Finite because of Deadline constraint
-Active era1@(Era _ (Finite e1)) f1 ... Active era2@(Era (Finite s2) _) f2
+Active era1@(Era _ (Finite e1)) f1 <<>> Active era2@(Era (Finite s2) _) f2
   = Active (eraSeq era1 era2)
            (\t -> choose (Proxy :: Proxy r1) (Proxy :: Proxy l2)
                     e1 t (f1 t) (shift (e1 .-. s2) f2 t))
 
 instance Deadline r l t a => Semigroup (Active Floating l r t a) where
-  (<>) = (...)
+  (<>) = (<<>>)
 
 instance Deadline r l t a => Monoid (Active Floating l r t a) where
   mappend = (<>)
@@ -638,7 +673,7 @@ instance Deadline r l t a => Monoid (Active Floating l r t a) where
             -- never be called.
 
 anchorStart
-  :: forall l r t a. (IsFinite l, AreNotOpen l r, AffineSpace t)
+  :: forall l r t a. (IsFinite l, AreNotOpen l r, Clock t)
   => t -> Active Floating l r t a -> Active Fixed l r t a
 anchorStart t (Active (Era (Finite s) e) f)
   = Active (Era (Finite t) (shift d e)) (shift d f)
@@ -648,7 +683,7 @@ anchorStart t (Active (Era (Finite s) e) f)
   -- Era Infinity _  case can't happen because of IsFinite l constraint.
 
 anchorEnd
-  :: forall l r t a. (IsFinite r, AreNotOpen l r, AffineSpace t)
+  :: forall l r t a. (IsFinite r, AreNotOpen l r, Clock t)
   => t -> Active Floating l r t a -> Active Fixed l r t a
 anchorEnd t (Active (Era s (Finite e)) f)
   = Active (Era (shift d s) (Finite t)) (shift d f)
@@ -661,16 +696,57 @@ anchorEnd t (Active (Era s (Finite e)) f)
 -- Derived API
 ------------------------------------------------------------
 
+runActive :: Active f l r t a -> t -> a
+runActive = view activeFun
+
 interval :: Ord t => t -> t -> Active Fixed C C t ()
 interval s e = Active (mkFixedEra' s e) (const ())
 
+(...) :: Ord t => t -> t -> Active Fixed C C t ()
+(...) = interval
+
+timeValued :: Active Fixed l r t a -> Active Fixed l r t t
+timeValued = mapTimed const
+
 -- XXX should check if duration is <= 0?
-spell :: (AffineSpace t, Ord t, Num t) => Diff t -> Active Floating C C t ()
+spell :: (Clock t, Ord t, Num t) => Diff t -> Active Floating C C t ()
 spell dur = fromJust . float $ interval 0 (0 .+^ dur)
 
-rev :: (AffineSpace t, IsEraType f, IsFinite l, IsFinite r)
+backwards :: (Clock t, IsEraType f, IsFinite l, IsFinite r)
     => Active f l r t a -> Active f r l t a
-rev (Active EmptyEra f) = Active (reverseEra EmptyEra) f
-rev (Active er@(Era (Finite s) (Finite e)) f) = Active (reverseEra er) f'
+backwards (Active EmptyEra f) = Active (reverseEra EmptyEra) f
+backwards (Active er@(Era (Finite s) (Finite e)) f) = Active (reverseEra er) f'
   where
     f' t = f (e .+^ (s .-. t))
+
+stretchFromStart :: (IsFinite l, Clock t) => Rational -> Active f l r t a -> Active f l r t a
+stretchFromStart 0 _ = error "stretchFromStart by 0"  -- XXX ?
+stretchFromStart _ a@(Active EmptyEra _) = a
+stretchFromStart k (Active e@(Era (Finite s) Infinity) f)
+  = Active e (stretchFunFromStart s k f)
+stretchFromStart k (Active (Era (Finite s) (Finite e)) f)
+  = Active (Era (Finite s) (Finite e')) (stretchFunFromStart s k f)
+  where
+    e' = s .+^ (fromRational k *^ (e .-. s))
+
+stretchFunFromStart :: (Clock t) => t -> Rational -> (t -> a) -> t -> a
+stretchFunFromStart s k f t = f (s .+^ ((t .-. s) ^/ fromRational k))
+
+stretchFromEnd :: (IsFinite r, Clock t) => Rational -> Active f l r t a -> Active f l r t a
+stretchFromEnd 0 _ = error "stretchFromEnd by 0" -- XXX ?
+stretchFromEnd _ a@(Active EmptyEra _) = a
+stretchFromEnd k (Active er@(Era Infinity (Finite e)) f)
+  = Active er (stretchFunFromEnd e k f)
+stretchFromEnd k (Active (Era (Finite s) (Finite e)) f)
+  = Active (Era (Finite s') (Finite e)) (stretchFunFromEnd e k f)
+  where
+    s' = e .-^ (fromRational k *^ (e .-. s))
+
+stretchFunFromEnd :: (Clock t) => t -> Rational -> (t -> a) -> t -> a
+stretchFunFromEnd e k f t = f (e .-^ ((e .-. t) ^/ fromRational k))
+
+snapshot :: (IsEraType f, Ord t)
+         => t -> Active Fixed l r t a -> Maybe (Active f I I t a)
+snapshot t (Active er f)
+  | er `contains` t = Just $ pureA (f t)
+  | otherwise       = Nothing
