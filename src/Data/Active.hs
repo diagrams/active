@@ -290,9 +290,10 @@ eraContains (Era s e) t = endpt s (<=) && endpt e (>=)
 mkFixedEra :: (NotOpen l, NotOpen r, Ord t) => Endpoint l t -> Endpoint r t -> Era Fixed l r t
 mkFixedEra s e = canonicalizeFixedEra $ Era s e
 
--- | Create a finite fixed 'Era' by specifying finite start and end 'Time's.
-mkFixedEra' :: Ord t => t -> t -> Era Fixed C C t
-mkFixedEra' s e = mkFixedEra (Finite s) (Finite e)
+-- | Create a finite 'Era' by specifying finite start and end 'Time's.
+mkEra :: (EraConstraints f l r, IsFinite l, IsFinite r, Ord t) => t -> t -> Era f l r t
+mkEra s e = Era (Finite s) (Finite e)
+  -- XXX what to do about canonicalization?
 
 -- | A getter for accessing the start time of a fixed 'Era', or @Nothing@
 --   if the era is empty.
@@ -493,8 +494,11 @@ fixed = id
 mapT :: (t -> a -> b) -> Active Fixed l r t a -> Active Fixed l r t b
 mapT g (Active e f) = Active e (\t -> g t (f t))
 
-mkActive :: Ord t => t -> t -> (t -> a) -> Active Fixed C C t a
-mkActive s e f = Active (mkFixedEra' s e) f
+mkActive :: (Ord t, EraConstraints f C C) => t -> t -> (t -> a) -> Active f C C t a
+mkActive s e f = Active (mkEra s e) f
+
+(..$) :: (Ord t, EraConstraints f C C) => t -> t -> (t -> a) -> Active f C C t a
+(..$) = mkActive
 
 -- | Create a bi-infinite, constant 'Active' value.
 pureA :: (IsEraType f, Ord t) => a -> Active f I I t a
@@ -707,10 +711,10 @@ anchorEnd t (Active (Era s (Finite e)) f)
 runActive :: Active f l r t a -> t -> a
 runActive = view activeFun
 
-interval :: Ord t => t -> t -> Active Fixed C C t ()
-interval s e = Active (mkFixedEra' s e) (const ())
+interval :: (Ord t, EraConstraints f C C) => t -> t -> Active f C C t ()
+interval s e = Active (mkEra s e) (const ())
 
-(...) :: Ord t => t -> t -> Active Fixed C C t ()
+(...) :: (Ord t, EraConstraints f C C) => t -> t -> Active f C C t ()
 (...) = interval
 
 ui :: (Num t, Ord t) => Active Fixed C C t t
@@ -730,8 +734,8 @@ backwards (Active er@(Era (Finite s) (Finite e)) f) = Active (reverseEra er) f'
   where
     f' t = f (e .+^ (s .-. t))
 
-(*>>) :: (IsFinite l, Clock t) => Rational -> Active f l r t a -> Active f l r t a
-(*>>) = stretchFromStart
+(*>>) :: (IsFinite l, Clock t) => Active f l r t a -> Rational -> Active f l r t a
+(*>>) = flip stretchFromStart
 
 stretchFromStart :: (IsFinite l, Clock t) => Rational -> Active f l r t a -> Active f l r t a
 stretchFromStart 0 _ = error "stretchFromStart by 0"  -- XXX ?
@@ -790,10 +794,9 @@ padBefore = undefined
 padAfter :: a -> Active f l C t a -> Active f l I t a
 padAfter = undefined
 
-
-movie :: (Deadline r l t a, Compat l r)
-      => [Active Free l r t a] -> Active Free l r t a
-movie = foldr (<<>>) emptyFreeA
+movie :: (Clock t, Deadline O C t a) => [Active Free C C t a] -> Active Free C C t a
+movie [] = error "empty movie" -- XXX ?
+movie xs = foldr1 (<>>) xs
   -- XXX use a balanced fold?
 
 discrete :: (Clock t, Ord t, Num t, FractionalOf t Rational) => [a] -> Active Fixed C C t a
