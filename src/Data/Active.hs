@@ -826,3 +826,14 @@ discrete xs = f <$> ui
       | otherwise = arr ! floor (toFractionalOf t * fromIntegral n :: Rational)
     n   = length xs
     arr = listArray (0, n-1) xs
+
+simulate :: (Clock t, FractionalOf t Rational)
+         => Rational -> Active Floating C C t a -> [a]
+simulate _ (Active EmptyEra _) = []
+simulate rate (Active (Era (Finite s) (Finite e)) f)
+  = map (f . toTime) [s', s' + (1^/rate) .. e']
+  where
+    s', e' :: Rational
+    s' = fromTime s
+    e' = fromTime e
+
