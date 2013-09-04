@@ -730,6 +730,9 @@ backwards (Active er@(Era (Finite s) (Finite e)) f) = Active (reverseEra er) f'
   where
     f' t = f (e .+^ (s .-. t))
 
+(*>>) :: (IsFinite l, Clock t) => Rational -> Active f l r t a -> Active f l r t a
+(*>>) = stretchFromStart
+
 stretchFromStart :: (IsFinite l, Clock t) => Rational -> Active f l r t a -> Active f l r t a
 stretchFromStart 0 _ = error "stretchFromStart by 0"  -- XXX ?
 stretchFromStart _ a@(Active EmptyEra _) = a
@@ -742,6 +745,9 @@ stretchFromStart k (Active (Era (Finite s) (Finite e)) f)
 
 stretchFunFromStart :: (Clock t) => t -> Rational -> (t -> a) -> t -> a
 stretchFunFromStart s k f t = f (s .+^ ((t .-. s) ^/ fromRational k))
+
+(<<*) :: (IsFinite r, Clock t) => Rational -> Active f l r t a -> Active f l r t a
+(<<*) = stretchFromEnd
 
 stretchFromEnd :: (IsFinite r, Clock t) => Rational -> Active f l r t a -> Active f l r t a
 stretchFromEnd 0 _ = error "stretchFromEnd by 0" -- XXX ?
