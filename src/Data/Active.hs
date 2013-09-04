@@ -493,6 +493,9 @@ fixed = id
 mapT :: (t -> a -> b) -> Active Fixed l r t a -> Active Fixed l r t b
 mapT g (Active e f) = Active e (\t -> g t (f t))
 
+mkActive :: Ord t => t -> t -> (t -> a) -> Active Fixed C C t a
+mkActive s e f = Active (mkFixedEra' s e) f
+
 -- | Create a bi-infinite, constant 'Active' value.
 pureA :: (IsEraType f, Ord t) => a -> Active f I I t a
 pureA a = Active allTime (pure a)
@@ -526,7 +529,7 @@ emptyFreeA :: Compat l r => Active Free l r t a
 emptyFreeA = Active emptyFreeEra (const undefined)
 
 ------------------------------------------------------------
--- Active
+-- Active'
 ------------------------------------------------------------
 
 -- | An @Active t a@ is a time-varying value of type @a@, over the
@@ -576,35 +579,7 @@ instance (Shifty a, Clock t, t ~ ShiftyTime a) => Shifty (Active' Fixed t a) whe
 
   shift d (Active' a) = Active' (shift d a)
 
-------------------------------------------------------------
--- Anchors
-------------------------------------------------------------
 
--- data Anchor = Start | End | Anchor
---   deriving (Eq, Ord, Show, Read)
-
--- type AnchorMap t = M.Map Anchor t
-
--- addDefaultAnchors :: (Clock t) => SActive l r t a -> SActive l r t a
--- addDefaultAnchors (SActive a m) = SActive a (M.union m (defaultAnchors (a^.era)))
-
--- defaultAnchors :: (Clock t) => SEra l r t -> AnchorMap t
--- defaultAnchors EmptyEra      = M.empty
--- defaultAnchors (Era s e) = M.unions [startAnchor s, endAnchor e]
---   where
---     startAnchor (Finite s') = M.singleton Start s'
---     startAnchor _           = M.empty
---     endAnchor   (Finite e') = M.singleton End e'
---     endAnchor   _           = M.empty
-
--- combineAnchors :: AnchorMap t -> AnchorMap t -> AnchorMap t
--- combineAnchors = M.unionWithKey select
---   where
---     select Start s _ = s
---     select Fixed f _ = f
---     select End   _ e = e
-
-------------------------------------------------------------
 
 free :: Active Fixed l r t a -> Maybe (Active Free l r t a)
 free (Active e f) = Active <$> freeEra e <*> Just f
