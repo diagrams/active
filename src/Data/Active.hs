@@ -490,8 +490,8 @@ fixed = id
 floating :: Active Floating l r t a -> Active Floating l r t a
 floating = id
 
-mapTimed :: (t -> a -> b) -> Active Fixed l r t a -> Active Fixed l r t b
-mapTimed g (Active e f) = Active e (\t -> g t (f t))
+mapT :: (t -> a -> b) -> Active Fixed l r t a -> Active Fixed l r t b
+mapT g (Active e f) = Active e (\t -> g t (f t))
 
 -- | Create a bi-infinite, constant 'Active' value.
 pureA :: (IsEraType f, Ord t) => a -> Active f I I t a
@@ -611,27 +611,42 @@ float (Active e f) = Active <$> floatEra e <*> Just f
 
 -- unsafe because this should not be called on an Active with en empty era
 -- basically  fromJust . float  with a better error message.
-unsafeFloat :: Active Fixed l r t a -> Active Floating l r t a
-unsafeFloat a = case float a of
-                  Nothing -> error "unsafeFloat called on empty era"
+ufloat :: Active Fixed l r t a -> Active Floating l r t a
+ufloat a = case float a of
+                  Nothing -> error "ufloat called on empty era"
                   Just a' -> a'
 
 floatR :: Active Fixed l r t a -> Maybe (Active Floating l (Open r) t a)
 floatR = float >=> openR
 
-unsafeFloatR :: Active Fixed l r t a -> Active Floating l (Open r) t a
-unsafeFloatR a = case floatR a of
-                   Nothing -> error "unsafeFloatR on empty era"
+ufloatR :: Active Fixed l r t a -> Active Floating l (Open r) t a
+ufloatR a = case floatR a of
+                   Nothing -> error "ufloatR on empty era"
                    Just a' -> a'
 
 floatL :: Active Fixed l r t a -> Maybe (Active Floating (Open l) r t a)
 floatL = float >=> openL
 
+ufloatL :: Active Fixed l r t a -> Active Floating (Open l) r t a
+ufloatL a = case floatL a of
+                   Nothing -> error "ufloatL on empty era"
+                   Just a' -> a'
+
 openR :: Active Floating l r t a -> Maybe (Active Floating l (Open r) t a)
 openR (Active e f) = Active <$> openREra e <*> Just f
 
+uopenR :: Active Floating l r t a -> Active Floating l (Open r) t a
+uopenR a = case openR a of
+                  Nothing -> error "uopenR on empty era"
+                  Just a' -> a'
+
 openL :: Active Floating l r t a -> Maybe (Active Floating (Open l) r t a)
 openL (Active e f) = Active <$> openLEra e <*> Just f
+
+uopenL :: Active Floating l r t a -> Active Floating (Open l) r t a
+uopenL a = case openL a of
+                  Nothing -> error "uopenL on empty era"
+                  Just a' -> a'
 
 closeR :: (Eq t, Num t) => a -> Active Floating l O t a -> Active Floating l C t a
 closeR a (Active e f) = Active (closeREra e) f'
@@ -673,6 +688,23 @@ instance Deadline r l t a => Monoid (Active Floating l r t a) where
             -- OK to use 'undefined' above since this function can
             -- never be called.
 
+-- this is not unsafe because we restrict the left endpoint to not be
+-- open, which is usually fine since in the most common use cases we
+-- will have either C or I.
+(<>>) :: (Clock t, Deadline (Open r1) l2 t a, NotOpen l1)
+      => Active Floating l1 r1 t a -> Active Floating l2 r2 t a
+      -> Active Floating l1 r2 t a
+a1 <>> a2 = uopenR a1 <<>> a2
+
+
+-- crazy idea: maybe we don't need these at all?  i.e. maybe the way
+-- you use the API is to work with floating actives, and sometimes you
+-- need to construct an active using a fixed time frame and then float
+-- it, but you never "un-float" a floating down to a fixed?  Well, in
+-- any case there's nothing wrong with anchorStart and anchorEnd, but
+-- perhaps this means we don't need the elaborate system of anchor
+-- points I was originally imagining.
+
 anchorStart
   :: forall l r t a. (IsFinite l, AreNotOpen l r, Clock t)
   => t -> Active Floating l r t a -> Active Fixed l r t a
@@ -710,7 +742,7 @@ ui :: (Num t, Ord t) => Active Fixed C C t t
 ui = timeValued (0 ... 1)
 
 timeValued :: Active Fixed l r t a -> Active Fixed l r t t
-timeValued = mapTimed const
+timeValued = mapT const
 
 -- XXX should check if duration is <= 0?
 spell :: (Clock t, Ord t, Num t) => Diff t -> Active Floating C C t ()
