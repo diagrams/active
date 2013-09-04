@@ -40,7 +40,7 @@ import           Data.Maybe          (fromJust)
 import           Data.Proxy
 import           Data.Semigroup
 import           Data.VectorSpace
-import           Prelude             hiding (Floating)
+import           Prelude
 
 ------------------------------------------------------------
 -- Clock
@@ -182,12 +182,12 @@ instance Clock t => Shifty (Endpoint e t) where
 -- Era
 ------------------------------------------------------------
 
-data EraType = Fixed | Floating
+data EraType = Fixed | Free
   deriving (Eq, Ord, Show)
 
 data IsEraTypePf :: EraType -> * where
-  IsEraTypeFixed    :: IsEraTypePf Fixed
-  IsEraTypeFloating :: IsEraTypePf Floating
+  IsEraTypeFixed :: IsEraTypePf Fixed
+  IsEraTypeFree  :: IsEraTypePf Free
 
 class IsEraType (f :: EraType) where
   isEraType :: IsEraTypePf f
@@ -195,18 +195,18 @@ class IsEraType (f :: EraType) where
 instance IsEraType Fixed where
   isEraType = IsEraTypeFixed
 
-instance IsEraType Floating where
-  isEraType = IsEraTypeFloating
+instance IsEraType Free where
+  isEraType = IsEraTypeFree
 
 type family   EmptyConstraints (et :: EraType)
                 :: EndpointType -> EndpointType -> Constraint
-type instance EmptyConstraints Fixed    = AreC
-type instance EmptyConstraints Floating = Compat
+type instance EmptyConstraints Fixed = AreC
+type instance EmptyConstraints Free  = Compat
 
 type family   EraConstraints (et :: EraType)
                 :: EndpointType -> EndpointType -> Constraint
-type instance EraConstraints Fixed    = AreNotOpen
-type instance EraConstraints Floating = NoConstraints
+type instance EraConstraints Fixed = AreNotOpen
+type instance EraConstraints Free  = NoConstraints
 
 lemma_EmptyConstraints_comm
   :: forall p1 p2 f l r x.
@@ -216,14 +216,14 @@ lemma_EmptyConstraints_comm
 lemma_EmptyConstraints_comm _ l r x
   = case isEraType :: IsEraTypePf f of
       IsEraTypeFixed    -> lemma_areC_isC l r    $ x
-      IsEraTypeFloating -> lemma_Compat_comm l r $ x
+      IsEraTypeFree -> lemma_Compat_comm l r $ x
 
 lemma_EraConstraints_II
   :: forall p f r. IsEraType f => p f -> (EraConstraints f I I => r) -> r
 lemma_EraConstraints_II _ r
   = case isEraType :: IsEraTypePf f of
       IsEraTypeFixed    -> r
-      IsEraTypeFloating -> r
+      IsEraTypeFree -> r
 
 lemma_EraConstraints_comm
   :: forall p1 p2 f l r x.
@@ -233,7 +233,7 @@ lemma_EraConstraints_comm
 lemma_EraConstraints_comm _ l r x
   = case isEraType :: IsEraTypePf f of
       IsEraTypeFixed    -> lemma_areNotOpen__notOpen l r $ x
-      IsEraTypeFloating -> x
+      IsEraTypeFree -> x
 
 -- | An @Era@ is a (potentially infinite) span of time.  @Era@s form a
 --   monoid: the combination of two @Era@s is the largest @Era@ which
@@ -262,8 +262,8 @@ deriving instance Eq   t => Eq   (Era f l r t)
 emptyFixedEra :: Era Fixed C C t
 emptyFixedEra = EmptyEra
 
-emptyFloatingEra :: Compat l r => Era Floating l r t
-emptyFloatingEra = EmptyEra
+emptyFreeEra :: Compat l r => Era Free l r t
+emptyFreeEra = EmptyEra
 
 -- | The era of ALL TIME
 allTime :: forall f t. IsEraType f => Era f I I t
@@ -275,11 +275,11 @@ eraIsEmpty :: Ord t => Era f l r t -> Bool
 eraIsEmpty EmptyEra = True
 eraIsEmpty _        = False
   -- XXX this is wrong now, e.g. what happens if we have a one-point
-  -- closed floating era and then call openR on it?
+  -- closed free era and then call openR on it?
 
-contains :: forall l r t. Ord t => Era Fixed l r t -> t -> Bool
-contains EmptyEra _  = False
-contains (Era s e) t = endpt s (<=) && endpt e (>=)
+eraContains :: forall l r t. Ord t => Era Fixed l r t -> t -> Bool
+eraContains EmptyEra _  = False
+eraContains (Era s e) t = endpt s (<=) && endpt e (>=)
   where
     endpt :: forall e. Endpoint e t -> (t -> t -> Bool) -> Bool
     endpt Infinity _     = True
@@ -358,8 +358,8 @@ canonicalizeFixedEra era = era
 eraSeq
   :: forall l1 r1 l2 r2 t.
     (Compat r1 l2, Clock t)
-  => Era Floating l1 r1 t -> Era Floating l2 r2 t
-  -> Era Floating l1 r2 t
+  => Era Free l1 r1 t -> Era Free l2 r2 t
+  -> Era Free l1 r2 t
 eraSeq EmptyEra EmptyEra
   = lemma_Compat_trans3 (Proxy :: Proxy l1) (Proxy :: Proxy r1) (Proxy :: Proxy l2) (Proxy :: Proxy r2)
   $ EmptyEra
@@ -413,14 +413,14 @@ withEras e1 e2 k = withEra e1 $ \e1' -> withEra e2 $ \e2' -> k e1' e2'
 wrapEra :: forall f l r t. Era f l r t -> Era' f t
 wrapEra = Era'
 
-floatEra :: forall l r t. Era Fixed l r t -> Maybe (Era Floating l r t)
-floatEra EmptyEra  = Nothing
-floatEra (Era s e) = Just (Era s e)
+freeEra :: forall l r t. Era Fixed l r t -> Maybe (Era Free l r t)
+freeEra EmptyEra  = Nothing
+freeEra (Era s e) = Just (Era s e)
 
 -- One might think the EmptyEra cases below (marked with XXX) ought to
 -- result in an EmptyEra. In fact, this would be wrong (as the type
 -- error makes clear (given sufficient amounts of vigorous
--- squinting)).  If we have an empty floating era, it must have one
+-- squinting)).  If we have an empty free era, it must have one
 -- closed and one open endpoint; opening the closed endpoint would
 -- result not in a closed era, but in a zero-duration era with two
 -- open endpoints, a bizarre abomination which should never be allowed
@@ -428,13 +428,13 @@ floatEra (Era s e) = Just (Era s e)
 -- either side, and consider what happens to the values at their
 -- endpoints).  But I cannot see how to disallow this statically.
 
-openREra :: forall l r t. Era Floating l r t -> Maybe (Era Floating l (Open r) t)
+openREra :: forall l r t. Era Free l r t -> Maybe (Era Free l (Open r) t)
 openREra EmptyEra           = Nothing
 openREra (Era s Infinity)   = Just $ Era s Infinity
 openREra (Era s (Finite e)) = lemma_F_FOpen (Proxy :: Proxy r)
                             $ Just $ Era s (Finite e)
 
-openLEra :: forall l r t. Era Floating l r t -> Maybe (Era Floating (Open l) r t)
+openLEra :: forall l r t. Era Free l r t -> Maybe (Era Free (Open l) r t)
 openLEra EmptyEra           = Nothing
 openLEra (Era Infinity e)   = Just $ Era Infinity e
 openLEra (Era (Finite s) e) = lemma_F_FOpen (Proxy :: Proxy l)
@@ -442,13 +442,13 @@ openLEra (Era (Finite s) e) = lemma_F_FOpen (Proxy :: Proxy l)
 
 -- The Num t constraint is sort of a hack, but we need to create a
 -- non-empty era.  It doesn't matter WHAT t value we choose (since the
--- Era is Floating) but we need to choose one.  Alternatively, we
+-- Era is Free) but we need to choose one.  Alternatively, we
 -- could make another Era constructor for point eras, but that seems
 -- like it would be a lot of work...
-closeREra :: forall l r t. Num t => Era Floating l r t -> Era Floating l (Close r) t
+closeREra :: forall l r t. Num t => Era Free l r t -> Era Free l (Close r) t
 closeREra EmptyEra           = lemma_Compat_Finite (Proxy :: Proxy l) (Proxy :: Proxy r)
                              $ lemma_F_FClose (Proxy :: Proxy r)
-  $ Era (Finite 0) (Finite 0) :: Era Floating l (Close r) t
+  $ Era (Finite 0) (Finite 0) :: Era Free l (Close r) t
 
 closeREra (Era s Infinity)
   = Era s Infinity
@@ -456,10 +456,10 @@ closeREra (Era s Infinity)
 closeREra (Era s (Finite e)) = lemma_F_FClose (Proxy :: Proxy r)
   $ Era s (Finite e)
 
-closeLEra :: forall l r t. Num t => Era Floating l r t -> Era Floating (Close l) r t
+closeLEra :: forall l r t. Num t => Era Free l r t -> Era Free (Close l) r t
 closeLEra EmptyEra           = lemma_Compat_Finite (Proxy :: Proxy l) (Proxy :: Proxy r)
                              $ lemma_F_FClose (Proxy :: Proxy l)
-  $ Era (Finite 0) (Finite 0) :: Era Floating (Close l) r t
+  $ Era (Finite 0) (Finite 0) :: Era Free (Close l) r t
 
 closeLEra (Era Infinity e)
   = Era Infinity e
@@ -487,8 +487,8 @@ makeLenses ''Active
 fixed :: Active Fixed l r t a -> Active Fixed l r t a
 fixed = id
 
-floating :: Active Floating l r t a -> Active Floating l r t a
-floating = id
+-- free :: Active Free l r t a -> Active Free l r t a
+-- free = id
 
 mapT :: (t -> a -> b) -> Active Fixed l r t a -> Active Fixed l r t b
 mapT g (Active e f) = Active e (\t -> g t (f t))
@@ -522,8 +522,8 @@ instance (Shifty a, Clock t, t ~ ShiftyTime a) => Shifty (Active Fixed l r t a) 
 
   shift d = (activeFun %~ shift d) . (era %~ shift d)
 
-emptyFloatA :: Compat l r => Active Floating l r t a
-emptyFloatA = Active emptyFloatingEra (const undefined)
+emptyFreeA :: Compat l r => Active Free l r t a
+emptyFreeA = Active emptyFreeEra (const undefined)
 
 ------------------------------------------------------------
 -- Active
@@ -606,56 +606,56 @@ instance (Shifty a, Clock t, t ~ ShiftyTime a) => Shifty (Active' Fixed t a) whe
 
 ------------------------------------------------------------
 
-float :: Active Fixed l r t a -> Maybe (Active Floating l r t a)
-float (Active e f) = Active <$> floatEra e <*> Just f
+free :: Active Fixed l r t a -> Maybe (Active Free l r t a)
+free (Active e f) = Active <$> freeEra e <*> Just f
 
 -- unsafe because this should not be called on an Active with en empty era
--- basically  fromJust . float  with a better error message.
-ufloat :: Active Fixed l r t a -> Active Floating l r t a
-ufloat a = case float a of
-                  Nothing -> error "ufloat called on empty era"
+-- basically  fromJust . free  with a better error message.
+ufree :: Active Fixed l r t a -> Active Free l r t a
+ufree a = case free a of
+                  Nothing -> error "ufree called on empty era"
                   Just a' -> a'
 
-floatR :: Active Fixed l r t a -> Maybe (Active Floating l (Open r) t a)
-floatR = float >=> openR
+freeR :: Active Fixed l r t a -> Maybe (Active Free l (Open r) t a)
+freeR = free >=> openR
 
-ufloatR :: Active Fixed l r t a -> Active Floating l (Open r) t a
-ufloatR a = case floatR a of
-                   Nothing -> error "ufloatR on empty era"
+ufreeR :: Active Fixed l r t a -> Active Free l (Open r) t a
+ufreeR a = case freeR a of
+                   Nothing -> error "ufreeR on empty era"
                    Just a' -> a'
 
-floatL :: Active Fixed l r t a -> Maybe (Active Floating (Open l) r t a)
-floatL = float >=> openL
+freeL :: Active Fixed l r t a -> Maybe (Active Free (Open l) r t a)
+freeL = free >=> openL
 
-ufloatL :: Active Fixed l r t a -> Active Floating (Open l) r t a
-ufloatL a = case floatL a of
-                   Nothing -> error "ufloatL on empty era"
+ufreeL :: Active Fixed l r t a -> Active Free (Open l) r t a
+ufreeL a = case freeL a of
+                   Nothing -> error "ufreeL on empty era"
                    Just a' -> a'
 
-openR :: Active Floating l r t a -> Maybe (Active Floating l (Open r) t a)
+openR :: Active Free l r t a -> Maybe (Active Free l (Open r) t a)
 openR (Active e f) = Active <$> openREra e <*> Just f
 
-uopenR :: Active Floating l r t a -> Active Floating l (Open r) t a
+uopenR :: Active Free l r t a -> Active Free l (Open r) t a
 uopenR a = case openR a of
                   Nothing -> error "uopenR on empty era"
                   Just a' -> a'
 
-openL :: Active Floating l r t a -> Maybe (Active Floating (Open l) r t a)
+openL :: Active Free l r t a -> Maybe (Active Free (Open l) r t a)
 openL (Active e f) = Active <$> openLEra e <*> Just f
 
-uopenL :: Active Floating l r t a -> Active Floating (Open l) r t a
+uopenL :: Active Free l r t a -> Active Free (Open l) r t a
 uopenL a = case openL a of
                   Nothing -> error "uopenL on empty era"
                   Just a' -> a'
 
-closeR :: (Eq t, Num t) => a -> Active Floating l O t a -> Active Floating l C t a
+closeR :: (Eq t, Num t) => a -> Active Free l O t a -> Active Free l C t a
 closeR a (Active e f) = Active (closeREra e) f'
   where
     f' = case e of
            EmptyEra           -> f
            (Era _ (Finite y)) -> (\t -> if t == y then a else f t)
 
-closeL :: (Eq t, Num t) => a -> Active Floating O r t a -> Active Floating C r t a
+closeL :: (Eq t, Num t) => a -> Active Free O r t a -> Active Free C r t a
 closeL a (Active e f) = Active (closeLEra e) f'
   where
     f' = case e of
@@ -664,8 +664,8 @@ closeL a (Active e f) = Active (closeLEra e) f'
 
 (<<>>) :: forall l1 r1 l2 r2 t a.
          (Clock t, Deadline r1 l2 t a)
-      => Active Floating l1 r1 t a -> Active Floating l2 r2 t a
-      -> Active Floating l1 r2 t a
+      => Active Free l1 r1 t a -> Active Free l2 r2 t a
+      -> Active Free l1 r2 t a
 Active era1@EmptyEra f <<>> Active era2@EmptyEra _ = Active (eraSeq era1 era2) f
 
 Active era1@EmptyEra _ <<>> Active era2@(Era {}) f = Active (eraSeq era1 era2) f
@@ -678,13 +678,13 @@ Active era1@(Era _ (Finite e1)) f1 <<>> Active era2@(Era (Finite s2) _) f2
            (\t -> choose (Proxy :: Proxy r1) (Proxy :: Proxy l2)
                     e1 t (f1 t) (shift (e1 .-. s2) f2 t))
 
-instance Deadline r l t a => Semigroup (Active Floating l r t a) where
+instance Deadline r l t a => Semigroup (Active Free l r t a) where
   (<>) = (<<>>)
 
-instance Deadline r l t a => Monoid (Active Floating l r t a) where
+instance Deadline r l t a => Monoid (Active Free l r t a) where
   mappend = (<>)
   mempty  = lemma_Compat_comm (Proxy :: Proxy r) (Proxy :: Proxy l)
-          $ Active emptyFloatingEra (const undefined)
+          $ Active emptyFreeEra (const undefined)
             -- OK to use 'undefined' above since this function can
             -- never be called.
 
@@ -692,22 +692,22 @@ instance Deadline r l t a => Monoid (Active Floating l r t a) where
 -- open, which is usually fine since in the most common use cases we
 -- will have either C or I.
 (<>>) :: (Clock t, Deadline (Open r1) l2 t a, NotOpen l1)
-      => Active Floating l1 r1 t a -> Active Floating l2 r2 t a
-      -> Active Floating l1 r2 t a
+      => Active Free l1 r1 t a -> Active Free l2 r2 t a
+      -> Active Free l1 r2 t a
 a1 <>> a2 = uopenR a1 <<>> a2
 
 
 -- crazy idea: maybe we don't need these at all?  i.e. maybe the way
--- you use the API is to work with floating actives, and sometimes you
--- need to construct an active using a fixed time frame and then float
--- it, but you never "un-float" a floating down to a fixed?  Well, in
+-- you use the API is to work with free actives, and sometimes you
+-- need to construct an active using a fixed time frame and then free
+-- it, but you never "un-free" a free down to a fixed?  Well, in
 -- any case there's nothing wrong with anchorStart and anchorEnd, but
 -- perhaps this means we don't need the elaborate system of anchor
 -- points I was originally imagining.
 
 anchorStart
   :: forall l r t a. (IsFinite l, AreNotOpen l r, Clock t)
-  => t -> Active Floating l r t a -> Active Fixed l r t a
+  => t -> Active Free l r t a -> Active Fixed l r t a
 anchorStart t (Active (Era (Finite s) e) f)
   = Active (Era (Finite t) (shift d e)) (shift d f)
   where d = t .-. s
@@ -717,7 +717,7 @@ anchorStart t (Active (Era (Finite s) e) f)
 
 anchorEnd
   :: forall l r t a. (IsFinite r, AreNotOpen l r, Clock t)
-  => t -> Active Floating l r t a -> Active Fixed l r t a
+  => t -> Active Free l r t a -> Active Fixed l r t a
 anchorEnd t (Active (Era s (Finite e)) f)
   = Active (Era (shift d s) (Finite t)) (shift d f)
   where d = t .-. e
@@ -745,8 +745,8 @@ timeValued :: Active Fixed l r t a -> Active Fixed l r t t
 timeValued = mapT const
 
 -- XXX should check if duration is <= 0?
-spell :: (Clock t, Ord t, Num t) => Diff t -> Active Floating C C t ()
-spell dur = fromJust . float $ interval 0 (0 .+^ dur)
+spell :: (Clock t, Ord t, Num t) => Diff t -> Active Free C C t ()
+spell dur = fromJust . free $ interval 0 (0 .+^ dur)
 
 backwards :: (Clock t, IsEraType f, IsFinite l, IsFinite r)
     => Active f l r t a -> Active f r l t a
@@ -784,7 +784,7 @@ stretchFunFromEnd e k f t = f (e .-^ ((e .-. t) ^/ fromRational k))
 snapshot :: (IsEraType f, Ord t)
          => t -> Active Fixed l r t a -> Maybe (Active f I I t a)
 snapshot t (Active er f)
-  | er `contains` t = Just $ pureA (f t)
+  | er `eraContains` t = Just $ pureA (f t)
   | otherwise       = Nothing
 
 clamp :: Active f C C t a -> Active f I I t a
@@ -800,8 +800,8 @@ clampBefore = undefined
 clampAfter :: Active f l C t a -> Active f l I t a
 clampAfter = undefined
 
-pad :: a -> Active f C C t a -> Active f I I t a
-pad = undefined
+padActive :: a -> Active f C C t a -> Active f I I t a
+padActive = undefined
 
 padBefore :: a -> Active f C r t a -> Active f I r t a
 padBefore = undefined
@@ -811,10 +811,9 @@ padAfter = undefined
 
 
 movie :: (Deadline r l t a, Compat l r)
-      => [Active Floating l r t a] -> Active Floating l r t a
-movie = foldr (<<>>) emptyFloatA
+      => [Active Free l r t a] -> Active Free l r t a
+movie = foldr (<<>>) emptyFreeA
   -- XXX use a balanced fold?
-
 
 discrete :: (Clock t, Ord t, Num t, FractionalOf t Rational) => [a] -> Active Fixed C C t a
 discrete [] = error "Data.Active.discrete must be called with a non-empty list."
@@ -828,7 +827,7 @@ discrete xs = f <$> ui
     arr = listArray (0, n-1) xs
 
 simulate :: (Clock t, FractionalOf t Rational)
-         => Rational -> Active Floating C C t a -> [a]
+         => Rational -> Active Free C C t a -> [a]
 simulate _ (Active EmptyEra _) = []
 simulate rate (Active (Era (Finite s) (Finite e)) f)
   = map (f . toTime) [s', s' + (1^/rate) .. e']
