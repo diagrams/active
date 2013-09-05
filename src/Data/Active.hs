@@ -1,18 +1,14 @@
-{-# LANGUAGE ConstraintKinds            #-}
-{-# LANGUAGE DataKinds                  #-}
-{-# LANGUAGE DeriveFunctor              #-}
-{-# LANGUAGE EmptyDataDecls             #-}
-{-# LANGUAGE FlexibleContexts           #-}
-{-# LANGUAGE FlexibleInstances          #-}
-{-# LANGUAGE GADTs                      #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE MultiParamTypeClasses      #-}
-{-# LANGUAGE PolyKinds                  #-}
-{-# LANGUAGE RankNTypes                 #-}
-{-# LANGUAGE ScopedTypeVariables        #-}
-{-# LANGUAGE StandaloneDeriving         #-}
-{-# LANGUAGE TemplateHaskell            #-}
-{-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE ConstraintKinds     #-}
+{-# LANGUAGE DataKinds           #-}
+{-# LANGUAGE DeriveFunctor       #-}
+{-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE FlexibleInstances   #-}
+{-# LANGUAGE GADTs               #-}
+{-# LANGUAGE RankNTypes          #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving  #-}
+{-# LANGUAGE TemplateHaskell     #-}
+{-# LANGUAGE TypeFamilies        #-}
 
 -----------------------------------------------------------------------------
 -- |
@@ -27,156 +23,20 @@ module Data.Active where
 
 import           GHC.Exts            (Constraint)
 
-import           Data.Active.Endpoint
-
 import           Control.Applicative
-import           Control.Arrow       ((***))
 import           Control.Lens        (makeLenses, view, Getter, (%~))
 import           Control.Monad       ((>=>))
 import           Data.AffineSpace
 import           Data.Array
-import qualified Data.Map            as M
 import           Data.Maybe          (fromJust)
 import           Data.Proxy
 import           Data.Semigroup
 import           Data.VectorSpace
 import           Prelude
 
-------------------------------------------------------------
--- Clock
-------------------------------------------------------------
--- | A class that abstracts over time.
+import           Data.Active.Endpoint
+import           Data.Active.Time
 
-class ( AffineSpace t
-      , Waiting (Diff t)
-      ) => Clock t where
-
-  -- | Convert any value of a 'Real' type (including @Int@, @Integer@,
-  --   @Rational@, @Float@, and @Double@) to a 'Time'.
-  toTime :: Real a => a -> t
-  -- | Convert a 'Time' to a value of any 'Fractional' type (such as
-  --   @Rational@, @Float@, or @Double@).
-  fromTime :: (FractionalOf t a) => t -> a
-
-  firstTime :: t -> t -> t
-  lastTime  :: t -> t -> t
-
-class (FractionalOf w (Scalar w), VectorSpace w) => Waiting w where
-  -- | Convert any value of a 'Real' type (including @Int@, @Integer@,
-  --   @Rational@, @Float@, and @Double@) to a 'Duration'.
-  toDuration :: Real a => a -> w
-
-  -- | Convert a 'Duration' to any other 'Fractional' type (such as
-  --   @Rational@, @Float@, or @Double@).
-  fromDuration :: (FractionalOf w a) => w -> a
-
-class Fractional a => FractionalOf v a where
-  toFractionalOf :: v -> a
-
-class (Clock t, Compat l r) => Deadline (l :: EndpointType) (r :: EndpointType) t a where
-  -- choose deadline-time time-now (if before deadline) (if after deadline)
-  choose :: Proxy l -> Proxy r -> t -> t -> a -> a -> a
-
-------------------------------------------------------------
--- Time + Duration
-------------------------------------------------------------
-
--- | An abstract type for representing /points in time/.  Note that
---   literal numeric values may be used as @Time@s, thanks to the the
---   'Num' and 'Fractional' instances.  'toTime' and 'fromTime' are
---   also provided for convenience in converting between @Time@ and
---   other numeric types.
-newtype Time = Time { _time :: Rational }
-  deriving ( Eq, Ord, Show, Read, Enum, Num, Fractional, Real, RealFrac )
-
-makeLenses ''Time
-
-instance AffineSpace Time where
-  type Diff Time = Duration
-  (Time t1) .-. (Time t2) = Duration (t1 - t2)
-  (Time t) .+^ (Duration d) = Time (t + d)
-
-instance Clock Time where
-  toTime = fromRational . toRational
-  fromTime = fromRational . view time
-  firstTime = min
-  lastTime = max
-
-instance Fractional a => FractionalOf Time a where
-  toFractionalOf (Time d) = fromRational d
-
-instance Deadline C O Time a where
-  choose _ _ deadline now a b = if now <= deadline then a else b
-
-instance Deadline O C Time a where
-  choose _ _ deadline now a b = if now <  deadline then a else b
-
--- | An abstract type representing /elapsed time/ between two points
---   in time.  Note that durations can be negative. Literal numeric
---   values may be used as @Duration@s thanks to the 'Num' and
---   'Fractional' instances. 'toDuration' and 'fromDuration' are also
---   provided for convenience in converting between @Duration@s and
---   other numeric types.
-newtype Duration = Duration { _duration :: Rational }
-  deriving ( Eq, Ord, Show, Read, Enum, Num, Fractional, Real, RealFrac
-           , AdditiveGroup)
-
-makeLenses ''Duration
-
-instance VectorSpace Duration where
-  type Scalar Duration = Rational
-  s *^ (Duration d) = Duration (s * d)
-
-instance Waiting Duration where
-  toDuration = fromRational . toRational
-  fromDuration = toFractionalOf
-
-instance Fractional a => FractionalOf Duration a where
-  toFractionalOf (Duration d) = fromRational d
-
---------------------------------------------------
--- Shifty
---------------------------------------------------
-
--- Note this is a monoid action of durations on timey things.  But we
--- can't really use the Action type class because we want it to be
--- polymorphic in both the timey things AND the durations (so we can
--- do deep embedding stuff and use e.g. JSDuration or whatever).
-
-class Shifty a where
-  type ShiftyTime a :: *
-
-  shift :: Diff (ShiftyTime a) -> a -> a
-
-instance Shifty s => Shifty (Maybe s) where
-  type ShiftyTime (Maybe s) = ShiftyTime s
-
-  shift = fmap . shift
-
-instance (Shifty a, Shifty b, ShiftyTime a ~ ShiftyTime b) => Shifty (a,b) where
-  type ShiftyTime (a,b) = ShiftyTime a
-
-  shift d = shift d *** shift d
-
-instance (AffineSpace t) => Shifty (t -> a) where
-  type ShiftyTime (t -> a) = t
-
-  shift d f = f . (.-^ d)
-
-instance AffineSpace t => Shifty (M.Map k t) where
-  type ShiftyTime (M.Map k t) = t
-
-  shift d = fmap (.+^ d)
-
-instance Shifty Time where
-  type ShiftyTime Time = Time
-
-  shift d = (.+^ d)
-
-instance Clock t => Shifty (Endpoint e t) where
-  type ShiftyTime (Endpoint e t) = t
-
-  shift d = fmap (.+^ d)
 
 ------------------------------------------------------------
 -- Era
