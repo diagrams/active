@@ -8,9 +8,18 @@
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeFamilies               #-}
 
--- | This module defines several type classes for representations of
---   time (which can be used /e.g./ for building deep embeddings), as
---   well as a concrete default representation.
+-----------------------------------------------------------------------------
+-- |
+-- Module      :  Data.Active.Time
+-- Copyright   :  (c) 2013 Andy Gill, Brent Yorgey
+-- License     :  BSD-style (see LICENSE)
+-- Maintainer  :  byorgey@cis.upenn.edu
+--
+-- This module defines several type classes for representations of
+-- time (which can be used /e.g./ for building deep embeddings), as
+-- well as a concrete default representation.
+-----------------------------------------------------------------------------
+
 module Data.Active.Time
     ( -- * Default concrete representations of time and duration
 
