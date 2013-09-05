@@ -123,8 +123,6 @@ type instance Isect C I = C
 type instance Isect I C = C
 type instance Isect C C = C
 
--- Some proof objects about EndpointTypes:
-
 -- | Proofs that finite endpoints are compatible (@O\/C@ or @C\/O@).
 data CompatPf (e1 :: EndpointType) (e2 :: EndpointType) where
   CompatCO :: CompatPf C O
