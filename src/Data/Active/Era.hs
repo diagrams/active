@@ -17,7 +17,50 @@
 -- XXX write me
 -----------------------------------------------------------------------------
 
-module Data.Active.Era where
+module Data.Active.Era
+    ( -- * Era types
+
+      EraType(..)
+    , EmptyConstraints, EraConstraints
+
+      -- * Eras
+
+    , Era(..)
+
+      -- ** Constructors
+    , emptyFixedEra
+    , emptyFreeEra
+    , allTime
+    , mkFixedEra
+    , mkEra
+
+      -- ** Accessors
+
+    , eraIsEmpty
+    , eraContains
+    , start
+    , end
+
+      -- ** Operations
+
+    , eraIsect
+    , eraSeq
+    , reverseEra
+
+    , freeEra
+    , openREra
+    , openLEra
+    , closeREra
+    , closeLEra
+
+      -- * Proofs
+
+      -- ** Properties and proof objects
+    , IsEraType(..)
+    , IsEraTypePf(..)
+
+    )
+    where
 
 import GHC.Exts (Constraint)
 
@@ -116,7 +159,7 @@ emptyFixedEra = EmptyEra
 emptyFreeEra :: Compat l r => Era Free l r t
 emptyFreeEra = EmptyEra
 
--- | The era of ALL TIME
+-- | The ERA OF ALL TIME!!!1
 allTime :: forall f t. IsEraType f => Era f I I t
 allTime = lemma_EraConstraints_II (Proxy :: Proxy f)
         $ Era Infinity Infinity
@@ -244,27 +287,6 @@ reverseEra (Era (Finite s) (Finite e))
   = lemma_EraConstraints_comm (Proxy :: Proxy f) (Proxy :: Proxy l) (Proxy :: Proxy r)
   $ Era (Finite s) (Finite e)
 
-------------------------------------------------------------
--- Existential Eras
-------------------------------------------------------------
-
-data Era' :: EraType -> * -> * where
-  Era' :: Era f l r t -> Era' f t
-
-deriving instance Show t => Show (Era' f t)
-
-withEra :: Era' f t -> (forall l r. Era f l r t -> x) -> x
-withEra (Era' e) k = k e
-
-withEras
-  :: Era' f t -> Era' f t
-  -> (forall l1 r1 l2 r2. Era f l1 r1 t -> Era f l2 r2 t -> x)
-  -> x
-withEras e1 e2 k = withEra e1 $ \e1' -> withEra e2 $ \e2' -> k e1' e2'
-
-wrapEra :: forall f l r t. Era f l r t -> Era' f t
-wrapEra = Era'
-
 freeEra :: forall l r t. Era Fixed l r t -> Maybe (Era Free l r t)
 freeEra EmptyEra  = Nothing
 freeEra (Era s e) = Just (Era s e)
@@ -318,4 +340,3 @@ closeLEra (Era Infinity e)
 
 closeLEra (Era (Finite s) e) = lemma_F_FClose (Proxy :: Proxy l)
   $ Era (Finite s) e
-
