@@ -67,7 +67,7 @@ lemma_EmptyConstraints_comm
 lemma_EmptyConstraints_comm _ l r x
   = case isEraType :: IsEraTypePf f of
       IsEraTypeFixed    -> lemma_areC_isC l r    $ x
-      IsEraTypeFree -> lemma_Compat_comm l r $ x
+      IsEraTypeFree -> lemma_Compat_sym l r $ x
 
 lemma_EraConstraints_II
   :: forall p f r. IsEraType f => p f -> (EraConstraints f I I => r) -> r

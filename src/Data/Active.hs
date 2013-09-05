@@ -229,7 +229,7 @@ instance Deadline r l t a => Semigroup (Active Free l r t a) where
 
 instance Deadline r l t a => Monoid (Active Free l r t a) where
   mappend = (<>)
-  mempty  = lemma_Compat_comm (Proxy :: Proxy r) (Proxy :: Proxy l)
+  mempty  = lemma_Compat_sym (Proxy :: Proxy r) (Proxy :: Proxy l)
           $ Active emptyFreeEra (const undefined)
             -- OK to use 'undefined' above since this function can
             -- never be called.
