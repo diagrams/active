@@ -61,10 +61,10 @@ fixed = id
 mapT :: (t -> a -> b) -> Active Fixed l r t a -> Active Fixed l r t b
 mapT g (Active e f) = Active e (\t -> g t (f t))
 
-mkActive :: (Ord t, EraConstraints f C C) => t -> t -> (t -> a) -> Active f C C t a
+mkActive :: (Ord t, IsEraType f, EraConstraints f C C) => t -> t -> (t -> a) -> Active f C C t a
 mkActive s e f = Active (mkEra s e) f
 
-(..$) :: (Ord t, EraConstraints f C C) => t -> t -> (t -> a) -> Active f C C t a
+(..$) :: (Ord t, IsEraType f, EraConstraints f C C) => t -> t -> (t -> a) -> Active f C C t a
 (..$) = mkActive
 
 -- | Create a bi-infinite, constant 'Active' value.
@@ -278,10 +278,10 @@ anchorEnd t (Active (Era s (Finite e)) f)
 runActive :: Active f l r t a -> t -> a
 runActive = view activeFun
 
-interval :: (Ord t, EraConstraints f C C) => t -> t -> Active f C C t ()
+interval :: (Ord t, IsEraType f, EraConstraints f C C) => t -> t -> Active f C C t ()
 interval s e = Active (mkEra s e) (const ())
 
-(...) :: (Ord t, EraConstraints f C C) => t -> t -> Active f C C t ()
+(...) :: (Ord t, IsEraType f, EraConstraints f C C) => t -> t -> Active f C C t ()
 (...) = interval
 
 ui :: (Num t, Ord t) => Active Fixed C C t t

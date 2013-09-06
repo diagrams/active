@@ -101,13 +101,31 @@ data IsEraTypePf :: EraType -> * where
   IsEraTypeFree  :: IsEraTypePf Free
 
 class IsEraType (f :: EraType) where
-  isEraType :: IsEraTypePf f
+  isEraType       :: IsEraTypePf f
+  canonicalizeEra :: Ord t => Era f l r t -> Era f l r t
+
+-- Maintain the invariant that s <= e for fixed eras.
+canonicalizeFixedEra :: forall l r t. Ord t => Era Fixed l r t -> Era Fixed l r t
+canonicalizeFixedEra (Era (Finite s) (Finite e))
+  | s > e
+  =                     lemma_areNotOpen__notOpen (Proxy :: Proxy l) (Proxy :: Proxy r)
+                      $ lemma_notOpen_isFinite__C (Proxy :: Proxy l)
+                      $ lemma_notOpen_isFinite__C                (Proxy :: Proxy r)
+  $ EmptyEra
+canonicalizeFixedEra era = era
 
 instance IsEraType Fixed where
   isEraType = IsEraTypeFixed
 
+  -- Maintain the invariant that s <= e for fixed eras.
+  canonicalizeEra = canonicalizeFixedEra
+
 instance IsEraType Free where
   isEraType = IsEraTypeFree
+
+  -- don't need to do any canonicalization for free eras.  API doesn't
+  -- make it possible to construct values with s > e.
+  canonicalizeEra = id
 
 -- | Constraints on the endpoint types of the empty era, parameterized
 --   by era type:
@@ -198,12 +216,12 @@ eraContains (Era s e) t = endpt s (<=) && endpt e (>=)
     endpt Infinity _     = True
     endpt (Finite p) cmp = p `cmp` t
 
--- | Create a fixed 'Era' by specifying its endpoints.
-mkEra' :: (NotOpen l, NotOpen r, Ord t) => Endpoint l t -> Endpoint r t -> Era Fixed l r t
-mkEra' s e = canonicalizeFixedEra $ Era s e
+-- | Create an 'Era' by specifying its endpoints.
+mkEra' :: (IsEraType f, EraConstraints f l r, Ord t) => Endpoint l t -> Endpoint r t -> Era f l r t
+mkEra' s e = canonicalizeEra $ Era s e
 
--- | Create a finite fixed 'Era' by specifying finite start and end times.
-mkEra :: (Ord t) => t -> t -> Era Fixed C C t
+-- | Create a finite 'Era' by specifying finite start and end times.
+mkEra :: (IsEraType f, EraConstraints f l r, IsFinite l, IsFinite r, Ord t) => t -> t -> Era f l r t
 mkEra s e = mkEra' (Finite s) (Finite e)
 
 -- | Two fixed eras intersect to form the largest fixed era which is contained in
@@ -219,7 +237,7 @@ eraIsect (Era l1 r1) (Era l2 r2)
                       $ lemma_areNotOpen__notOpen (Proxy :: Proxy l2) (Proxy :: Proxy r2)
                       $ lemma_isect_notOpen       (Proxy :: Proxy l1) (Proxy :: Proxy l2)
                       $ lemma_isect_notOpen       (Proxy :: Proxy r1) (Proxy :: Proxy r2)
-  $ canonicalizeFixedEra
+  $ canonicalizeEra
   $ Era (endpointMax l1 l2) (endpointMin r1 r2)
 
 eraIsect EmptyEra EmptyEra
@@ -242,17 +260,6 @@ eraIsect (Era {}) EmptyEra
                       $ lemma_isect_notOpen_C     (Proxy :: Proxy l1)
                       $ lemma_isect_notOpen_C     (Proxy :: Proxy r1)
   $ EmptyEra
-
--- Maintain the invariant that s <= e for fixed eras. (For free eras,
--- the API does not make it possible to construct an era with s > e.)
-canonicalizeFixedEra :: forall l r t. Ord t => Era Fixed l r t -> Era Fixed l r t
-canonicalizeFixedEra (Era (Finite s) (Finite e))
-  | s > e
-  =                     lemma_areNotOpen__notOpen (Proxy :: Proxy l) (Proxy :: Proxy r)
-                      $ lemma_notOpen_isFinite__C (Proxy :: Proxy l)
-                      $ lemma_notOpen_isFinite__C                (Proxy :: Proxy r)
-  $ EmptyEra
-canonicalizeFixedEra era = era
 
 -- | Sequence two compatible free eras.
 eraSeq
@@ -282,7 +289,8 @@ instance Clock t => Shifty (Era Fixed l r t) where
   shift _ EmptyEra  = EmptyEra
   shift d (Era s e) = Era (shift d s) (shift d e)
 
--- | Reverse an era so it runs backwards. XXX
+-- | Reverse an era with two finite endpoints.  This is the identity
+--   on endpoint times, and swaps the endpoint types.
 reverseEra
   :: forall f l r t. (IsFinite l, IsFinite r, IsEraType f)
   => Era f l r t -> Era f r l t
@@ -293,6 +301,8 @@ reverseEra (Era (Finite s) (Finite e))
   = lemma_EraConstraints_comm (Proxy :: Proxy f) (Proxy :: Proxy l) (Proxy :: Proxy r)
   $ Era (Finite s) (Finite e)
 
+-- | Turn a fixed era into a free era, by forgetting its concrete
+--   location in time.
 freeEra :: forall l r t. Era Fixed l r t -> Maybe (Era Free l r t)
 freeEra EmptyEra  = Nothing
 freeEra (Era s e) = Just (Era s e)
