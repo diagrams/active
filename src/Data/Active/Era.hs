@@ -14,11 +14,14 @@
 -- License     :  BSD-style (see LICENSE)
 -- Maintainer  :  byorgey@cis.upenn.edu
 --
--- XXX write me
+-- An @Era@ is a (potentially infinite) span of time within which an
+-- @Active@ value is defined.  This module defines eras and operations
+-- on them.
 -----------------------------------------------------------------------------
 
 module Data.Active.Era
     ( -- * Era types
+      -- $eratypes
 
       EraType(..)
     , EmptyConstraints, EraConstraints
@@ -30,16 +33,13 @@ module Data.Active.Era
       -- ** Constructors
     , emptyFixedEra
     , emptyFreeEra
-    , allTime
+    , always
     , mkFixedEra
     , mkEra
 
       -- ** Accessors
 
-    , eraIsEmpty
     , eraContains
-    , start
-    , end
 
       -- ** Operations
 
@@ -64,8 +64,6 @@ module Data.Active.Era
 
 import GHC.Exts (Constraint)
 
-import Data.Functor
-import Control.Lens (Getter)
 import Data.Proxy
 import Data.AffineSpace
 
@@ -76,7 +74,26 @@ import Data.Active.Time
 -- Era
 ------------------------------------------------------------
 
-data EraType = Fixed | Free
+-- $eratypes
+-- There are two types of era:
+--
+-- * /Fixed/ eras have a definite location in time.
+--
+-- * /Free/ eras are /equivalence classes/ of fixed eras
+--   under shifting in time.  Intuitively, they have a
+--   duration but no definite location in time.
+--
+-- The type of an era is tracked with a type-level tag consisting of a
+-- promoted (via @-XDataKinds@) 'EraType' value.
+--
+-- In addition, each era type imposes some constraints on the
+-- endpoints of the era.  These constraints are encoded by the
+-- 'EmptyConstraints' and 'EraConstraints' type families.
+
+-- | Tags used to track the type of an era.
+data EraType
+  = Fixed  -- ^ Eras with a definite location in time
+  | Free   -- ^ Equivalence classes of @Fixed@ eras under shifting in time
   deriving (Eq, Ord, Show)
 
 data IsEraTypePf :: EraType -> * where
@@ -92,12 +109,24 @@ instance IsEraType Fixed where
 instance IsEraType Free where
   isEraType = IsEraTypeFree
 
-type family   EmptyConstraints (et :: EraType)
+-- | Constraints on the endpoint types of the empty era, parameterized
+--   by era type:
+--
+--   * The fixed empty era must have both endpoints of type @C@.
+--
+--   * The free empty era must have compatible endpoints (@C\/O@ or @O\/C@).
+type family   EmptyConstraints (eraType :: EraType)
                 :: EndpointType -> EndpointType -> Constraint
 type instance EmptyConstraints Fixed = AreC
 type instance EmptyConstraints Free  = Compat
 
-type family   EraConstraints (et :: EraType)
+-- | Constraints on the endpoint types of nonempty eras, parameterized
+--   by era type.
+--
+--   * Fixed nonempty eras must have endpoints which are either @C@ or @I@.
+--
+--   * Free nonempty eras have no constraints on their endpoints.
+type family   EraConstraints (eraType :: EraType)
                 :: EndpointType -> EndpointType -> Constraint
 type instance EraConstraints Fixed = AreNotOpen
 type instance EraConstraints Free  = NoConstraints
@@ -129,48 +158,31 @@ lemma_EraConstraints_comm _ l r x
       IsEraTypeFixed    -> lemma_areNotOpen__notOpen l r $ x
       IsEraTypeFree -> x
 
--- | An @Era@ is a (potentially infinite) span of time.  @Era@s form a
---   monoid: the combination of two @Era@s is the largest @Era@ which
---   is contained in both; the identity @Era@ is the bi-infinite @Era@
---   covering all time.
---
---   There is also a distinguished empty @Era@, which has no duration
---   and no start or end time.  Note that an @Era@ whose start and end
---   times coincide is /not/ the empty @Era@, though it has zero
---   duration.
---
---   @Era@ is (intentionally) abstract. To construct @Era@ values, use
---   'mkEra'; to deconstruct, use 'start' and 'end'.
+-- | XXX write me
 data Era :: EraType -> EndpointType -> EndpointType -> * -> * where
   EmptyEra :: EmptyConstraints f l r => Era f l r t
   Era      :: EraConstraints f l r => Endpoint l t -> Endpoint r t -> Era f l r t
 
-  -- We do not export the Era constructor, and maintain the invariant
-  -- that the start time is always <= the end time.
-
 deriving instance Show t => Show (Era f l r t)
 deriving instance Eq   t => Eq   (Era f l r t)
 
--- | The empty era, which has no duration and no start or end time,
---   and is an annihilator for 'eraIsect'.
+-- | The empty fixed era, which has no duration and no start or end
+--   time, and is an annihilator for 'eraIsect'.
 emptyFixedEra :: Era Fixed C C t
 emptyFixedEra = EmptyEra
 
+-- | The empty free era, which can be thought of as a half-open
+--   interval of zero duration.  It is an identity for sequential
+--   composition.
 emptyFreeEra :: Compat l r => Era Free l r t
 emptyFreeEra = EmptyEra
 
--- | The ERA OF ALL TIME!!!1
-allTime :: forall f t. IsEraType f => Era f I I t
-allTime = lemma_EraConstraints_II (Proxy :: Proxy f)
+-- | The bi-infinite era of all time.
+always :: forall f t. IsEraType f => Era f I I t
+always = lemma_EraConstraints_II (Proxy :: Proxy f)
         $ Era Infinity Infinity
 
--- | Check if an era is the empty era.
-eraIsEmpty :: Ord t => Era f l r t -> Bool
-eraIsEmpty EmptyEra = True
-eraIsEmpty _        = False
-  -- XXX this is wrong now, e.g. what happens if we have a one-point
-  -- closed free era and then call openR on it?
-
+-- | Check whether a fixed era contains a given moment in time.
 eraContains :: forall l r t. Ord t => Era Fixed l r t -> t -> Bool
 eraContains EmptyEra _  = False
 eraContains (Era s e) t = endpt s (<=) && endpt e (>=)
@@ -179,30 +191,16 @@ eraContains (Era s e) t = endpt s (<=) && endpt e (>=)
     endpt Infinity _     = True
     endpt (Finite p) cmp = p `cmp` t
 
--- | Create a fixed 'Era' by specifying (potentially infinite) start
---   and end times.
+-- | Create a fixed 'Era' by specifying its endpoints.
 mkFixedEra :: (NotOpen l, NotOpen r, Ord t) => Endpoint l t -> Endpoint r t -> Era Fixed l r t
-mkFixedEra s e = canonicalizeFixedEra $ Era s e
+mkFixedEra s e = Era s e
 
--- | Create a finite 'Era' by specifying finite start and end 'Time's.
+-- | Create a finite 'Era' by specifying finite start and end times.
 mkEra :: (EraConstraints f l r, IsFinite l, IsFinite r, Ord t) => t -> t -> Era f l r t
 mkEra s e = Era (Finite s) (Finite e)
-  -- XXX what to do about canonicalization?
-
--- | A getter for accessing the start time of a fixed 'Era', or @Nothing@
---   if the era is empty.
-start :: Getter (Era Fixed l r t) (Maybe (Endpoint l t))
-start f EmptyEra     = EmptyEra <$ f Nothing
-start f er@(Era s _) = er <$ f (Just s)
-
--- | A getter for accessing the end time of an 'Era', or @Nothing@ if
---   the era is empty.
-end :: Getter (Era Fixed l r t) (Maybe (Endpoint r t))
-end f EmptyEra     = EmptyEra <$ f Nothing
-end f er@(Era _ e) = er <$ f (Just e)
 
 -- | Two fixed eras intersect to form the largest fixed era which is contained in
---   both, with the empty era as an annihilator.
+--   both.
 eraIsect
   :: forall l1 r1 l2 r2 t.
      Ord t
@@ -215,7 +213,6 @@ eraIsect (Era l1 r1) (Era l2 r2)
                       $ lemma_isect_notOpen       (Proxy :: Proxy l1) (Proxy :: Proxy l2)
                       $ lemma_isect_notOpen       (Proxy :: Proxy r1) (Proxy :: Proxy r2)
 
-  $ canonicalizeFixedEra
   $ Era (endpointMax l1 l2) (endpointMin r1 r2)
 
 eraIsect EmptyEra EmptyEra
@@ -240,16 +237,7 @@ eraIsect (Era {}) EmptyEra
   $ EmptyEra
 
 
--- Maintain the invariant that s <= e
-canonicalizeFixedEra :: forall l r t. Ord t => Era Fixed l r t -> Era Fixed l r t
-canonicalizeFixedEra (Era (Finite s) (Finite e))
-  | s > e
-  =                     lemma_areNotOpen__notOpen (Proxy :: Proxy l) (Proxy :: Proxy r)
-                      $ lemma_notOpen_isFinite__C (Proxy :: Proxy l)
-                      $ lemma_notOpen_isFinite__C                (Proxy :: Proxy r)
-  $ EmptyEra
-canonicalizeFixedEra era = era
-
+-- | Sequence two compatible free eras.
 eraSeq
   :: forall l1 r1 l2 r2 t.
     (Compat r1 l2, Clock t)
@@ -277,6 +265,7 @@ instance Clock t => Shifty (Era Fixed l r t) where
   shift _ EmptyEra  = EmptyEra
   shift d (Era s e) = Era (shift d s) (shift d e)
 
+-- | Reverse an era so it runs backwards. XXX
 reverseEra
   :: forall f l r t. (IsFinite l, IsFinite r, IsEraType f)
   => Era f l r t -> Era f r l t
