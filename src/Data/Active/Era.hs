@@ -54,10 +54,8 @@ module Data.Active.Era
     , closeLEra
 
       -- * Proofs
-
-      -- ** Properties and proof objects
-    , IsEraType(..)
     , IsEraTypePf(..)
+    , IsEraType(..)
 
     )
     where
@@ -317,25 +315,41 @@ freeEra :: forall l r t. Era Fixed l r t -> Maybe (Era Free l r t)
 freeEra EmptyEra  = Nothing
 freeEra (Era s e) = Just (Era s e)
 
+-- | Make the right endpoint of a free era open.  Has no effect on
+--   right-infinite eras or eras which are right-finite but already
+--   open.  Returns @Nothing@ if called on a left-open right-closed
+--   empty era (since that would result in a both-open zero-duration
+--   era, an absurdity).
 openREra :: forall l r t. Ord t => Era Free l r t -> Maybe (Era Free l (Open r) t)
-openREra EmptyEra           = Nothing
+openREra EmptyEra           = case compat :: CompatPf l r of
+                                CompatCO -> Just EmptyEra
+                                CompatOC -> Nothing
 openREra (Era s Infinity)   = Just $ Era s Infinity
 openREra (Era s (Finite e)) = lemma_F_FOpen (Proxy :: Proxy r)
                             $ Just $ canonicalizeEra $ Era s (Finite e)
 
+-- | Make the left endpoint of a free era open.  Has no effect on
+--   left-infinite eras or eras which are left-finite but already
+--   open.  Returns @Nothing@ if called on a left-closed right-open
+--   empty era (since that would result in a both-open zero-duration
+--   era, an absurdity).
 openLEra :: forall l r t. Ord t => Era Free l r t -> Maybe (Era Free (Open l) r t)
-openLEra EmptyEra           = Nothing
+openLEra EmptyEra           = case compat :: CompatPf l r of
+                                CompatCO -> Nothing
+                                CompatOC -> Just EmptyEra
 openLEra (Era Infinity e)   = Just $ Era Infinity e
 openLEra (Era (Finite s) e) = lemma_F_FOpen (Proxy :: Proxy l)
                             $ Just $ canonicalizeEra $ Era (Finite s) e
 
+-- | Close the right endpoint of a free era.  Has no effect on
+--   right-infinite or right-closed eras.
+closeREra :: forall l r t. Num t => Era Free l r t -> Era Free l (Close r) t
 -- The Num t constraint is sort of a hack, but we need to create a
 -- non-empty era.  It doesn't matter WHAT t value we choose (since the
 -- Era is Free) but we need to choose one.  Alternatively, we
 -- could make another Era constructor for point eras, but that seems
 -- like it would be a lot of work...
 
-closeREra :: forall l r t. Num t => Era Free l r t -> Era Free l (Close r) t
 closeREra EmptyEra           = lemma_Compat_Finite (Proxy :: Proxy l) (Proxy :: Proxy r)
                              $ lemma_F_FClose (Proxy :: Proxy r)
   $ Era (Finite 0) (Finite 0) :: Era Free l (Close r) t
@@ -346,6 +360,8 @@ closeREra (Era s Infinity)
 closeREra (Era s (Finite e)) = lemma_F_FClose (Proxy :: Proxy r)
   $ Era s (Finite e)
 
+-- | Close the left endpoint of a free era.  Has no effect on
+--   left-infinite or left-closed eras.
 closeLEra :: forall l r t. Num t => Era Free l r t -> Era Free (Close l) r t
 closeLEra EmptyEra           = lemma_Compat_Finite (Proxy :: Proxy l) (Proxy :: Proxy r)
                              $ lemma_F_FClose (Proxy :: Proxy l)
