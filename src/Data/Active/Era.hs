@@ -34,8 +34,8 @@ module Data.Active.Era
     , emptyFixedEra
     , emptyFreeEra
     , always
-    , mkFixedEra
     , mkEra
+    , mkEra'
 
       -- ** Accessors
 
@@ -199,12 +199,12 @@ eraContains (Era s e) t = endpt s (<=) && endpt e (>=)
     endpt (Finite p) cmp = p `cmp` t
 
 -- | Create a fixed 'Era' by specifying its endpoints.
-mkFixedEra :: (NotOpen l, NotOpen r, Ord t) => Endpoint l t -> Endpoint r t -> Era Fixed l r t
-mkFixedEra s e = canonicalizeFixedEra $ Era s e
+mkEra' :: (NotOpen l, NotOpen r, Ord t) => Endpoint l t -> Endpoint r t -> Era Fixed l r t
+mkEra' s e = canonicalizeFixedEra $ Era s e
 
--- | Create a finite 'Era' by specifying finite start and end times.
-mkEra :: (EraConstraints f l r, IsFinite l, IsFinite r, Ord t) => t -> t -> Era f l r t
-mkEra s e = Era (Finite s) (Finite e)
+-- | Create a finite fixed 'Era' by specifying finite start and end times.
+mkEra :: (Ord t) => t -> t -> Era Fixed C C t
+mkEra s e = mkEra' (Finite s) (Finite e)
 
 -- | Two fixed eras intersect to form the largest fixed era which is contained in
 --   both.
@@ -243,7 +243,8 @@ eraIsect (Era {}) EmptyEra
                       $ lemma_isect_notOpen_C     (Proxy :: Proxy r1)
   $ EmptyEra
 
--- Maintain the invariant that s <= e
+-- Maintain the invariant that s <= e for fixed eras. (For free eras,
+-- the API does not make it possible to construct an era with s > e.)
 canonicalizeFixedEra :: forall l r t. Ord t => Era Fixed l r t -> Era Fixed l r t
 canonicalizeFixedEra (Era (Finite s) (Finite e))
   | s > e
