@@ -236,59 +236,59 @@ mkEra s e = mkEra' (Finite s) (Finite e)
 -- | Two fixed eras intersect to form the largest fixed era which is contained in
 --   both.
 eraIsect
-  :: forall l1 r1 l2 r2 t.
+  :: forall l r l' r' t.
      Ord t
-  => Era Fixed l1 r1 t -> Era Fixed l2 r2 t
-  -> Era Fixed (Isect l1 l2) (Isect r1 r2) t
+  => Era Fixed l r t -> Era Fixed l' r' t
+  -> Era Fixed (Isect l l') (Isect r r') t
 
-eraIsect (Era l1 r1) (Era l2 r2)
-  =                     lemma_areNotOpen__notOpen (Proxy :: Proxy l1) (Proxy :: Proxy r1)
-                      $ lemma_areNotOpen__notOpen (Proxy :: Proxy l2) (Proxy :: Proxy r2)
-                      $ lemma_isect_notOpen       (Proxy :: Proxy l1) (Proxy :: Proxy l2)
-                      $ lemma_isect_notOpen       (Proxy :: Proxy r1) (Proxy :: Proxy r2)
+eraIsect (Era l r) (Era l' r')
+  =                     lemma_areNotOpen__notOpen (Proxy :: Proxy l ) (Proxy :: Proxy r )
+                      $ lemma_areNotOpen__notOpen (Proxy :: Proxy l') (Proxy :: Proxy r')
+                      $ lemma_isect_notOpen       (Proxy :: Proxy l ) (Proxy :: Proxy l')
+                      $ lemma_isect_notOpen       (Proxy :: Proxy r ) (Proxy :: Proxy r')
   $ canonicalizeEra
-  $ Era (endpointMax l1 l2) (endpointMin r1 r2)
+  $ Era (endpointMax l l') (endpointMin r r')
 
 eraIsect EmptyEra EmptyEra
-  =                     lemma_areC_isC (Proxy :: Proxy l1) (Proxy :: Proxy r1)
-                      $ lemma_areC_isC (Proxy :: Proxy l2) (Proxy :: Proxy r2)
+  =                     lemma_areC_isC (Proxy :: Proxy l ) (Proxy :: Proxy r)
+                      $ lemma_areC_isC (Proxy :: Proxy l') (Proxy :: Proxy r')
 
   $ EmptyEra
 
 eraIsect EmptyEra (Era {})
-  =                     lemma_areC_isC            (Proxy :: Proxy l1) (Proxy :: Proxy r1)
-                      $ lemma_areNotOpen__notOpen (Proxy :: Proxy l2) (Proxy :: Proxy r2)
-                      $ lemma_isect_C_notOpen     (Proxy :: Proxy l2)
-                      $ lemma_isect_C_notOpen     (Proxy :: Proxy r2)
+  =                     lemma_areC_isC            (Proxy :: Proxy l ) (Proxy :: Proxy r )
+                      $ lemma_areNotOpen__notOpen (Proxy :: Proxy l') (Proxy :: Proxy r')
+                      $ lemma_isect_C_notOpen     (Proxy :: Proxy l')
+                      $ lemma_isect_C_notOpen     (Proxy :: Proxy r')
 
   $ EmptyEra
 
 eraIsect (Era {}) EmptyEra
-  =                     lemma_areNotOpen__notOpen (Proxy :: Proxy l1) (Proxy :: Proxy r1)
-                      $ lemma_areC_isC            (Proxy :: Proxy l2) (Proxy :: Proxy r2)
-                      $ lemma_isect_notOpen_C     (Proxy :: Proxy l1)
-                      $ lemma_isect_notOpen_C     (Proxy :: Proxy r1)
+  =                     lemma_areNotOpen__notOpen (Proxy :: Proxy l ) (Proxy :: Proxy r )
+                      $ lemma_areC_isC            (Proxy :: Proxy l') (Proxy :: Proxy r')
+                      $ lemma_isect_notOpen_C     (Proxy :: Proxy l )
+                      $ lemma_isect_notOpen_C     (Proxy :: Proxy r )
   $ EmptyEra
 
 -- | Sequence two compatible free eras.
 eraSeq
-  :: forall l1 r1 l2 r2 t.
-    (Compat r1 l2, Clock t)
-  => Era Free l1 r1 t -> Era Free l2 r2 t
-  -> Era Free l1 r2 t
+  :: forall α β β' γ t.
+    (Compat β β', Clock t)
+  => Era Free α β t -> Era Free β' γ t
+  -> Era Free α γ t
 eraSeq EmptyEra EmptyEra
-  = lemma_Compat_trans3 (Proxy :: Proxy l1) (Proxy :: Proxy r1) (Proxy :: Proxy l2) (Proxy :: Proxy r2)
+  = lemma_Compat_trans3 (Proxy :: Proxy α) (Proxy :: Proxy β) (Proxy :: Proxy β') (Proxy :: Proxy γ)
   $ EmptyEra
 
 eraSeq EmptyEra e@(Era _ _)
-  = lemma_Compat_trans2 (Proxy :: Proxy l1) (Proxy :: Proxy r1) (Proxy :: Proxy l2)
+  = lemma_Compat_trans2 (Proxy :: Proxy α) (Proxy :: Proxy β) (Proxy :: Proxy β')
   $ e
 
 eraSeq e@(Era _ _) EmptyEra
-  = lemma_Compat_trans2 (Proxy :: Proxy r1) (Proxy :: Proxy l2) (Proxy :: Proxy r2)
+  = lemma_Compat_trans2 (Proxy :: Proxy β) (Proxy :: Proxy β') (Proxy :: Proxy γ)
   $ e
 
--- We know e1 and s2 are Finite because of Compat r1 l2 constraint
+-- We know e1 and s2 are Finite because of Compat β β' constraint
 eraSeq (Era s1 (Finite e1)) (Era (Finite s2) e2)
   = Era s1 (shift (e1 .-. s2) e2)
 

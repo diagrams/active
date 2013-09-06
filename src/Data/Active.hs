@@ -75,19 +75,19 @@ pureA a = Active always (pure a)
 --   in time, taking the intersection of their intervals.  This is
 --   like '<*>' but with a richer indexed type.
 appA :: Ord t
-     => Active Fixed l1 r1 t (a -> b)
-     -> Active Fixed l2 r2 t a
-     -> Active Fixed (Isect l1 l2) (Isect r1 r2) t b
-appA (Active e1 f1) (Active e2 f2) = Active (eraIsect e1 e2) (f1 <*> f2)
+     => Active Fixed l  r  t (a -> b)
+     -> Active Fixed l' r' t a
+     -> Active Fixed (Isect l  l') (Isect r  r') t b
+appA (Active e  f ) (Active e' f') = Active (eraIsect e  e') (f  <*> f')
 
 -- | Parallel composition of fixed 'Active' values.  The 'Era' of the
 --   result is the intersection of the 'Era's of the inputs.
 parA :: (Semigroup a, Ord t)
-     => Active Fixed l1 r1 t a -> Active Fixed l2 r2 t a
-     -> Active Fixed (Isect l1 l2) (Isect r1 r2) t a
-parA (Active e1 f1) (Active e2 f2) = Active (eraIsect e1 e2) (f1 <> f2)
+     => Active Fixed l  r  t a -> Active Fixed l' r' t a
+     -> Active Fixed (Isect l  l') (Isect r  r') t a
+parA (Active e  f ) (Active e' f') = Active (eraIsect e  e') (f  <> f')
 
--- parA p1 p2 = pureA (<>) `appA` p1 `appA` p2
+-- parA p  p' = pureA (<>) `appA` p  `appA` p'
 --   for the above to typecheck, would need to introduce a type-level proof
 --   that I is a left identity for Isect.  Doable but probably not worth it. =)
 
