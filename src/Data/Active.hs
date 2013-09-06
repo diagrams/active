@@ -69,7 +69,7 @@ mkActive s e f = Active (mkEra s e) f
 
 -- | Create a bi-infinite, constant 'Active' value.
 pureA :: (IsEraType f, Ord t) => a -> Active f I I t a
-pureA a = Active allTime (pure a)
+pureA a = Active always (pure a)
 
 -- | \"Apply\" a fixed 'Active' function to a fixed 'Active' value, pointwise
 --   in time, taking the intersection of their intervals.  This is
@@ -333,6 +333,9 @@ stretchFromEnd k (Active (Era (Finite s) (Finite e)) f)
 stretchFunFromEnd :: (Clock t) => t -> Rational -> (t -> a) -> t -> a
 stretchFunFromEnd e k f t = f (e .-^ ((e .-. t) ^/ fromRational k))
 
+-- stretchTo
+-- stretchAs
+
 snapshot :: (IsEraType f, Ord t)
          => t -> Active Fixed l r t a -> Maybe (Active f I I t a)
 snapshot t (Active er f)
@@ -352,6 +355,9 @@ clampBefore = undefined
 clampAfter :: Active f l C t a -> Active f l I t a
 clampAfter = undefined
 
+-- clampTo
+-- clampAs
+
 padActive :: a -> Active f C C t a -> Active f I I t a
 padActive = undefined
 
@@ -360,6 +366,11 @@ padBefore = undefined
 
 padAfter :: a -> Active f l C t a -> Active f l I t a
 padAfter = undefined
+
+-- padTo
+-- padAs
+
+-- unionPar
 
 movie :: (Clock t, Deadline O C t a) => [Active Free C C t a] -> Active Free C C t a
 movie [] = error "empty movie" -- XXX ?
