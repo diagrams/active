@@ -162,34 +162,34 @@ ufree a = case free a of
                   Nothing -> error "ufree called on empty era"
                   Just a' -> a'
 
-freeR :: Active Fixed l r t a -> Maybe (Active Free l (Open r) t a)
+freeR :: Ord t => Active Fixed l r t a -> Maybe (Active Free l (Open r) t a)
 freeR = free >=> openR
 
-ufreeR :: Active Fixed l r t a -> Active Free l (Open r) t a
+ufreeR :: Ord t => Active Fixed l r t a -> Active Free l (Open r) t a
 ufreeR a = case freeR a of
                    Nothing -> error "ufreeR on empty era"
                    Just a' -> a'
 
-freeL :: Active Fixed l r t a -> Maybe (Active Free (Open l) r t a)
+freeL :: Ord t => Active Fixed l r t a -> Maybe (Active Free (Open l) r t a)
 freeL = free >=> openL
 
-ufreeL :: Active Fixed l r t a -> Active Free (Open l) r t a
+ufreeL :: Ord t => Active Fixed l r t a -> Active Free (Open l) r t a
 ufreeL a = case freeL a of
                    Nothing -> error "ufreeL on empty era"
                    Just a' -> a'
 
-openR :: Active Free l r t a -> Maybe (Active Free l (Open r) t a)
+openR :: Ord t => Active Free l r t a -> Maybe (Active Free l (Open r) t a)
 openR (Active e f) = Active <$> openREra e <*> Just f
 
-uopenR :: Active Free l r t a -> Active Free l (Open r) t a
+uopenR :: Ord t => Active Free l r t a -> Active Free l (Open r) t a
 uopenR a = case openR a of
                   Nothing -> error "uopenR on empty era"
                   Just a' -> a'
 
-openL :: Active Free l r t a -> Maybe (Active Free (Open l) r t a)
+openL :: Ord t => Active Free l r t a -> Maybe (Active Free (Open l) r t a)
 openL (Active e f) = Active <$> openLEra e <*> Just f
 
-uopenL :: Active Free l r t a -> Active Free (Open l) r t a
+uopenL :: Ord t => Active Free l r t a -> Active Free (Open l) r t a
 uopenL a = case openL a of
                   Nothing -> error "uopenL on empty era"
                   Just a' -> a'
@@ -237,7 +237,7 @@ instance Deadline r l t a => Monoid (Active Free l r t a) where
 -- this is not unsafe because we restrict the left endpoint to not be
 -- open, which is usually fine since in the most common use cases we
 -- will have either C or I.
-(<>>) :: (Clock t, Deadline (Open r1) l2 t a, NotOpen l1)
+(<>>) :: (Clock t, Ord t, Deadline (Open r1) l2 t a, NotOpen l1)
       => Active Free l1 r1 t a -> Active Free l2 r2 t a
       -> Active Free l1 r2 t a
 a1 <>> a2 = uopenR a1 <<>> a2
@@ -372,7 +372,7 @@ padAfter = undefined
 
 -- unionPar
 
-movie :: (Clock t, Deadline O C t a) => [Active Free C C t a] -> Active Free C C t a
+movie :: (Clock t, Ord t, Deadline O C t a) => [Active Free C C t a] -> Active Free C C t a
 movie [] = error "empty movie" -- XXX ?
 movie xs = foldr1 (<>>) xs
   -- XXX use a balanced fold?

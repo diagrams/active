@@ -120,12 +120,22 @@ instance IsEraType Fixed where
   -- Maintain the invariant that s <= e for fixed eras.
   canonicalizeEra = canonicalizeFixedEra
 
+-- If endpoints are of compatible types, check and see if they are at
+-- the same time: if so, switch to an EmptyEra representation.  Note
+-- this can happen e.g. by constructing a one-point C/C free era and
+-- then calling openR or openL on it.
+canonicalizeFreeEra :: forall l r t. Ord t => Era Free l r t -> Era Free l r t
+canonicalizeFreeEra er@(Era (Finite s) (Finite e)) =
+  case (isFinite :: IsFinitePf l, isFinite :: IsFinitePf r) of
+    (IsFiniteO, IsFiniteO) -> er
+    (IsFiniteC, IsFiniteC) -> er
+    (IsFiniteO, IsFiniteC) -> if s >= e then EmptyEra else er
+    (IsFiniteC, IsFiniteO) -> if s >= e then EmptyEra else er
+canonicalizeFreeEra era = era
+
 instance IsEraType Free where
   isEraType = IsEraTypeFree
-
-  -- don't need to do any canonicalization for free eras.  API doesn't
-  -- make it possible to construct values with s > e.
-  canonicalizeEra = id
+  canonicalizeEra = canonicalizeFreeEra
 
 -- | Constraints on the endpoint types of the empty era, parameterized
 --   by era type:
@@ -183,9 +193,8 @@ data Era :: EraType -> EndpointType -> EndpointType -> * -> * where
 
   -- invariants:
   --
-  --   * Empty fixed eras are always represented using
-  --     EmptyEra.  (Empty free eras may be represented by either
-  --     EmptyEra or Era.)
+  --   * Empty eras (both fixed and free) are always represented using
+  --     EmptyEra.
   --   * With (Era (Finite s) (Finite e)), s <= e.
 
 deriving instance Show t => Show (Era f l r t)
@@ -302,39 +311,30 @@ reverseEra (Era (Finite s) (Finite e))
   $ Era (Finite s) (Finite e)
 
 -- | Turn a fixed era into a free era, by forgetting its concrete
---   location in time.
+--   location in time.  Returns @Nothing@ iff given the empty fixed
+--   era as input.
 freeEra :: forall l r t. Era Fixed l r t -> Maybe (Era Free l r t)
 freeEra EmptyEra  = Nothing
 freeEra (Era s e) = Just (Era s e)
 
--- One might think the EmptyEra cases below (marked with XXX) ought to
--- result in an EmptyEra. In fact, this would be wrong (as the type
--- error makes clear (given sufficient amounts of vigorous
--- squinting)).  If we have an empty free era, it must have one
--- closed and one open endpoint; opening the closed endpoint would
--- result not in a closed era, but in a zero-duration era with two
--- open endpoints, a bizarre abomination which should never be allowed
--- (to see why, imagine sequentially composing it with an Era on
--- either side, and consider what happens to the values at their
--- endpoints).  But I cannot see how to disallow this statically.
-
-openREra :: forall l r t. Era Free l r t -> Maybe (Era Free l (Open r) t)
+openREra :: forall l r t. Ord t => Era Free l r t -> Maybe (Era Free l (Open r) t)
 openREra EmptyEra           = Nothing
 openREra (Era s Infinity)   = Just $ Era s Infinity
 openREra (Era s (Finite e)) = lemma_F_FOpen (Proxy :: Proxy r)
-                            $ Just $ Era s (Finite e)
+                            $ Just $ canonicalizeEra $ Era s (Finite e)
 
-openLEra :: forall l r t. Era Free l r t -> Maybe (Era Free (Open l) r t)
+openLEra :: forall l r t. Ord t => Era Free l r t -> Maybe (Era Free (Open l) r t)
 openLEra EmptyEra           = Nothing
 openLEra (Era Infinity e)   = Just $ Era Infinity e
 openLEra (Era (Finite s) e) = lemma_F_FOpen (Proxy :: Proxy l)
-                            $ Just $ Era (Finite s) e
+                            $ Just $ canonicalizeEra $ Era (Finite s) e
 
 -- The Num t constraint is sort of a hack, but we need to create a
 -- non-empty era.  It doesn't matter WHAT t value we choose (since the
 -- Era is Free) but we need to choose one.  Alternatively, we
 -- could make another Era constructor for point eras, but that seems
 -- like it would be a lot of work...
+
 closeREra :: forall l r t. Num t => Era Free l r t -> Era Free l (Close r) t
 closeREra EmptyEra           = lemma_Compat_Finite (Proxy :: Proxy l) (Proxy :: Proxy r)
                              $ lemma_F_FClose (Proxy :: Proxy r)
