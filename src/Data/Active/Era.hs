@@ -163,6 +163,13 @@ data Era :: EraType -> EndpointType -> EndpointType -> * -> * where
   EmptyEra :: EmptyConstraints f l r => Era f l r t
   Era      :: EraConstraints f l r => Endpoint l t -> Endpoint r t -> Era f l r t
 
+  -- invariants:
+  --
+  --   * Empty fixed eras are always represented using
+  --     EmptyEra.  (Empty free eras may be represented by either
+  --     EmptyEra or Era.)
+  --   * With (Era (Finite s) (Finite e)), s <= e.
+
 deriving instance Show t => Show (Era f l r t)
 deriving instance Eq   t => Eq   (Era f l r t)
 
@@ -180,7 +187,7 @@ emptyFreeEra = EmptyEra
 -- | The bi-infinite era of all time.
 always :: forall f t. IsEraType f => Era f I I t
 always = lemma_EraConstraints_II (Proxy :: Proxy f)
-        $ Era Infinity Infinity
+       $ Era Infinity Infinity
 
 -- | Check whether a fixed era contains a given moment in time.
 eraContains :: forall l r t. Ord t => Era Fixed l r t -> t -> Bool
@@ -193,7 +200,7 @@ eraContains (Era s e) t = endpt s (<=) && endpt e (>=)
 
 -- | Create a fixed 'Era' by specifying its endpoints.
 mkFixedEra :: (NotOpen l, NotOpen r, Ord t) => Endpoint l t -> Endpoint r t -> Era Fixed l r t
-mkFixedEra s e = Era s e
+mkFixedEra s e = canonicalizeFixedEra $ Era s e
 
 -- | Create a finite 'Era' by specifying finite start and end times.
 mkEra :: (EraConstraints f l r, IsFinite l, IsFinite r, Ord t) => t -> t -> Era f l r t
@@ -212,7 +219,7 @@ eraIsect (Era l1 r1) (Era l2 r2)
                       $ lemma_areNotOpen__notOpen (Proxy :: Proxy l2) (Proxy :: Proxy r2)
                       $ lemma_isect_notOpen       (Proxy :: Proxy l1) (Proxy :: Proxy l2)
                       $ lemma_isect_notOpen       (Proxy :: Proxy r1) (Proxy :: Proxy r2)
-
+  $ canonicalizeFixedEra
   $ Era (endpointMax l1 l2) (endpointMin r1 r2)
 
 eraIsect EmptyEra EmptyEra
@@ -236,6 +243,15 @@ eraIsect (Era {}) EmptyEra
                       $ lemma_isect_notOpen_C     (Proxy :: Proxy r1)
   $ EmptyEra
 
+-- Maintain the invariant that s <= e
+canonicalizeFixedEra :: forall l r t. Ord t => Era Fixed l r t -> Era Fixed l r t
+canonicalizeFixedEra (Era (Finite s) (Finite e))
+  | s > e
+  =                     lemma_areNotOpen__notOpen (Proxy :: Proxy l) (Proxy :: Proxy r)
+                      $ lemma_notOpen_isFinite__C (Proxy :: Proxy l)
+                      $ lemma_notOpen_isFinite__C                (Proxy :: Proxy r)
+  $ EmptyEra
+canonicalizeFixedEra era = era
 
 -- | Sequence two compatible free eras.
 eraSeq
