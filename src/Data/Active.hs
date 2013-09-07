@@ -65,18 +65,16 @@ module Data.Active
     )
     where
 
-import           Control.Applicative
+import           Control.Applicative  (Applicative)
 import           Control.Lens         (Lens', generateSignatures, lensRules,
-                                       makeLensesWith, view, (%~),
-                                       (&), (.~))
-import           Control.Monad        ((>=>))
-import           Data.AffineSpace
-import           Data.Array
+                                       makeLensesWith, view, (%~), (&), (.~))
+import           Control.Monad        (ap, (>=>))
+import           Data.AffineSpace     (Diff, (.+^), (.-.), (.-^))
+import           Data.Array           (listArray, (!))
 import           Data.Maybe           (fromJust)
-import           Data.Proxy
-import           Data.Semigroup
-import           Data.VectorSpace
-import           Prelude
+import           Data.Proxy           (Proxy (..))
+import           Data.Semigroup       (Monoid (..), Semigroup (..))
+import           Data.VectorSpace     ((*^), (^/))
 
 import           Data.Active.Endpoint
 import           Data.Active.Era
