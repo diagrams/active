@@ -39,6 +39,7 @@ module Data.Active.Era
 
       -- ** Accessors
 
+    , eraIsEmpty
     , eraContains
 
       -- ** Operations
@@ -54,9 +55,14 @@ module Data.Active.Era
     , closeLEra
 
       -- * Proofs
+      -- ** Proof objects
     , IsEraTypePf(..)
     , IsEraType(..)
 
+      -- ** Lemmata
+    , lemma_EmptyConstraints_sym
+    , lemma_EraConstraints_II
+    , lemma_EraConstraints_sym
     )
     where
 
@@ -157,16 +163,18 @@ type family   EraConstraints (eraType :: EraType)
 type instance EraConstraints Fixed = AreNotOpen
 type instance EraConstraints Free  = NoConstraints
 
-lemma_EmptyConstraints_comm
+-- | @'EmptyConstraints' f@ is symmetric.
+lemma_EmptyConstraints_sym
   :: forall p1 p2 f l r x.
      (IsEraType f, EmptyConstraints f l r)
   => p1 f -> p2 l -> p2 r
   -> (EmptyConstraints f r l => x) -> x
-lemma_EmptyConstraints_comm _ l r x
+lemma_EmptyConstraints_sym _ l r x
   = case isEraType :: IsEraTypePf f of
       IsEraTypeFixed    -> lemma_areC_isC l r    $ x
       IsEraTypeFree -> lemma_Compat_sym l r $ x
 
+-- | @'EraConstraints' f@ holds of infinite endpoints.
 lemma_EraConstraints_II
   :: forall p f r. IsEraType f => p f -> (EraConstraints f I I => r) -> r
 lemma_EraConstraints_II _ r
@@ -174,17 +182,30 @@ lemma_EraConstraints_II _ r
       IsEraTypeFixed    -> r
       IsEraTypeFree -> r
 
-lemma_EraConstraints_comm
+-- | @'EraConstraints' f@ is symmetric.
+lemma_EraConstraints_sym
   :: forall p1 p2 f l r x.
      (IsEraType f, EraConstraints f l r)
   => p1 f -> p2 l -> p2 r
   -> (EraConstraints f r l => x) -> x
-lemma_EraConstraints_comm _ l r x
+lemma_EraConstraints_sym _ l r x
   = case isEraType :: IsEraTypePf f of
       IsEraTypeFixed    -> lemma_areNotOpen__notOpen l r $ x
       IsEraTypeFree -> x
 
--- | XXX write me
+-- | An @Era@ is a (potentially infinite) span of time within which an
+--   @Active@ value is defined.  The type of an @Era@ indicates
+--
+--   * Its \"flavor\", either 'Fixed' or 'Free';
+--
+--   * Each of its two endpoint types;
+--
+--   * The type of time values.
+--
+--   Users of the @active@ library should not need to use the
+--   constructors of @Era@ directly; instead, use one of the provided
+--   \"smart\" constructors 'emptyFixedEra', 'emptyFreeEra', 'always',
+--   'mkEra', or 'mkEra''.
 data Era :: EraType -> EndpointType -> EndpointType -> * -> * where
   EmptyEra :: EmptyConstraints f l r => Era f l r t
   Era      :: EraConstraints f l r => Endpoint l t -> Endpoint r t -> Era f l r t
@@ -213,6 +234,11 @@ emptyFreeEra = EmptyEra
 always :: forall f t. IsEraType f => Era f I I t
 always = lemma_EraConstraints_II (Proxy :: Proxy f)
        $ Era Infinity Infinity
+
+-- | Check whether an era is empty.
+eraIsEmpty :: Era f l r t -> Bool
+eraIsEmpty EmptyEra = True
+eraIsEmpty _        = False
 
 -- | Check whether a fixed era contains a given moment in time.
 eraContains :: forall l r t. Ord t => Era Fixed l r t -> t -> Bool
@@ -302,10 +328,10 @@ reverseEra
   :: forall f l r t. (IsFinite l, IsFinite r, IsEraType f)
   => Era f l r t -> Era f r l t
 reverseEra EmptyEra
-  = lemma_EmptyConstraints_comm (Proxy :: Proxy f) (Proxy :: Proxy l) (Proxy :: Proxy r)
+  = lemma_EmptyConstraints_sym (Proxy :: Proxy f) (Proxy :: Proxy l) (Proxy :: Proxy r)
   $ EmptyEra
 reverseEra (Era (Finite s) (Finite e))
-  = lemma_EraConstraints_comm (Proxy :: Proxy f) (Proxy :: Proxy l) (Proxy :: Proxy r)
+  = lemma_EraConstraints_sym (Proxy :: Proxy f) (Proxy :: Proxy l) (Proxy :: Proxy r)
   $ Era (Finite s) (Finite e)
 
 -- | Turn a fixed era into a free era, by forgetting its concrete
