@@ -26,46 +26,62 @@ module Data.Active
 
       -- ** Constructors
 
-    , emptyActive, mkActive, (..$), pureA
-    , interval, (...), ui, dur
-    , asFixed, asFree
+    , emptyActive, pureA
+    , interval, mkActive, (...), (..$)
+    , timeValued, ui
+    , dur
+    , snapshot
+    , discrete
 
       -- ** Accessors
 
     , era, activeFun, runActive
 
-      -- ** Operations
+      -- * Active operations
 
-    , mapT
-    , appA, parA
+      -- ** General operations
+
+    , mapT, appA
+
+      -- ** Converting between fixed and free
+
+    , asFixed, asFree
+
     , free, ufree
     , freeR, ufreeR
     , freeL, ufreeL
+    , anchorStart, anchorEnd
+
+      -- ** Fiddling with endpoints
     , openR, uopenR
     , openL, uopenL
     , closeR, closeL
 
-    , (<<>>), (<>>)
-    , anchorStart, anchorEnd
+      -- ** Composition
 
-    , timeValued
+    , parA
+    , (<<>>), (<>>), movie
+
+      -- ** Modification
+
     , backwards
     , stretchFromStart, (*>>)
     , stretchFromEnd, (<<*)
-    , snapshot
     , clamp, clampBefore, clampAfter
     , padActive, padBefore, padAfter
 
-    , movie, discrete, simulate
+      -- ** Discretization
 
-      -- ** @Active'@
+    , simulate
+
+      -- * @Active'@
 
     , Active'(..), withActive, onActive'
 
     )
     where
 
-import           Control.Applicative  (Applicative)
+import           Control.Applicative  (Applicative (..), (<$>), (<*>))
 import           Control.Lens         (Lens', generateSignatures, lensRules,
                                        makeLensesWith, view, (%~), (&), (.~))
 import           Control.Monad        (ap, (>=>))
@@ -114,17 +130,38 @@ asFixed = id
 asFree :: Active Free l r t a -> Active Free l r t a
 asFree = id
 
+-- | Like 'fmap', but extended to have access to the time values as
+--   well as the values of type @a@.  In other words, 'fmap' enables
+--   \"time-independent\" transformations (applying the same
+--   transformation uniformly without regard to time), whereas 'mapT'
+--   enables \"time-dependent\" transformations (applying a
+--   transformation indexed by time).
 mapT :: (t -> a -> b) -> Active Fixed l r t a -> Active Fixed l r t b
-mapT g (Active e f) = Active e (\t -> g t (f t))
+mapT g (Active e f) = Active e (g `ap` f)
 
 -- | An empty @Active@ value, which is defined nowhere.
 emptyActive :: EmptyConstraints f l r => Active f l r t a
 emptyActive = Active emptyEra (const undefined)
 
-mkActive :: (Ord t, IsEraType f, EraConstraints f C C) => t -> t -> (t -> a) -> Active f C C t a
+-- | Create a finite @Active@ with the given start and end times,
+-- taking on values according to the given function.
+mkActive
+  :: (Ord t, IsEraType f, EraConstraints f C C)
+  => t -> t -> (t -> a) -> Active f C C t a
 mkActive s e f = Active (mkEra s e) f
 
-(..$) :: (Ord t, IsEraType f, EraConstraints f C C) => t -> t -> (t -> a) -> Active f C C t a
+-- | A synonym for 'mkActive', designed to be used something like
+--
+--   @
+--   (1 ..$ 4) (\\t -> ...)
+--   @
+--
+--   The name is supposed to be reminiscent of a combination between
+--   @(...)@ (since it creates a finite interval) and @($)@ (since it
+--   is applied to a function of time).
+(..$)
+  :: (Ord t, IsEraType f, EraConstraints f C C)
+  => t -> t -> (t -> a) -> Active f C C t a
 (..$) = mkActive
 
 -- | Create a bi-infinite, constant 'Active' value.
@@ -207,28 +244,49 @@ instance (Shifty a, Clock t, t ~ ShiftyTime a) => Shifty (Active' Fixed t a) whe
 
   shift d (Active' a) = Active' (shift d a)
 
-
+-- | Turn a fixed @Active@ into a free, by \"forgetting\" the concrete
+--   location of its era.  Returns @Nothing@ iff given the empty fixed
+--   era as input (the empty fixed era has no free counterpart); see
+--   also 'ufree'.
 free :: Active Fixed l r t a -> Maybe (Active Free l r t a)
 free (Active e f) = Active <$> freeEra e <*> Just f
 
--- unsafe because this should not be called on an Active with en empty era
--- basically  fromJust . free  with a better error message.
+-- | An \"unsafe\" variant of 'free' which throws an error iff given
+--   the empty era as input.  Can be more convenient than 'free' if
+--   you know that its argument is not empty, since it does not
+--   require dealing with @Maybe@.
 ufree :: Active Fixed l r t a -> Active Free l r t a
 ufree a = case free a of
                   Nothing -> error "ufree called on empty era"
                   Just a' -> a'
 
+-- | Turn a fixed @Active@ into a free with an open right endpoint, by
+--   \"forgetting\" both the concrete location of its era and the
+--   value at the right endpoint (if it is finite).  Returns @Nothing@
+--   iff given the empty era as input; see also 'ufreeR'.
 freeR :: Ord t => Active Fixed l r t a -> Maybe (Active Free l (Open r) t a)
 freeR = free >=> openR
 
+-- | An \"unsafe\" variant of 'freeR' which throws an error iff given
+--   the empty era as input.  Can be more convenient than 'freeR' if
+--   you know that its argument is not empty, since it does not
+--   require dealing with @Maybe@.
 ufreeR :: Ord t => Active Fixed l r t a -> Active Free l (Open r) t a
 ufreeR a = case freeR a of
                    Nothing -> error "ufreeR on empty era"
                    Just a' -> a'
 
+-- | Turn a fixed @Active@ into a free with an open left endpoint, by
+--   \"forgetting\" both the concrete location of its era and the
+--   value at the left endpoint (if it is finite).  Returns @Nothing@
+--   iff given the empty era as input; see also 'ufreeL'.
 freeL :: Ord t => Active Fixed l r t a -> Maybe (Active Free (Open l) r t a)
 freeL = free >=> openL
 
+-- | An \"unsafe\" variant of 'freeL' which throws an error iff given
+--   the empty era as input.  Can be more convenient than 'freeL' if
+--   you know that its argument is not empty, since it does not
+--   require dealing with @Maybe@.
 ufreeL :: Ord t => Active Fixed l r t a -> Active Free (Open l) r t a
 ufreeL a = case freeL a of
                    Nothing -> error "ufreeL on empty era"
@@ -250,6 +308,8 @@ uopenL a = case openL a of
                   Nothing -> error "uopenL on empty era"
                   Just a' -> a'
 
+-- | Turn an @Active@ with an open right endpoint into one with a
+--   closed right endpoint, by providing a value at the endpoint.
 closeR :: (Eq t, Num t) => a -> Active Free l O t a -> Active Free l C t a
 closeR a (Active e f) = Active (closeREra e) f'
   where
@@ -257,6 +317,8 @@ closeR a (Active e f) = Active (closeREra e) f'
            EmptyEra           -> f
            (Era _ (Finite y)) -> (\t -> if t == y then a else f t)
 
+-- | Turn an @Active@ with an open left endpoint into one with a
+--   closed left endpoint, by providing a value at the endpoint.
 closeL :: (Eq t, Num t) => a -> Active Free O r t a -> Active Free C r t a
 closeL a (Active e f) = Active (closeLEra e) f'
   where
@@ -331,21 +393,35 @@ anchorEnd t (Active (Era s (Finite e)) f)
 -- Derived API
 ------------------------------------------------------------
 
+-- | \"Run\" a fixed @Active@ value, turning it into a function from
+--   time.  Note that the function is only guaranteed to be defined on
+--   the @Active@'s 'Era'.
 runActive :: Active Fixed l r t a -> t -> a
 runActive = view activeFun
 
+-- | Create a finite @Active@ with the constant value @()@.
 interval :: (Ord t, IsEraType f, EraConstraints f C C) => t -> t -> Active f C C t ()
 interval s e = Active (mkEra s e) (const ())
 
+-- | A synonym for 'interval'.
 (...) :: (Ord t, IsEraType f, EraConstraints f C C) => t -> t -> Active f C C t ()
 (...) = interval
 
+-- | An @Active@ defined on the unit interval [0,1], taking on the
+--   value @t@ at time @t@.  Equivalent to @'timeValued' (0 ... 1)@.
 ui :: (Num t, Ord t) => Active Fixed C C t t
 ui = timeValued (0 ... 1)
 
+-- | Make an @Active@ which takes on the value @t@ at time @t@.  For
+--   example, @timeValued (3 ... 5)@ creates a duration-2 @Active@,
+--   starting at time 3 and ending at time 5, which takes on values
+--   from 3 to 5 over the course of the interval.
 timeValued :: Active Fixed l r t a -> Active Fixed l r t t
 timeValued = mapT const
 
+-- | Create a free @Active@ of the given duration, taking on the
+--   constant value @()@.  Note that the absolute value of the given
+--   duration is used.
 dur :: forall t. (Clock t, Ord t, Num t) => Diff t -> Active Free C C t ()
 dur d = fromJust . free $ interval 0 t'
   where
