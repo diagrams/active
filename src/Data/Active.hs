@@ -27,23 +27,47 @@ module Data.Active
       -- ** Constructors
 
     , emptyActive, mkActive, (..$), pureA
+    , interval, (...), ui, dur
+    , asFixed, asFree
 
       -- ** Accessors
 
-    , era, activeFun
+    , era, activeFun, runActive
 
       -- ** Operations
 
     , mapT
     , appA, parA
-    , asFixed, asFree
+    , free, ufree
+    , freeR, ufreeR
+    , freeL, ufreeL
+    , openR, uopenR
+    , openL, uopenL
+    , closeR, closeL
+
+    , (<<>>), (<>>)
+    , anchorStart, anchorEnd
+
+    , timeValued
+    , backwards
+    , stretchFromStart, (*>>)
+    , stretchFromEnd, (<<*)
+    , snapshot
+    , clamp, clampBefore, clampAfter
+    , padActive, padBefore, padAfter
+
+    , movie, discrete, simulate
+
+      -- ** @Active'@
+
+    , Active'(..), withActive, onActive'
 
     )
     where
 
 import           Control.Applicative
 import           Control.Lens         (Lens', generateSignatures, lensRules,
-                                       makeLenses, makeLensesWith, view, (%~),
+                                       makeLensesWith, view, (%~),
                                        (&), (.~))
 import           Control.Monad        ((>=>))
 import           Data.AffineSpace
@@ -184,7 +208,6 @@ instance (Shifty a, Clock t, t ~ ShiftyTime a) => Shifty (Active' Fixed t a) whe
   type ShiftyTime (Active' Fixed t a) = t
 
   shift d (Active' a) = Active' (shift d a)
-
 
 
 free :: Active Fixed l r t a -> Maybe (Active Free l r t a)
