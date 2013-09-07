@@ -346,9 +346,11 @@ ui = timeValued (0 ... 1)
 timeValued :: Active Fixed l r t a -> Active Fixed l r t t
 timeValued = mapT const
 
--- XXX should check if duration is <= 0?
-dur :: (Clock t, Ord t, Num t) => Diff t -> Active Free C C t ()
-dur d = fromJust . free $ interval 0 (0 .+^ d)
+dur :: forall t. (Clock t, Ord t, Num t) => Diff t -> Active Free C C t ()
+dur d = fromJust . free $ interval 0 t'
+  where
+    t' | (0 :: t) .+^ d >= 0  = 0 .+^ d
+       | otherwise            = 0 .-^ d
 
 backwards :: (Clock t, IsEraType f, IsFinite l, IsFinite r)
     => Active f l r t a -> Active f r l t a
