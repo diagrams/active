@@ -31,6 +31,7 @@ module Data.Active.Era
     , Era(..)
 
       -- ** Constructors
+    , emptyEra
     , emptyFixedEra
     , emptyFreeEra
     , always
@@ -204,8 +205,8 @@ lemma_EraConstraints_sym _ l r x
 --
 --   Users of the @active@ library should not need to use the
 --   constructors of @Era@ directly; instead, use one of the provided
---   \"smart\" constructors 'emptyFixedEra', 'emptyFreeEra', 'always',
---   'mkEra', or 'mkEra''.
+--   \"smart\" constructors 'emptyEra', 'emptyFixedEra',
+--   'emptyFreeEra', 'always', 'mkEra', or 'mkEra''.
 data Era :: EraType -> EndpointType -> EndpointType -> * -> * where
   EmptyEra :: EmptyConstraints f l r => Era f l r t
   Era      :: EraConstraints f l r => Endpoint l t -> Endpoint r t -> Era f l r t
@@ -219,16 +220,22 @@ data Era :: EraType -> EndpointType -> EndpointType -> * -> * where
 deriving instance Show t => Show (Era f l r t)
 deriving instance Eq   t => Eq   (Era f l r t)
 
+-- | Construct an empty era.
+emptyEra :: EmptyConstraints f l r => Era f l r t
+emptyEra = EmptyEra
+
 -- | The empty fixed era, which has no duration and no start or end
---   time, and is an annihilator for 'eraIsect'.
+--   time, and is an annihilator for 'eraIsect'.  This is a
+--   specialized version of 'emptyEra', provided for convenience.
 emptyFixedEra :: Era Fixed C C t
-emptyFixedEra = EmptyEra
+emptyFixedEra = emptyEra
 
 -- | The empty free era, which can be thought of as a half-open
 --   interval of zero duration.  It is an identity for sequential
---   composition.
+--   composition.  This is a specialized version of 'emptyEra',
+--   provided for convenience.
 emptyFreeEra :: Compat l r => Era Free l r t
-emptyFreeEra = EmptyEra
+emptyFreeEra = emptyEra
 
 -- | The bi-infinite era of all time.
 always :: forall f t. IsEraType f => Era f I I t

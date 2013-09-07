@@ -1,13 +1,14 @@
-{-# LANGUAGE ConstraintKinds     #-}
-{-# LANGUAGE DataKinds           #-}
-{-# LANGUAGE DeriveFunctor       #-}
-{-# LANGUAGE FlexibleContexts    #-}
-{-# LANGUAGE FlexibleInstances   #-}
-{-# LANGUAGE GADTs               #-}
-{-# LANGUAGE RankNTypes          #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TemplateHaskell     #-}
-{-# LANGUAGE TypeFamilies        #-}
+{-# LANGUAGE ConstraintKinds       #-}
+{-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE DeriveFunctor         #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RankNTypes            #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE TypeFamilies          #-}
 
 -----------------------------------------------------------------------------
 -- |
@@ -18,14 +19,36 @@
 --
 -----------------------------------------------------------------------------
 
-module Data.Active where
+module Data.Active
+    ( -- * Active
+
+      Active
+
+      -- ** Constructors
+
+    , emptyActive, mkActive, (..$), pureA
+
+      -- ** Accessors
+
+    , era, activeFun
+
+      -- ** Operations
+
+    , mapT
+    , appA, parA
+    , asFixed, asFree
+
+    )
+    where
 
 import           Control.Applicative
-import           Control.Lens        (makeLenses, view, (%~))
-import           Control.Monad       ((>=>))
+import           Control.Lens         (Lens', generateSignatures, lensRules,
+                                       makeLenses, makeLensesWith, view, (%~),
+                                       (&), (.~))
+import           Control.Monad        ((>=>))
 import           Data.AffineSpace
 import           Data.Array
-import           Data.Maybe          (fromJust)
+import           Data.Maybe           (fromJust)
 import           Data.Proxy
 import           Data.Semigroup
 import           Data.VectorSpace
@@ -39,27 +62,42 @@ import           Data.Active.Time
 -- Active
 ------------------------------------------------------------
 
--- | An @Active f l r t a@ is a time-varying value of type @a@, over the
---   time type @t@, defined on an 'Era' of type @f@.
+-- | An @Active f l r t a@ is a time-varying value of type @a@, over
+--   the time type @t@, defined on an 'Era' of type @f@ with endpoints
+--   of type @l@ and @r@.
 data Active f l r t a = Active
   { _era       :: Era f l r t
   , _activeFun :: t -> a
   }
   deriving (Functor)
 
-makeLenses ''Active
+makeLensesWith (lensRules & generateSignatures .~ False) ''Active
 
--- XXX should only export era and activeFun as an accessors for Active
--- Fixed.
+-- | A lens for accessing the era of a fixed @Active@ value.
+era :: Lens' (Active Fixed l r t a) (Era Fixed l r t)
 
-fixed :: Active Fixed l r t a -> Active Fixed l r t a
-fixed = id
+-- | A lens for accessing the underlying function of a fixed @Active@
+-- value.
+activeFun :: Lens' (Active Fixed l r t a) (t -> a)
 
--- free :: Active Free l r t a -> Active Free l r t a
--- free = id
+-- | The identity function with a restricted type, sometimes
+--   convenient for giving type inference a nudge in the right
+--   direction.
+asFixed :: Active Fixed l r t a -> Active Fixed l r t a
+asFixed = id
+
+-- | The identity function with a restricted type, sometimes
+--   convenient for giving type inference a nudge in the right
+--   direction.
+asFree :: Active Free l r t a -> Active Free l r t a
+asFree = id
 
 mapT :: (t -> a -> b) -> Active Fixed l r t a -> Active Fixed l r t b
 mapT g (Active e f) = Active e (\t -> g t (f t))
+
+-- | An empty @Active@ value, which is defined nowhere.
+emptyActive :: EmptyConstraints f l r => Active f l r t a
+emptyActive = Active emptyEra (const undefined)
 
 mkActive :: (Ord t, IsEraType f, EraConstraints f C C) => t -> t -> (t -> a) -> Active f C C t a
 mkActive s e f = Active (mkEra s e) f
@@ -95,9 +133,6 @@ instance (Shifty a, Clock t, t ~ ShiftyTime a) => Shifty (Active Fixed l r t a) 
   type ShiftyTime (Active Fixed l r t a) = t
 
   shift d = (activeFun %~ shift d) . (era %~ shift d)
-
-emptyFreeA :: Compat l r => Active Free l r t a
-emptyFreeA = Active emptyFreeEra (const undefined)
 
 ------------------------------------------------------------
 -- Active'
@@ -275,7 +310,7 @@ anchorEnd t (Active (Era s (Finite e)) f)
 -- Derived API
 ------------------------------------------------------------
 
-runActive :: Active f l r t a -> t -> a
+runActive :: Active Fixed l r t a -> t -> a
 runActive = view activeFun
 
 interval :: (Ord t, IsEraType f, EraConstraints f C C) => t -> t -> Active f C C t ()
@@ -397,4 +432,3 @@ simulate rate (Active (Era (Finite s) (Finite e)) f)
     s', e' :: Rational
     s' = fromTime s
     e' = fromTime e
-
