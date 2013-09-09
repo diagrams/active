@@ -531,11 +531,16 @@ discrete xs = f <$> ui
     n   = length xs
     arr = listArray (0, n-1) xs
 
+-- | @simulate rate a@ generates a list of values sampled from @a@, at
+--   a granularity of @rate@ samples per unit of time.  The first
+--   value is taken precisely at the start time of @a@; subsequent
+--   values are taken every @1\/rate@ time units, with the final value
+--   taken at or before the end time of @a@.
 simulate :: (Clock t, FractionalOf t Rational)
          => Rational -> Active Free C C t a -> [a]
 simulate _ (Active EmptyEra _) = []
 simulate rate (Active (Era (Finite s) (Finite e)) f)
-  = map (f . toTime) [s', s' + (1^/rate) .. e']
+  = map (f . toTime) . takeWhile (<= e') . iterate (+ (1^/rate)) $ s'
   where
     s', e' :: Rational
     s' = fromTime s
