@@ -177,6 +177,8 @@ appA :: Ord t
      -> Active Fixed (Isect l  l') (Isect r  r') t b
 appA (Active e  f ) (Active e' f') = Active (eraIsect e  e') (f  <*> f')
 
+infixl 4 `appA`
+
 -- | Parallel composition of fixed 'Active' values.  The 'Era' of the
 --   result is the intersection of the 'Era's of the inputs.
 parA :: (Semigroup a, Ord t)
