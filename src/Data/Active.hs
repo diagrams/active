@@ -50,7 +50,7 @@ module Data.Active
     , free, ufree
     , freeR, ufreeR
     , freeL, ufreeL
-    , anchorStart, anchorEnd
+    , anchorL, anchorR
 
       -- ** Fiddling with endpoints
     , openR, uopenR
@@ -277,9 +277,9 @@ freeR :: Ord t => Active Fixed l r t a -> Maybe (Active Free l (Open r) t a)
 freeR = free >=> openR
 
 -- | An \"unsafe\" variant of 'freeR' which throws an error iff given
---   the empty era as input.  Can be more convenient than 'freeR' if
---   you know that its argument is not empty, since it does not
---   require dealing with @Maybe@.
+--   an active with an empty era as input.  Can be more convenient
+--   than 'freeR' if you know that its argument is not empty, since it
+--   does not require dealing with @Maybe@.
 ufreeR :: Ord t => Active Fixed l r t a -> Active Free l (Open r) t a
 ufreeR a = case freeR a of
                    Nothing -> error "ufreeR on empty era"
@@ -293,25 +293,43 @@ freeL :: Ord t => Active Fixed l r t a -> Maybe (Active Free (Open l) r t a)
 freeL = free >=> openL
 
 -- | An \"unsafe\" variant of 'freeL' which throws an error iff given
---   the empty era as input.  Can be more convenient than 'freeL' if
---   you know that its argument is not empty, since it does not
---   require dealing with @Maybe@.
+--   an active with an empty era as input.  Can be more convenient
+--   than 'freeL' if you know that its argument is not empty, since it
+--   does not require dealing with @Maybe@.
 ufreeL :: Ord t => Active Fixed l r t a -> Active Free (Open l) r t a
 ufreeL a = case freeL a of
                    Nothing -> error "ufreeL on empty era"
                    Just a' -> a'
 
+-- | Open the right endpoint of a free active, forgetting the value
+--   defined there.  Returns @Nothing@ iff its argument has a
+--   left-open right-closed empty era (see 'openREra').  See also
+--   'uopenR'.
 openR :: Ord t => Active Free l r t a -> Maybe (Active Free l (Open r) t a)
 openR (Active e f) = Active <$> openREra e <*> Just f
 
+-- | An \"unsafe\" variant of 'openR' which throws an error iff given
+--   an active with a left-open right-closed empty era as input.  Can
+--   be more convenient than 'openR' if you know that its argument is
+--   not of the prohibited shape, since it does not require dealing
+--   with @Maybe@.
 uopenR :: Ord t => Active Free l r t a -> Active Free l (Open r) t a
 uopenR a = case openR a of
                   Nothing -> error "uopenR on empty era"
                   Just a' -> a'
 
+-- | Open the left endpoint of a free active, forgetting the value
+--   defined there.  Returns @Nothing@ iff its argument has a
+--   right-open left-closed empty era (see 'openLEra').  See also
+--   'uopenL'.
 openL :: Ord t => Active Free l r t a -> Maybe (Active Free (Open l) r t a)
 openL (Active e f) = Active <$> openLEra e <*> Just f
 
+-- | An \"unsafe\" variant of 'openL' which throws an error iff given
+--   an active with a left-closed right-open empty era as input.  Can
+--   be more convenient than 'openL' if you know that its argument is
+--   not of the prohibited shape, since it does not require dealing
+--   with @Maybe@.
 uopenL :: Ord t => Active Free l r t a -> Active Free (Open l) r t a
 uopenL a = case openL a of
                   Nothing -> error "uopenL on empty era"
@@ -335,6 +353,8 @@ closeL a (Active e f) = Active (closeLEra e) f'
            EmptyEra           -> f
            (Era (Finite x) _) -> (\t -> if t == x then a else f t)
 
+-- | Sequential composition of free 'Active' values with compatible
+--   endpoint types.
 (<<>>) :: forall l1 r1 l2 r2 t a.
          (Clock t, Deadline r1 l2 t a)
       => Active Free l1 r1 t a -> Active Free l2 r2 t a
@@ -361,13 +381,16 @@ instance Deadline r l t a => Monoid (Active Free l r t a) where
             -- OK to use 'undefined' above since this function can
             -- never be called.
 
--- this is not unsafe because we restrict the left endpoint to not be
--- open, which is usually fine since in the most common use cases we
--- will have either C or I.
+-- | Biased sequential composition of free 'Active' values, which
+--   throws away the right endpoint of its first argument.
 (<>>) :: (Clock t, Ord t, Deadline (Open r1) l2 t a, NotOpen l1)
       => Active Free l1 r1 t a -> Active Free l2 r2 t a
       -> Active Free l1 r2 t a
 a1 <>> a2 = uopenR a1 <<>> a2
+
+-- Note, the above is not unsafe because we restrict the left endpoint to not be
+-- open, which is usually fine since in the most common use cases we
+-- will have either C or I.
 
 
 -- crazy idea: maybe we don't need these at all?  i.e. maybe the way
@@ -378,20 +401,24 @@ a1 <>> a2 = uopenR a1 <<>> a2
 -- perhaps this means we don't need the elaborate system of anchor
 -- points I was originally imagining.
 
-anchorStart
+-- | \"Fix\" a free active by anchoring its (finite) left endpoint to
+--   a specific time.
+anchorL
   :: forall l r t a. (IsFinite l, AreNotOpen l r, Clock t)
   => t -> Active Free l r t a -> Active Fixed l r t a
-anchorStart t (Active (Era (Finite s) e) f)
+anchorL t (Active (Era (Finite s) e) f)
   = Active (Era (Finite t) (shift d e)) (shift d f)
   where d = t .-. s
 
   -- EmptyEra case can't happen because of AreNotOpen l r constraint.
   -- Era Infinity _  case can't happen because of IsFinite l constraint.
 
-anchorEnd
+-- | \"Fix\" a free active by anchoring its (finite) right endpoint to
+--   a specific time.
+anchorR
   :: forall l r t a. (IsFinite r, AreNotOpen l r, Clock t)
   => t -> Active Free l r t a -> Active Fixed l r t a
-anchorEnd t (Active (Era s (Finite e)) f)
+anchorR t (Active (Era s (Finite e)) f)
   = Active (Era (shift d s) (Finite t)) (shift d f)
   where d = t .-. e
 
@@ -437,6 +464,8 @@ dur d = fromJust . free $ interval 0 t'
     t' | (0 :: t) .+^ d >= 0  = 0 .+^ d
        | otherwise            = 0 .-^ d
 
+-- | Flip around a finite 'Active' value so it runs backwards, with
+--   the value at the start time mapped to the end time and vice versa.
 backwards :: (Clock t, IsEraType f, IsFinite l, IsFinite r)
     => Active f l r t a -> Active f r l t a
 backwards (Active EmptyEra f) = Active (reverseEra EmptyEra) f
@@ -479,6 +508,8 @@ stretchFunFromEnd e k f t = f (e .-^ ((e .-. t) ^/ fromRational k))
 -- stretchTo
 -- stretchAs
 
+-- | Take a \"snapshot\", /i.e./ sample an @Active@ at a single point
+--   in time and make an infinite @Active@ which is constantly the sampled value.
 snapshot :: (IsEraType f, Ord t)
          => t -> Active Fixed l r t a -> Maybe (Active f I I t a)
 snapshot t (Active er f)
@@ -515,11 +546,27 @@ padAfter = undefined
 
 -- unionPar
 
+-- | Make a \"movie\" out of a sequence of free 'Active' values,
+--   composing them with the biased sequential composition operator
+--   '<>>'.  The input list must be non-empty.
 movie :: (Clock t, Ord t, Deadline O C t a) => [Active Free C C t a] -> Active Free C C t a
 movie [] = error "empty movie" -- XXX ?
 movie xs = foldr1 (<>>) xs
   -- XXX use a balanced fold?
 
+-- | Make an @Active@ value with evenly spaced discrete transitions
+--   between the elements of a given list.  Given a list @as@ of
+--   length @n@, it takes on the values
+--
+--   * @as !! 0@ from time 0 up to but not including time @1\/(n-1)@;
+--
+--   * @as !! 1@ from time @1\/(n-1)@ up to but not including time @2\/(n-1)@;
+--
+--   * @as !! k@ from time @k\/(n-1)@ up to but not including time @(k+1)\/(n-1)@;
+--
+--   * @as !! n@ precisely at time @1@.
+--
+--   It is an error to provide @discrete@ with an empty list.
 discrete :: (Clock t, Ord t, Num t, FractionalOf t Rational) => [a] -> Active Fixed C C t a
 discrete [] = error "Data.Active.discrete must be called with a non-empty list."
 discrete xs = f <$> ui
