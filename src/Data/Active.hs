@@ -41,7 +41,7 @@ module Data.Active
 
       -- ** General operations
 
-    , mapT, appA
+    , mapT, appA, pairA
 
       -- ** Converting between fixed and free
 
@@ -178,6 +178,13 @@ appA :: Ord t
 appA (Active e  f ) (Active e' f') = Active (eraIsect e  e') (f  <*> f')
 
 infixl 4 `appA`
+
+-- | A specialized variant of 'appA'.
+pairA :: Ord t
+      => Active Fixed l  r  t a
+      -> Active Fixed l' r' t b
+      -> Active Fixed (Isect l  l') (Isect r  r') t (a,b)
+pairA a b = (,) <$> a `appA` b
 
 -- | Parallel composition of fixed 'Active' values.  The 'Era' of the
 --   result is the intersection of the 'Era's of the inputs.
