@@ -23,7 +23,7 @@
 module Data.Active.Time
     ( -- * Default concrete representations of time and duration
 
-      Time , time
+      Time, time
     , Duration, duration
 
       -- * Shifting things in time

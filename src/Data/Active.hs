@@ -20,9 +20,47 @@
 -----------------------------------------------------------------------------
 
 module Data.Active
-    ( -- * Active
+    ( -- * Time
 
-      Active
+      Time, time, Clock(..)
+    , Duration, duration, Waiting(..)
+    , Shifty(..)
+
+      -- * Endpoints
+    , EndpointType(..), Endpoint(..)
+
+      -- * Eras
+
+    , EraType(..), IsEraType(..), Era
+
+      -- ** Constructors
+    , emptyEra
+    , emptyFixedEra
+    , emptyFreeEra
+    , always
+    , mkEra
+    , mkEra'
+
+      -- ** Accessors
+
+    , eraIsEmpty
+    , eraContains
+
+      -- ** Operations
+
+    , eraIsect
+    , eraSeq
+    , reverseEra
+
+    , freeEra
+    , openREra
+    , openLEra
+    , closeREra
+    , closeLEra
+
+      -- * Active
+
+    , Active
 
       -- ** Constructors
 
@@ -65,10 +103,11 @@ module Data.Active
       -- ** Modification
 
     , backwards
-    , stretchFromStart, (*>>)
-    , stretchFromEnd, (<<*)
-    , clamp, clampBefore, clampAfter
-    , padActive, padBefore, padAfter
+    , stretchR, (*>>)
+    , stretchL, (<<*)
+    , syncTo, syncAs
+    , clamp, clampL, clampR
+    , padActive, padL, padR
 
       -- ** Discretization
 
@@ -473,40 +512,52 @@ backwards (Active er@(Era (Finite s) (Finite e)) f) = Active (reverseEra er) f'
   where
     f' t = f (e .+^ (s .-. t))
 
+-- | Operator synonym for 'stretchR'.
 (*>>) :: (IsFinite l, Clock t) => Active f l r t a -> Rational -> Active f l r t a
-(*>>) = flip stretchFromStart
+(*>>) = flip stretchR
 
-stretchFromStart :: (IsFinite l, Clock t) => Rational -> Active f l r t a -> Active f l r t a
-stretchFromStart 0 _ = error "stretchFromStart by 0"  -- XXX ?
-stretchFromStart _ a@(Active EmptyEra _) = a
-stretchFromStart k (Active e@(Era (Finite s) Infinity) f)
-  = Active e (stretchFunFromStart s k f)
-stretchFromStart k (Active (Era (Finite s) (Finite e)) f)
-  = Active (Era (Finite s) (Finite e')) (stretchFunFromStart s k f)
+-- | Stretch the era of an @Active@ value by the given factor \"to the
+--   right\", /i.e./ keeping its left endpoint fixed.
+stretchR :: (IsFinite l, Clock t) => Rational -> Active f l r t a -> Active f l r t a
+stretchR 0 _ = error "stretchR by 0"  -- XXX ?
+stretchR _ a@(Active EmptyEra _) = a
+stretchR k (Active e@(Era (Finite s) Infinity) f)
+  = Active e (stretchFunR s k f)
+stretchR k (Active (Era (Finite s) (Finite e)) f)
+  = Active (Era (Finite s) (Finite e')) (stretchFunR s k f)
   where
     e' = s .+^ (fromRational k *^ (e .-. s))
 
-stretchFunFromStart :: (Clock t) => t -> Rational -> (t -> a) -> t -> a
-stretchFunFromStart s k f t = f (s .+^ ((t .-. s) ^/ fromRational k))
+stretchFunR :: (Clock t) => t -> Rational -> (t -> a) -> t -> a
+stretchFunR s k f t = f (s .+^ ((t .-. s) ^/ fromRational k))
 
+-- | Operator synonym for 'stretchL'.
 (<<*) :: (IsFinite r, Clock t) => Rational -> Active f l r t a -> Active f l r t a
-(<<*) = stretchFromEnd
+(<<*) = stretchL
 
-stretchFromEnd :: (IsFinite r, Clock t) => Rational -> Active f l r t a -> Active f l r t a
-stretchFromEnd 0 _ = error "stretchFromEnd by 0" -- XXX ?
-stretchFromEnd _ a@(Active EmptyEra _) = a
-stretchFromEnd k (Active er@(Era Infinity (Finite e)) f)
-  = Active er (stretchFunFromEnd e k f)
-stretchFromEnd k (Active (Era (Finite s) (Finite e)) f)
-  = Active (Era (Finite s') (Finite e)) (stretchFunFromEnd e k f)
+-- | Stretch the era of an @Active@ value by the given factor \"to the
+--   left\", /i.e./ keeping its right endpoint fixed.
+stretchL :: (IsFinite r, Clock t) => Rational -> Active f l r t a -> Active f l r t a
+stretchL 0 _ = error "stretchL by 0" -- XXX ?
+stretchL _ a@(Active EmptyEra _) = a
+stretchL k (Active er@(Era Infinity (Finite e)) f)
+  = Active er (stretchFunL e k f)
+stretchL k (Active (Era (Finite s) (Finite e)) f)
+  = Active (Era (Finite s') (Finite e)) (stretchFunL e k f)
   where
     s' = e .-^ (fromRational k *^ (e .-. s))
 
-stretchFunFromEnd :: (Clock t) => t -> Rational -> (t -> a) -> t -> a
-stretchFunFromEnd e k f t = f (e .-^ ((e .-. t) ^/ fromRational k))
+stretchFunL :: (Clock t) => t -> Rational -> (t -> a) -> t -> a
+stretchFunL e k f t = f (e .-^ ((e .-. t) ^/ fromRational k))
 
 -- stretchTo
 -- stretchAs
+
+syncTo :: Era f l r t -> Active f l r t a -> Active f l r t a
+syncTo = undefined
+
+syncAs :: Active f l r t a -> Active f l r t a -> Active f l r t a
+syncAs = undefined
 
 -- | Take a \"snapshot\", /i.e./ sample an @Active@ at a single point
 --   in time and make an infinite @Active@ which is constantly the sampled value.
@@ -523,11 +574,11 @@ clamp (Active (Era (Finite s) (Finite e)) f)
                                                 -- with Clock or
                                                 -- Deadline?
 
-clampBefore :: Active f C r t a -> Active f I r t a
-clampBefore = undefined
+clampL :: Active f C r t a -> Active f I r t a
+clampL = undefined
 
-clampAfter :: Active f l C t a -> Active f l I t a
-clampAfter = undefined
+clampR :: Active f l C t a -> Active f l I t a
+clampR = undefined
 
 -- clampTo
 -- clampAs
@@ -535,11 +586,11 @@ clampAfter = undefined
 padActive :: a -> Active f C C t a -> Active f I I t a
 padActive = undefined
 
-padBefore :: a -> Active f C r t a -> Active f I r t a
-padBefore = undefined
+padL :: a -> Active f C r t a -> Active f I r t a
+padL = undefined
 
-padAfter :: a -> Active f l C t a -> Active f l I t a
-padAfter = undefined
+padR :: a -> Active f l C t a -> Active f l I t a
+padR = undefined
 
 -- padTo
 -- padAs
