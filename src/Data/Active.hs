@@ -643,3 +643,10 @@ simulate rate (Active (Era (Finite s) (Finite e)) f)
     s', e' :: Rational
     s' = fromTime s
     e' = fromTime e
+
+-- More API ideas
+--
+--   * get the value at the start or end of a finite fixed
+--   * like clamp but extend a certain amount of time
+--   * trimTo, which takes something like (1...3)
+--     Probably don't need all these functions which take Eras--- just use Active ().
