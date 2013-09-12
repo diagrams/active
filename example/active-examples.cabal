@@ -1,0 +1,8 @@
+name:                active-examples
+version:             0.1.0.0
+category:            Graphics
+build-type:          Simple
+cabal-version:       >=1.8
+
+library
+  build-depends:       base, active, diagrams-cairo, diagrams-lib, lens
