@@ -2,6 +2,9 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 
 import           Control.Applicative
+import           Control.Lens                   ((^.))
+import           Data.Active.Endpoint
+import           Data.Active.Era
 import           Data.Maybe
 import           Diagrams.Backend.Cairo.CmdLine
 import           Diagrams.Prelude
@@ -37,11 +40,22 @@ triColumn = ( (\d -> d <> case lookupName "theTri" d of
 ($>) :: Functor f => f b -> a -> f a
 ($>) = flip (<$)
 
+-- To implement this in terms of eraR and atTime we need Fixed.  But
+-- actually this type is valid for Free as well; in that case we just
+-- can't expose the internals of the implementation.
+atR :: (Monoid a, Ord t) => Active Fixed l C t a -> a
+atR a = fromMaybe mempty $ eraR (a ^. era) >>= atTime a
+
+eraR :: IsFinite r => Era Fixed l r t -> Maybe t
+eraR EmptyEra             = Nothing
+eraR (Era _ (Finite end)) = Just end
+
+scene1 :: Active 'Free 'C 'C Time (Diagram Cairo R2)
 scene1
   = movie
     [ dur 1 $> (theTri # translate (r2 (1,1)))
-    , ufree triColumn
-    , ufree $ snd <$> ((0...1) `pairA` fromJust (snapshot 9 triColumn))
+    , ufree triColumn *>> (1/2)
+    , dur 1 $> atR triColumn
     ]
 
 main :: IO ()
