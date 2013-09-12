@@ -73,7 +73,7 @@ module Data.Active
 
       -- ** Accessors
 
-    , era, activeFun, runActive
+    , era, atTime, uatTime
 
       -- * Active operations
 
@@ -122,7 +122,8 @@ module Data.Active
 
 import           Control.Applicative  (Applicative (..), (<$>), (<*>))
 import           Control.Lens         (Lens', generateSignatures, lensRules,
-                                       makeLensesWith, view, (%~), (&), (.~))
+                                       makeLensesWith, view, (%~), (&), (.~),
+                                       (^.))
 import           Control.Monad        (ap, (>=>))
 import           Data.AffineSpace     (Diff, (.+^), (.-.), (.-^))
 import           Data.Array           (listArray, (!))
@@ -468,11 +469,17 @@ anchorR t (Active (Era s (Finite e)) f)
 -- Derived API
 ------------------------------------------------------------
 
--- | \"Run\" a fixed @Active@ value, turning it into a function from
---   time.  Note that the function is only guaranteed to be defined on
---   the @Active@'s 'Era'.
-runActive :: Active Fixed l r t a -> t -> a
-runActive = view activeFun
+-- | \"Run\" a fixed @Active@ value, turning it into a partial
+--   function from time.
+atTime :: Ord t => Active Fixed l r t a -> t -> Maybe a
+atTime a t
+  | (a ^. era) `eraContains` t = Just $ (a ^. activeFun) t
+  | otherwise                  = Nothing
+
+-- | An \"unsafe\" variant of 'atTime' which does not check whether
+--   the input time value lies within the era.
+uatTime :: Active Fixed l r t a -> t -> a
+uatTime = view activeFun
 
 -- | Create a finite @Active@ with the constant value @()@.
 interval :: (Ord t, IsEraType f, EraConstraints f C C) => t -> t -> Active f C C t ()
