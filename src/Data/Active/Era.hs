@@ -42,6 +42,7 @@ module Data.Active.Era
 
     , eraIsEmpty
     , eraContains
+    , eraR, eraL
 
       -- ** Operations
 
@@ -255,6 +256,18 @@ eraContains (Era s e) t = endpt s (<=) && endpt e (>=)
     endpt :: forall e. Endpoint e t -> (t -> t -> Bool) -> Bool
     endpt Infinity _     = True
     endpt (Finite p) cmp = p `cmp` t
+
+-- | Get the right endpoint of a fixed era, or @Nothing@ if it is the
+--   empty era.
+eraR :: IsFinite r => Era Fixed l r t -> Maybe t
+eraR EmptyEra             = Nothing
+eraR (Era _ (Finite end)) = Just end
+
+-- | Get the left endpoint of a fixed era, or @Nothing@ if it is the
+--   empty era.
+eraL :: IsFinite l => Era Fixed l r t -> Maybe t
+eraL EmptyEra               = Nothing
+eraL (Era (Finite start) _) = Just start
 
 -- | Create an 'Era' by specifying its endpoints.
 mkEra' :: (IsEraType f, EraConstraints f l r, Ord t) => Endpoint l t -> Endpoint r t -> Era f l r t

@@ -4,7 +4,6 @@
 import           Control.Applicative
 import           Control.Lens                   ((^.))
 import           Data.Active.Endpoint
-import           Data.Active.Era
 import           Data.Maybe
 import           Diagrams.Backend.Cairo.CmdLine
 import           Diagrams.Prelude
@@ -45,10 +44,6 @@ triColumn = ( (\d -> d <> case lookupName "theTri" d of
 -- can't expose the internals of the implementation.
 atR :: (Monoid a, Ord t) => Active Fixed l C t a -> a
 atR a = fromMaybe mempty $ eraR (a ^. era) >>= atTime a
-
-eraR :: IsFinite r => Era Fixed l r t -> Maybe t
-eraR EmptyEra             = Nothing
-eraR (Era _ (Finite end)) = Just end
 
 scene1 :: Active 'Free 'C 'C Time (Diagram Cairo R2)
 scene1

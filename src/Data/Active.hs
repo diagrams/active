@@ -45,6 +45,7 @@ module Data.Active
 
     , eraIsEmpty
     , eraContains
+    , eraR, eraL
 
       -- ** Operations
 
