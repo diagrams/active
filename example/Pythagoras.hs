@@ -1,8 +1,10 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DataKinds                 #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 
 import           Diagrams.Backend.Cairo.CmdLine
 import           Diagrams.Prelude
+import Data.Active.Time
 
 theTri :: Diagram Cairo R2
 theTri
@@ -17,8 +19,26 @@ theTri
     # lineJoin LineJoinRound
     # named "theTri"
 
+accumulate :: (Deadline C O t a, Ord t, Monoid' a) => [Active Free O C t a] -> Active Free O C t a
+accumulate = go mempty
+  where
+    go _ []     = emptyActive
+    go m (a:as) = fmap (m <>) a <<>> go (m <> atRm a) as
+
+sigma :: Active Free C C Time Double
+sigma = (\t -> (1 - cos (pi * t)) / 2) <$> durValued (dur 1)
+
+swoopY :: Active Free C C Time T2
+swoopY = translationY <$> (sigma *>> 2 # scale 3)
+
+ts :: Active 'Free 'C 'C Time T2
+ts = closeL mempty $ accumulate (replicate 3 (uopenL swoopY))
+
+-- movingTri :: Animation Cairo R2
+-- movingTri = translateY <$> durValued (dur 9) <*~> theTri
+
 movingTri :: Animation Cairo R2
-movingTri = translateY <$> durValued (dur 9) <*~> theTri
+movingTri = transform <$> ts <*~> theTri
 
 canvas :: Diagram Cairo R2
 canvas = square 15 # fc white # alignBL
@@ -30,7 +50,7 @@ triColumn
   #  translate (r2 (1,1))
   where
     copies s = cat' unitY with {sep=1}
-             $ replicate (floor (snd (unp2 (location s)) / 3) + 1) theTri
+             $ replicate (floor (snd (unp2 (location s)) / 3) + 1) (theTri # fc green)
 
 scene1 :: Animation Cairo R2
 scene1
