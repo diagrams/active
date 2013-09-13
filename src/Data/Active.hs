@@ -68,7 +68,7 @@ module Data.Active
     , emptyActive, pureA
     , interval, mkActive, (...), (..$)
     , timeValued, ui
-    , dur
+    , dur, durValued
     , snapshot
     , discrete
 
@@ -544,6 +544,12 @@ dur d = fromJust . free $ interval 0 t'
   where
     t' | (0 :: t) .+^ d >= 0  = 0 .+^ d
        | otherwise            = 0 .-^ d
+
+-- | Make an @Active@ which takes on the value @d@ at duration @d@
+--   after the start of its era.
+durValued :: (Clock t, IsFinite l) => Active f l r t a -> Active f l r t (Diff t)
+durValued (Active EmptyEra f)                  = Active EmptyEra (\t -> t .-. t)
+durValued (Active er@(Era (Finite start) _) _) = Active er (\t -> t .-. start)
 
 -- | Flip around a finite 'Active' value so it runs backwards, with
 --   the value at the start time mapped to the end time and vice versa.
