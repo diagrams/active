@@ -21,7 +21,8 @@ library
   exposed-modules:     Data.Active,
                        Data.Active.Endpoint,
                        Data.Active.Era,
-                       Data.Active.Time
+                       Data.Active.Time,
+                       Data.Active.Util
   build-depends:       base >= 4.0 && < 4.8,
                        array >= 0.3 && < 0.5,
                        containers >= 0.5 && < 0.6,

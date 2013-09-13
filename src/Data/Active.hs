@@ -119,6 +119,10 @@ module Data.Active
 
     , Active'(..), withActive, onActive'
 
+      -- * Utilities
+
+    , (<#>), ($>), (<*~>)
+
     )
     where
 
@@ -137,6 +141,7 @@ import           Data.VectorSpace     ((*^), (^/))
 import           Data.Active.Endpoint
 import           Data.Active.Era
 import           Data.Active.Time
+import           Data.Active.Util
 
 ------------------------------------------------------------
 -- Active

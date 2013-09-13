@@ -1,9 +1,6 @@
 {-# LANGUAGE DataKinds                 #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 
-import           Control.Applicative
-import           Control.Lens                   ((^.))
-import           Data.Maybe
 import           Diagrams.Backend.Cairo.CmdLine
 import           Diagrams.Prelude
 
@@ -20,16 +17,6 @@ theTri
     # lineJoin LineJoinRound
     # named "theTri"
 
-infixl 8 <#>
-
-(<#>) :: Functor f => f a -> (a -> b) -> f b
-(<#>) = flip fmap
-
-infixl 4 <*~>
-
-(<*~>) :: Functor f => f (a -> b) -> a -> f b
-f <*~> a = fmap ($a) f
-
 movingTri :: Animation Cairo R2
 movingTri = translateY <$> durValued (dur 9) <*~> theTri
 
@@ -44,11 +31,6 @@ triColumn
   where
     copies s = cat' unitY with {sep=1}
              $ replicate (floor (snd (unp2 (location s)) / 3) + 1) theTri
-
-infixr 4 $>
-
-($>) :: Functor f => f b -> a -> f a
-($>) = flip (<$)
 
 scene1 :: Animation Cairo R2
 scene1
