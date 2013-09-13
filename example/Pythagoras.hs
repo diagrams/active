@@ -1,10 +1,33 @@
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DataKinds                 #-}
+{-# LANGUAGE FlexibleContexts          #-}
+{-# LANGUAGE MultiParamTypeClasses     #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 
+import           Control.Newtype
+import           Data.Active.Time
+import qualified Data.Map                       as M
+import           Data.Maybe                     (fromJust)
 import           Diagrams.Backend.Cairo.CmdLine
+import           Diagrams.Coordinates
 import           Diagrams.Prelude
-import Data.Active.Time
+
+keyframe :: ( OrderedField (Scalar v), HasLinearMap v, InnerSpace v
+              , Semigroup m )
+           => QDiagram b v m -> QDiagram b v m -> QAnimation b v m
+keyframe d1 d2 = f <$> durValued (dur 1)
+  where
+    pairs = concat . map strength . M.assocs
+          $ M.intersectionWith zip (unpack $ subMap d1) (unpack $ subMap d2)
+    strength (a,fb) = fmap ((,) a) fb
+    f t = mconcat
+        . map (\(_,(x1,x2)) ->
+                getSub x1
+                # translate
+                  ( lerp zeroV (location x2 .-. location x1)
+                    (fromJust $ sigma `atTime` t)
+                  )
+              )
+        $ pairs
 
 theTri :: Diagram Cairo R2
 theTri
@@ -25,20 +48,17 @@ accumulate = go mempty
     go _ []     = emptyActive
     go m (a:as) = fmap (m <>) a <<>> go (m <> atRm a) as
 
-sigma :: Active Free C C Time Double
-sigma = (\t -> (1 - cos (pi * t)) / 2) <$> durValued (dur 1)
-
 swoopY :: Active Free C C Time T2
-swoopY = translationY <$> (sigma *>> 2 # scale 3)
+swoopY = translationY <$> ((sigma *>> 2) # scale 3)
 
-ts :: Active 'Free 'C 'C Time T2
+ts :: Active Free C C Time T2
 ts = closeL mempty $ accumulate (replicate 3 (uopenL swoopY))
-
--- movingTri :: Animation Cairo R2
--- movingTri = translateY <$> durValued (dur 9) <*~> theTri
 
 movingTri :: Animation Cairo R2
 movingTri = transform <$> ts <*~> theTri
+
+fadeIn :: Duration -> Diagram Cairo R2 -> Animation Cairo R2
+fadeIn d dia = opacity <$> sigma *>> fromDuration d <*~> dia
 
 canvas :: Diagram Cairo R2
 canvas = square 15 # fc white # alignBL
@@ -49,16 +69,29 @@ triColumn
  <#> (atop <*> maybe mempty copies . lookupName "theTri")
   #  translate (r2 (1,1))
   where
-    copies s = cat' unitY with {sep=1}
-             $ replicate (floor (snd (unp2 (location s)) / 3) + 1) (theTri # fc green)
+    copies s
+      = theTri
+      # fc green
+      # replicate (floor (snd (unp2 (location s)) / 3) + 1)
+      # zipWith named [0::Int ..]
+      # cat' unitY with {sep=1}
+
+square1
+  = theTri
+  # iterateN 4 (rotateAbout (3.5 & 3.5) (1/4 :: Turn))
+  # zipWith named [0::Int ..]
+  # mconcat
 
 scene1 :: Animation Cairo R2
 scene1
   = movie
-    [ dur 1                  $> (theTri # translate (r2 (1,1)))
+    [ dur 1                  $> theTri # translate (1 & 1)
     , triColumn *>> (1/2)
     , dur 1                  $> atRm triColumn
     ]
 
+move1 = keyframe (atRm triColumn) square1 *>> 4
+
 main :: IO ()
-main = animMain ((<>) <$> scene1 <*~> canvas)
+-- main = defaultMain square1
+main = animMain ((<>) <$> move1 <*~> canvas)
