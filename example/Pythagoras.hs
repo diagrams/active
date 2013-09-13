@@ -3,7 +3,6 @@
 
 import           Control.Applicative
 import           Control.Lens                   ((^.))
-import           Data.Active.Endpoint
 import           Data.Maybe
 import           Diagrams.Backend.Cairo.CmdLine
 import           Diagrams.Prelude
@@ -17,7 +16,8 @@ theTri
     # closeTrail
     # (onLine . onLineSegments) (\[a,b,c] -> [b,c,a])
     # strokeTrail
-    # fc blue
+    # lw 0.05
+    # lineJoin LineJoinRound
     # named "theTri"
 
 movingTri :: Active Fixed C C Time (Diagram Cairo R2)
@@ -39,18 +39,12 @@ triColumn = ( (\d -> d <> case lookupName "theTri" d of
 ($>) :: Functor f => f b -> a -> f a
 ($>) = flip (<$)
 
--- To implement this in terms of eraR and atTime we need Fixed.  But
--- actually this type is valid for Free as well; in that case we just
--- can't expose the internals of the implementation.
-atR :: (Monoid a, Ord t) => Active Fixed l C t a -> a
-atR a = fromMaybe mempty $ eraR (a ^. era) >>= atTime a
-
 scene1 :: Active 'Free 'C 'C Time (Diagram Cairo R2)
 scene1
   = movie
     [ dur 1 $> (theTri # translate (r2 (1,1)))
     , ufree triColumn *>> (1/2)
-    , dur 1 $> atR triColumn
+    , dur 1 $> atRm triColumn
     ]
 
 main :: IO ()

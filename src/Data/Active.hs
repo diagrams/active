@@ -75,6 +75,7 @@ module Data.Active
       -- ** Accessors
 
     , era, atTime, uatTime
+    , atR, atRm, atL, atLm
 
       -- * Active operations
 
@@ -128,7 +129,7 @@ import           Control.Lens         (Lens', generateSignatures, lensRules,
 import           Control.Monad        (ap, (>=>))
 import           Data.AffineSpace     (Diff, (.+^), (.-.), (.-^))
 import           Data.Array           (listArray, (!))
-import           Data.Maybe           (fromJust)
+import           Data.Maybe           (fromJust, fromMaybe)
 import           Data.Proxy           (Proxy (..))
 import           Data.Semigroup       (Monoid (..), Semigroup (..))
 import           Data.VectorSpace     ((*^), (^/))
@@ -481,6 +482,39 @@ atTime a t
 --   the input time value lies within the era.
 uatTime :: Active Fixed l r t a -> t -> a
 uatTime = view activeFun
+
+-- | Get the value at the right end of a closed @Active@, or @Nothing@
+--   if it is empty.
+atR :: Ord t => Active f l C t a -> Maybe a
+atR (Active EmptyEra _)             = Nothing
+atR (Active (Era _ (Finite end)) f) = Just $ f end
+
+-- Note, we could implement atR (and similarly atL) in terms of eraR
+-- and atTime as
+--
+--   atR a = eraR (a ^. era) >>= atTime a
+--
+-- but then the era type would be restricted to only Fixed.  It is
+-- safe to provide atR for either era type, but eraR and atTime are
+-- only safe for Fixed.
+
+-- | Get the value at the right end of a closed @Active@, converting
+--   to 'mempty' if the @Active@ is empty.  This is provided for
+--   convenience and is equivalent to @fromMaybe mempty . atR@.
+atRm :: (Monoid a, Ord t) => Active f l C t a -> a
+atRm = fromMaybe mempty . atR
+
+-- | Get the value at the left end of a closed @Active@, or @Nothing@
+--   if it is empty.
+atL :: Ord t => Active f C r t a -> Maybe a
+atL (Active EmptyEra _) = Nothing
+atL (Active (Era (Finite start) _) f) = Just $ f start
+
+-- | Get the value at the left end of a closed @Active@, converting to
+--   'mempty' if the @Active@ is empty.  This is provided for
+--   convenience and is equivalent to @fromMaybe mempty . atL@.
+atLm :: (Monoid a, Ord t) => Active f C r t a -> a
+atLm = fromMaybe mempty . atL
 
 -- | Create a finite @Active@ with the constant value @()@.
 interval :: (Ord t, IsEraType f, EraConstraints f C C) => t -> t -> Active f C C t ()
