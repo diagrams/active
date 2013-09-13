@@ -20,13 +20,21 @@ theTri
     # lineJoin LineJoinRound
     # named "theTri"
 
-movingTri :: Active Fixed C C Time (Diagram Cairo R2)
-movingTri = translateY <$> (fromTime <$> timeValued (0 ... 9)) `appA` pureA theTri
+(<#>) :: Functor f => f a -> (a -> b) -> f b
+(<#>) = flip fmap
+
+infixl 4 <*~>
+
+(<*~>) :: Functor f => f (a -> b) -> a -> f b
+f <*~> a = fmap ($a) f
+
+movingTri :: Animation Cairo R2
+movingTri = (translateY . fromDuration) <$> durValued (dur 9) <*~> theTri
 
 canvas :: Diagram Cairo R2
 canvas = square 15 # fc white # alignBL
 
-triColumn :: Active Fixed C C Time (Diagram Cairo R2)
+triColumn :: Animation Cairo R2
 triColumn = ( (\d -> d <> case lookupName "theTri" d of
                             Just s  -> cat' unitY with {sep=1}
                                       $ replicate (floor (snd (unp2 (location s)) / 3) + 1) theTri
@@ -39,11 +47,11 @@ triColumn = ( (\d -> d <> case lookupName "theTri" d of
 ($>) :: Functor f => f b -> a -> f a
 ($>) = flip (<$)
 
-scene1 :: Active 'Free 'C 'C Time (Diagram Cairo R2)
+scene1 :: Animation Cairo R2
 scene1
   = movie
     [ dur 1 $> (theTri # translate (r2 (1,1)))
-    , ufree triColumn *>> (1/2)
+    , triColumn *>> (1/2)
     , dur 1 $> atRm triColumn
     ]
 
