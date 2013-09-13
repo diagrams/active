@@ -123,6 +123,10 @@ module Data.Active
 
     , (<#>), ($>), (<*~>)
 
+      -- * Other combinators
+
+    , sigma
+
     )
     where
 
@@ -716,3 +720,10 @@ simulate rate (Active (Era (Finite s) (Finite e)) f)
 --   * like clamp but extend a certain amount of time
 --   * trimTo, which takes something like (1...3)
 --     Probably don't need all these functions which take Eras--- just use Active ().
+
+-- XXX document me
+sigma :: (IsEraType f, EraConstraints f C C, Floating t) => Active f C C Time t
+sigma = (\t -> (1 - cos (pi * t)) / 2) <$> durValued (dur 1)
+
+
+-- XXX this module needs to be split up further
