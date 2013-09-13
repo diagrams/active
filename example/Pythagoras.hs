@@ -20,6 +20,8 @@ theTri
     # lineJoin LineJoinRound
     # named "theTri"
 
+infixl 8 <#>
+
 (<#>) :: Functor f => f a -> (a -> b) -> f b
 (<#>) = flip fmap
 
@@ -35,14 +37,15 @@ canvas :: Diagram Cairo R2
 canvas = square 15 # fc white # alignBL
 
 triColumn :: Animation Cairo R2
-triColumn = ( (\d -> d <> case lookupName "theTri" d of
-                            Just s  -> cat' unitY with {sep=1}
-                                      $ replicate (floor (snd (unp2 (location s)) / 3) + 1) theTri
-                            Nothing -> mempty
-              )
-              <$> movingTri
-            )
-            # translate (r2 (1,1))
+triColumn
+  = movingTri
+ <#> (atop <*> maybe mempty copies . lookupName "theTri")
+  #  translate (r2 (1,1))
+  where
+    copies s = cat' unitY with {sep=1}
+             $ replicate (floor (snd (unp2 (location s)) / 3) + 1) theTri
+
+infixr 4 $>
 
 ($>) :: Functor f => f b -> a -> f a
 ($>) = flip (<$)
@@ -50,10 +53,10 @@ triColumn = ( (\d -> d <> case lookupName "theTri" d of
 scene1 :: Animation Cairo R2
 scene1
   = movie
-    [ dur 1 $> (theTri # translate (r2 (1,1)))
+    [ dur 1                  $> (theTri # translate (r2 (1,1)))
     , triColumn *>> (1/2)
-    , dur 1 $> atRm triColumn
+    , dur 1                  $> atRm triColumn
     ]
 
 main :: IO ()
-main = animMain ((<>canvas) <$> scene1)
+main = animMain ((<>) <$> scene1 <*~> canvas)
