@@ -31,7 +31,7 @@ infixl 4 <*~>
 f <*~> a = fmap ($a) f
 
 movingTri :: Animation Cairo R2
-movingTri = (translateY . fromDuration) <$> durValued (dur 9) <*~> theTri
+movingTri = translateY <$> durValued (dur 9) <*~> theTri
 
 canvas :: Diagram Cairo R2
 canvas = square 15 # fc white # alignBL

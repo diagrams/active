@@ -526,15 +526,17 @@ interval s e = Active (mkEra s e) (const ())
 
 -- | An @Active@ defined on the unit interval [0,1], taking on the
 --   value @t@ at time @t@.  Equivalent to @'timeValued' (0 ... 1)@.
-ui :: (Num t, Ord t) => Active Fixed C C t t
+ui :: (Clock t, Num t, Ord t, FractionalOf t x) => Active Fixed C C t x
 ui = timeValued (0 ... 1)
 
 -- | Make an @Active@ which takes on the value @t@ at time @t@.  For
 --   example, @timeValued (3 ... 5)@ creates a duration-2 @Active@,
 --   starting at time 3 and ending at time 5, which takes on values
 --   from 3 to 5 over the course of the interval.
-timeValued :: Active Fixed l r t a -> Active Fixed l r t t
-timeValued = mapT const
+timeValued
+  :: (Clock t, FractionalOf t x)
+  => Active Fixed l r t a -> Active Fixed l r t x
+timeValued = mapT (\t _ -> fromTime t)
 
 -- | Create a free @Active@ of the given duration, taking on the
 --   constant value @()@.  Note that the absolute value of the given
@@ -547,9 +549,13 @@ dur d = fromJust . free $ interval 0 t'
 
 -- | Make an @Active@ which takes on the value @d@ at duration @d@
 --   after the start of its era.
-durValued :: (Clock t, IsFinite l) => Active f l r t a -> Active f l r t (Diff t)
-durValued (Active EmptyEra f)                  = Active EmptyEra (\t -> t .-. t)
-durValued (Active er@(Era (Finite start) _) _) = Active er (\t -> t .-. start)
+durValued
+  :: (Clock t, IsFinite l, FractionalOf (Diff t) d)
+  => Active f l r t a -> Active f l r t d
+durValued (Active EmptyEra f)
+  = Active EmptyEra (\t -> fromDuration (t .-. t))
+durValued (Active er@(Era (Finite start) _) _)
+  = Active er (\t -> fromDuration (t .-. start))
 
 -- | Flip around a finite 'Active' value so it runs backwards, with
 --   the value at the start time mapped to the end time and vice versa.
@@ -671,9 +677,9 @@ discrete [] = error "Data.Active.discrete must be called with a non-empty list."
 discrete xs = f <$> ui
   where
     f t
-      | toFractionalOf t <= (0 :: Rational) = arr ! 0
-      | toFractionalOf t >= (1 :: Rational) = arr ! (n-1)
-      | otherwise = arr ! floor (toFractionalOf t * fromIntegral n :: Rational)
+      | t <= (0 :: Rational) = arr ! 0
+      | t >= (1 :: Rational) = arr ! (n-1)
+      | otherwise = arr ! floor (t * fromIntegral n :: Rational)
     n   = length xs
     arr = listArray (0, n-1) xs
 
