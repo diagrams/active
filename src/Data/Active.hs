@@ -543,11 +543,14 @@ timeValued
   => Active Fixed l r t a -> Active Fixed l r t x
 timeValued = mapT (\t _ -> fromTime t)
 
--- | Create a free @Active@ of the given duration, taking on the
---   constant value @()@.  Note that the absolute value of the given
---   duration is used.
-dur :: forall t. (Clock t, Ord t, Num t) => Diff t -> Active Free C C t ()
-dur d = fromJust . free $ interval 0 t'
+-- | Create an @Active@ of the given duration, taking on the constant
+--   value @()@.  Note that the absolute value of the given duration
+--   is used.  If the return type is a 'Fixed' active, it will
+--   construct an active beginning at time 0.
+dur
+  :: forall f t. (IsEraType f, EraConstraints f C C, Clock t, Ord t, Num t)
+  => Diff t -> Active f C C t ()
+dur d = interval 0 t'
   where
     t' | (0 :: t) .+^ d >= 0  = 0 .+^ d
        | otherwise            = 0 .-^ d
