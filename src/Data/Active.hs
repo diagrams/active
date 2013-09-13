@@ -571,6 +571,8 @@ backwards (Active er@(Era (Finite s) (Finite e)) f) = Active (reverseEra er) f'
   where
     f' t = f (e .+^ (s .-. t))
 
+infixl 7 *>>
+
 -- | Operator synonym for 'stretchR'.
 (*>>) :: (IsFinite l, Clock t) => Active f l r t a -> Rational -> Active f l r t a
 (*>>) = flip stretchR
@@ -589,6 +591,8 @@ stretchR k (Active (Era (Finite s) (Finite e)) f)
 
 stretchFunR :: (Clock t) => t -> Rational -> (t -> a) -> t -> a
 stretchFunR s k f t = f (s .+^ ((t .-. s) ^/ fromRational k))
+
+infixr 7 <<*
 
 -- | Operator synonym for 'stretchL'.
 (<<*) :: (IsFinite r, Clock t) => Rational -> Active f l r t a -> Active f l r t a
