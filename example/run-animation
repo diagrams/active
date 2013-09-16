@@ -1,0 +1,12 @@
+#!/bin/zsh
+
+BASE=$1:r
+mkdir -p anim
+rm -f anim/*
+ghc --make -fforce-recomp -O2 $BASE -o $BASE && 
+  ./$BASE -o anim/$BASE.png -w 800 -h 800 &&
+  cd anim &&
+  FILE=`ls | head -n 1`
+  N=$(( `echo $FILE | grep -o '[[:digit:]]*' | wc -c` - 1 ))
+  ffmpeg -r 30 -i "${BASE}%0${N}d.png" anim.mp4 &&
+  mplayer -loop 0 anim.mp4
