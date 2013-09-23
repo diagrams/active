@@ -22,7 +22,13 @@ Shake
 *.bbl
 *.blg
 *.cut
+*.nav
+*.out
+*.snm
+*.toc
+*.vrb
 ActiveDiagrams
 semantics/diagrams/*
 semantics/FARM/diagrams/*
 example/anim/*
+pubs/FARM13/diagrams/*
