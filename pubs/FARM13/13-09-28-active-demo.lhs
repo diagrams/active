@@ -178,15 +178,25 @@
 
 \begin{frame}[fragile]{Time-varying values}
 
-\begin{diagram}[width=400]
+\begin{diagram}[width=300]
 import ActiveDiagrams
 
-dia = timeline (-10) 10
+dia
+  = mconcat
+    [ wiggle (closedEP (-3)) (closedEP 6)
+    , timeline (-10) 10
+    ]
+    # centerXY # pad 1.1
 \end{diagram}
 
-  \[ |(t, t -> a, t)| \]
+  \[ t \times (t \to a) \times t \]
 
-  % XXX cite "beginning, middle, and end"
+  \begin{center}
+    {{\scriptsize Matlage, Kevin, and Andy Gill. \textit{Every
+          Animation Should Have a Beginning, a Middle, and an
+          End}. TFP, 2011, pp. 150-165.}}
+  \end{center}
+
 \end{frame}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -200,11 +210,13 @@ dia = timeline (-10) 10
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \begin{frame}[fragile]{Operations?}
-\begin{diagram}[width=400]
+\begin{center}
+\begin{diagram}[width=300]
 import ActiveDiagrams
 
-dia = timeline (-10) 10 <> wiggle (-3) 6
+dia = timeline (-10) 10 <> wiggle (openEP (-3)) (closedEP 6)
 \end{diagram}
+\end{center}
 
   % XXX sequential composition picture
 
