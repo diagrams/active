@@ -176,8 +176,13 @@
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-\begin{frame}{Time-varying values}
-  % XXX picture
+\begin{frame}[fragile]{Time-varying values}
+
+\begin{diagram}[width=400]
+import ActiveDiagrams
+
+dia = timeline (-10) 10
+\end{diagram}
 
   \[ |(t, t -> a, t)| \]
 
@@ -194,8 +199,12 @@
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-\begin{frame}{Operations?}
-  % XXX parallel composition picture
+\begin{frame}[fragile]{Operations?}
+\begin{diagram}[width=400]
+import ActiveDiagrams
+
+dia = timeline (-10) 10 <> wiggle (-3) 6
+\end{diagram}
 
   % XXX sequential composition picture
 
