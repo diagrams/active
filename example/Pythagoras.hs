@@ -29,7 +29,10 @@ keyframe d1 d2 = f <$> durValued (dur 1)
               )
         $ pairs
 
-theTri :: Diagram Cairo R2
+type Anim = Animation Cairo R2
+type Dia = Diagram Cairo R2
+
+theTri :: Dia
 theTri
   = [ 2 *^ unit_Y
     , 5 *^ unitX
@@ -54,16 +57,16 @@ swoopY = translationY <$> ((sigma *>> 2) # scale 3)
 ts :: Active Free C C Time T2
 ts = closeL mempty $ accumulate (replicate 3 (uopenL swoopY))
 
-movingTri :: Animation Cairo R2
+movingTri :: Anim
 movingTri = transform <$> ts <*~> theTri
 
-fadeIn :: Duration -> Diagram Cairo R2 -> Animation Cairo R2
+fadeIn :: Duration -> Dia -> Anim
 fadeIn d dia = opacity <$> sigma *>> fromDuration d <*~> dia
 
-canvas :: Diagram Cairo R2
+canvas :: Dia
 canvas = square 15 # fc white # alignBL
 
-triColumn :: Animation Cairo R2
+triColumn :: Anim
 triColumn
   = movingTri
  <#> (atop <*> maybe mempty copies . lookupName "theTri")
@@ -82,7 +85,7 @@ square1
   # zipWith named [0::Int ..]
   # mconcat
 
-scene1 :: Animation Cairo R2
+scene1 :: Anim
 scene1
   = movie
     [ dur 1                  $> theTri # translate (1 & 1)
