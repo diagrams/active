@@ -51,6 +51,19 @@ closedEP x = EP x (circle 0.15 # fc black)
 noEP :: Double -> EP
 noEP x = EP x mempty
 
+theWiggle :: Dia
+theWiggle = theWiggle' 0
+
+theWiggle' :: Double -> Dia
+theWiggle' off
+  = mconcat
+    [ wiggle (closedEP (-3)) (closedEP 6) # translateX off
+    , timeline (-10) 10
+    ]
+
+plus :: Dia
+plus = (hrule 2 <> vrule 2) # lw 0.1
+
 ------------------------------------------------------------
 -- Old stuff
 

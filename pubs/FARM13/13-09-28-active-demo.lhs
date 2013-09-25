@@ -181,11 +181,7 @@
 \begin{diagram}[width=300]
 import ActiveDiagrams
 
-dia
-  = mconcat
-    [ wiggle (closedEP (-3)) (closedEP 6)
-    , timeline (-10) 10
-    ]
+dia = theWiggle
     # centerXY # pad 1.1
 \end{diagram}
 
@@ -209,24 +205,45 @@ dia
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-\begin{frame}[fragile]{Operations?}
+\begin{frame}[fragile]{Sequential composition}
 \begin{center}
 \begin{diagram}[width=300]
 import ActiveDiagrams
 
-dia = timeline (-10) 10 <> wiggle (openEP (-3)) (closedEP 6)
+dia
+  = hcat' with {sep = 1}
+    [ theWiggle
+    , plus
+    , theWiggle
+    ]
+    # centerXY # pad 1.1
 \end{diagram}
 \end{center}
+\end{frame}
 
-  % XXX sequential composition picture
+\begin{frame}[fragile]{Parallel composition}
+\begin{center}
+\begin{diagram}[height=200]
+import ActiveDiagrams
 
-  \onslide<2>
-  Semantics?
+dia
+  = vcat' with {sep = 1}
+    [ theWiggle' 1
+    , plus
+    , theWiggle' (-3)
+    ]
+    # centerXY # pad 1.1
+\end{diagram}
+\end{center}
 \end{frame}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-\begin{frame}
+\begin{frame}{}
+  \begin{center}
+    {\large Semantics?}
+  \end{center}
+  \onslide<2>
   \begin{center}
     \includegraphics[width=2in]{alice-rabbithole.jpg}
   \end{center}
