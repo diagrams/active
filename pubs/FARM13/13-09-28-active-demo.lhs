@@ -40,6 +40,13 @@
 %format parA = "\fun{parA}"
 %format seqA = "\fun{seqA}"
 
+%format `Isect` = "\cap"
+
+%format l1
+%format l2
+%format r1
+%format r2
+
 %format memptyL = "{\color{memptyC}{\mathit{mempty}}}"
 %format mappendL = "{\color{mappendC}{\mathit{mappend}}}"
 
@@ -158,12 +165,12 @@
 
 \renewcommand{\emph}{\textbf}
 
-\title{Functional Active Animation}
+\title{Functional Active Animation (Demo)}
 \date{FARM \\ Boston, Massachusetts, USA \\ September 28, 2013}
-\author{Brent Yorgey \inst{1} \and Andy Gill \inst{2}}
-\institute{\inst{1} University of Pennsylvania \and \inst{2}
-  University of Kansas}
-% \titlegraphic{\includegraphics[width=2in]{assoc}}
+\author{Brent Yorgey \and Andy Gill}
+% \institute{\inst{1} University of Pennsylvania \and \inst{2}
+%   University of Kansas}
+\titlegraphic{\includegraphics[width=2in]{wiggle}}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -251,56 +258,102 @@ dia
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-\begin{frame}{Generalizations}
+\begin{frame}[fragile]{Generalizations}
 
-Infinite endpoints
+\begin{itemize}
+\item<+-> Infinite endpoints
 
-% XXX picture
+% \begin{minipage}[c]{1.2\paperwidth}
+% \begin{diagram}[height=50]
+% dia = rect 10 3
+% \end{diagram}
+% \end{minipage}
+
+\item<+-> Open/closed endpoints  \hspace{0.25in}
+\begin{minipage}[c]{0.3\textwidth}
+\begin{diagram}[height=50]
+import ActiveDiagrams
+dia = mconcat
+    [ wiggle (closedEP (-3)) (openEP 6)
+    , timeline (-10) 10
+    ]
+    # centerXY # pad 1.1
+\end{diagram}
+\end{minipage}
+
+\item<+-> Sequential composition acts on \emph{equivalence classes}
+  under translation
+
+\begin{center}
+\begin{minipage}[c]{0.7\textwidth}
+\begin{center}
+\begin{diagram}[height=50]
+import ActiveDiagrams
+dia = hcat' with {sep = 1}
+    [ wig, plus, wig ]
+    # centerXY # pad 1.1
+  where
+    wig = wiggle (closedEP (-3)) (openEP 6)
+\end{diagram}
+\end{center}
+\end{minipage}
+\end{center}
+
+\end{itemize}
 \end{frame}
 
-\begin{frame}{Generalizations}
-
-  Open/closed endpoints
-
-% XXX picture
-\end{frame}
-
-\begin{frame}{Generalizations}
-
-  Sequential composition acts on \emph{equivalence classes} under translation
-
-% XXX picture
-
-\end{frame}
-
-\begin{frame}{Types}
+\begin{frame}[fragile]{Types}
   \[ |Active f l r t a| \]
   \begin{itemize}
-  \item |f|: |Fixed| or |Free|
-  \item |l, r|: |O|, |C|, or |I|nfinite
+  \item |f|: |Fixed|
+    \begin{minipage}[c]{0.16\textwidth}
+      \includegraphics[height=20px]{wiggle}
+      % \centering
+      % \begin{diagram}[height=50]
+      %   import ActiveDiagrams
+      %   dia = theWiggle # centerXY # pad 1.1
+      % \end{diagram}
+     \end{minipage}
+     or |Free|
+     \begin{minipage}[c]{0.16\textwidth}
+      \includegraphics[height=20px]{wigglefree}
+      % \centering
+      % \begin{diagram}[height=50]
+      %   import ActiveDiagrams
+      %   dia = theWiggle # centerXY # pad 1.1
+      % \end{diagram}
+     \end{minipage}
+  \item |l, r|: |O|pen, |C|losed, or |I|nfinite % XXX add little pictures
   \item |t|: time
   \item |a|: values
   \end{itemize}
 \end{frame}
 
 \begin{frame}{Examples}
-  \begin{multline*}
-   |parA :: (Semigroup a, Ord t)| \\
-   |=> Active Fixed l r t a -> Active Fixed l' r' t a| \\
-   |-> Active Fixed (Isect l l') (Isect r r') t a |
-  \end{multline*}
-  \onslide<2>
-  \begin{multline*}
-   |seqA :: (Clock t, Compat r1 l2)| \\
-   |=> Active Free l1 r1 t a -> Active Free l2 r2 t a| \\
-   |-> Active Free l1 r2 t a|
-  \end{multline*}
+  \begin{spec}
+   parA  :: Semigroup a
+         => Active Fixed l1 r1 t a -> Active Fixed l2 r2 t a
+         -> Active Fixed (l1 `Isect` l2) (r1 `Isect` r2) t a
+  \end{spec}
 \end{frame}
+
+\begin{frame}{Examples}
+  \begin{spec}
+   seqA  :: (Clock t, Compat r1 l2)
+         => Active Free l1 r1 t a -> Active Free l2 r2 t a
+         -> Active Free l1 r2 t a
+  \end{spec}
+\end{frame}
+
+% \begin{frame}{Examples}
+%   %% XXX put an example of another cool combinator here?  Or just put
+%   %% them all in the demo?
+% \end{frame}
 
 \begin{frame}{Practical difficulties}
   \begin{itemize}
-  \item Really want dependent types sometimes
-  \item How to present usable yet precise API?
+  \item Really want dependent types sometimes!
+  \item How to design precise yet usable API?
   \end{itemize}
 \end{frame}
 
