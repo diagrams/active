@@ -22,4 +22,8 @@ along t x = (moveTo . (t `atParam`)) <$> durValued (dur 1) <*~> x
 
 canvas = square 14 # fc white
 
-main = animMain (atop <$> ((circle 1 :: Diagram Cairo R2) # along spline) *>> 5 <*~> canvas)
+main = animMain
+  (     atop
+   <$>  ((circle 1 :: Diagram Cairo R2) # along spline) *>> 5
+   <*~> canvas
+  )
