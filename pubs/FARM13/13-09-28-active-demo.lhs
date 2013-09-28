@@ -261,7 +261,7 @@ dia
 \begin{frame}[fragile]{Generalizations}
 
 \begin{itemize}
-\item<+-> Infinite endpoints
+\item<+-> Infinite values
 
 % \begin{minipage}[c]{1.2\paperwidth}
 % \begin{diagram}[height=50]
@@ -339,7 +339,7 @@ dia = hcat' with {sep = 1}
 
 \begin{frame}{Examples}
   \begin{spec}
-   seqA  :: (Clock t, Compat r1 l2)
+   seqA  :: Compat r1 l2
          => Active Free l1 r1 t a -> Active Free l2 r2 t a
          -> Active Free l1 r2 t a
   \end{spec}
