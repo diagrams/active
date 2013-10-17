@@ -1,5 +1,5 @@
 name:                active
-version:             0.1.0.7
+version:             0.1.0.8
 synopsis:            Abstractions for animation
 description:         "Active" abstraction for animated things with finite start and end times.
 license:             BSD3
@@ -22,7 +22,7 @@ library
   build-depends:       base >= 4.0 && < 4.8,
                        array >= 0.3 && < 0.5,
                        semigroups >= 0.1 && < 0.12,
-                       semigroupoids >= 1.2 && < 3.2,
+                       semigroupoids >= 1.2 && < 4.1,
                        vector-space >= 0.8 && < 0.9,
                        newtype >= 0.2 && < 0.3
   hs-source-dirs:      src
@@ -34,7 +34,7 @@ test-suite active-tests
     build-depends:     base >= 4.0 && < 4.8,
                        array >= 0.3 && < 0.5,
                        semigroups >= 0.1 && < 0.12,
-                       semigroupoids >= 1.2 && < 3.2,
+                       semigroupoids >= 1.2 && < 4.1,
                        vector-space >= 0.8 && < 0.9,
                        newtype >= 0.2 && < 0.3,
 
