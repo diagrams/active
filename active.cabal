@@ -20,7 +20,7 @@ source-repository head
 library
   exposed-modules:     Data.Active
   build-depends:       base >= 4.0 && < 4.8,
-                       array >= 0.3 && < 0.5,
+                       array >= 0.3 && < 0.6,
                        semigroups >= 0.1 && < 0.12,
                        semigroupoids >= 1.2 && < 3.2,
                        vector-space >= 0.8 && < 0.9,
@@ -32,7 +32,7 @@ test-suite active-tests
     type:              exitcode-stdio-1.0
     main-is:           active-tests.hs
     build-depends:     base >= 4.0 && < 4.8,
-                       array >= 0.3 && < 0.5,
+                       array >= 0.3 && < 0.6,
                        semigroups >= 0.1 && < 0.12,
                        semigroupoids >= 1.2 && < 3.2,
                        vector-space >= 0.8 && < 0.9,
