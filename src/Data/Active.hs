@@ -1,12 +1,11 @@
-{-# LANGUAGE DeriveFunctor
-           , GeneralizedNewtypeDeriving
-           , TypeSynonymInstances
-           , MultiParamTypeClasses
-           , TypeFamilies
-           , FlexibleInstances
-           , FlexibleContexts
-           , ScopedTypeVariables
-  #-}
+{-# LANGUAGE DeriveFunctor              #-}
+{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE TypeSynonymInstances       #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 -----------------------------------------------------------------------------
@@ -151,19 +150,17 @@ module Data.Active
 
        ) where
 
-import Control.Applicative
-import Control.Arrow ((&&&))
-import Control.Newtype
+import           Control.Applicative
+import           Control.Arrow       ((&&&))
+import           Control.Newtype
 
-import Data.Array
-import Data.Maybe
+import           Data.Array
 
-import Data.Functor.Apply
-import Data.Semigroup hiding (First(..))
-import Data.Monoid (First(..))
+import           Data.Functor.Apply
+import           Data.Semigroup      hiding (First (..))
 
-import Data.VectorSpace hiding ((<.>))
-import Data.AffineSpace
+import           Data.AffineSpace
+import           Data.VectorSpace    hiding ((<.>))
 
 ------------------------------------------------------------
 -- Clock
@@ -302,8 +299,6 @@ duration = (.-.) <$> end <*> start
 --   will be mostly an internal implementation detail and that
 --   'Active' will be most commonly used.  But you never know what
 --   uses people might find for things.
-
-type Transition t a = Dynamic t a       -- proposed name for Dynamic
 
 data Dynamic t a = Dynamic { era        :: Era t
                            , runDynamic :: t -> a
@@ -490,7 +485,7 @@ activeDeadline = fromDynamic . transitionDeadline
 --   alter the era, you can use 'stretch' or 'shift'.
 -- TODO: Num=>Clock
 ui :: (Clock t, FractionalOf t a) => Active t a
-ui = interval (toTime 0) (toTime 1)
+ui = interval (toTime (0 :: Integer)) (toTime (1 :: Integer))
 
 -- | @interval a b@ is an active value starting at time @a@, ending at
 --   time @b@, and taking the value @t@ at time @t@.
@@ -500,7 +495,7 @@ interval a b = mkActive a b fromTime
 -- | @stretch s act@ \"stretches\" the active @act@ so that it takes
 --   @s@ times as long (retaining the same start time).
 stretch :: (Clock t) => Rational -> Active t a -> Active t a
-stretch 0 = modActive id . onDynamic $ \s e d -> mkDynamic s s d
+stretch 0 = modActive id . onDynamic $ \s _ d -> mkDynamic s s d
 stretch str = modActive id . onDynamic $ \s e d ->
     mkDynamic s (s .+^ (fromRational str *^ (e .-. s)))
       (\t -> d (s .+^ ((t .-. s) ^/ fromRational str)))
@@ -511,11 +506,11 @@ stretch str = modActive id . onDynamic $ \s e d ->
 -- [AJG: conditions (1) and (3) no longer true: to consider changing]
 
 stretchTo :: (Deadline t a) => Diff t -> Active t a -> Active t a
-stretchTo diff = modActive id . onDynamic $ \s e d ->
-    mkDynamic s (s .+^ diff)
-        (\ t -> choose (s .+^ diff) s
+stretchTo toD = modActive id . onDynamic $ \s e d ->
+    mkDynamic s (s .+^ toD)
+        (\ t -> choose (s .+^ toD) s
                      (d s)      -- avoiding dividing by zero
-                     (d (s .+^ (((t .-. s) ^/ (fromDuration diff / fromDuration (e .-. s)))))))
+                     (d (s .+^ (((t .-. s) ^/ (fromDuration toD / fromDuration (e .-. s)))))))
 
 -- | @a1 \`during\` a2@ 'stretch'es and 'shift's @a1@ so that it has the
 --   same era as @a2@.  Has no effect if either of @a1@ or @a2@ are constant.

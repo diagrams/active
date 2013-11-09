@@ -1,18 +1,19 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 module Main where
 
-import Control.Applicative
-import Control.Monad   (when)
-import Data.Semigroup
+import           Control.Applicative
+import           Control.Monad       (when)
+import           Data.Semigroup
 
-import System.Exit     (exitFailure)
+import           System.Exit         (exitFailure)
 
-import Test.QuickCheck
-import Text.Printf     (printf)
+import           Test.QuickCheck
+import           Text.Printf         (printf)
 
-import Data.Active
-import Data.VectorSpace
-import Data.AffineSpace
+import           Data.Active
+import           Data.AffineSpace
+import           Data.VectorSpace
 
 main :: IO ()
 main = do
@@ -62,7 +63,7 @@ instance (Clock t, Arbitrary (Diff t), CoArbitrary t, Arbitrary t, Arbitrary a) 
     mkDynamic <$> pure s <*> pure (s .+^ d) <*> arbitrary
 
 instance Show t => Show (Dynamic t a) where
-  show (Dynamic e f) = "<" ++ show e ++ ">"
+  show (Dynamic e _) = "<" ++ show e ++ ">"
 
 instance (Clock t, Arbitrary (Diff t), CoArbitrary t, Arbitrary t, Arbitrary a) => Arbitrary (Active t a) where
   arbitrary = oneof [ pure <$> arbitrary
