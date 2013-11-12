@@ -1,10 +1,10 @@
-{-# LANGUAGE NoMonomorphismRestriction  #-}
 {-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE KindSignatures             #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE NoMonomorphismRestriction  #-}
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeFamilies               #-}
 
@@ -36,20 +36,16 @@ module Data.Active.Time
 
     , Clock(..)
     , Waiting(..)
-    , Deadline(..)
     , FractionalOf(..)
 
     )
     where
 
-import           Control.Arrow ((***))
+import           Control.Arrow    ((***))
 import           Control.Lens
 import           Data.AffineSpace
-import qualified Data.Map as M
-import           Data.Proxy
+import qualified Data.Map         as M
 import           Data.VectorSpace
-
-import           Data.Active.Endpoint
 
 ------------------------------------------------------------
 -- Clock
@@ -100,28 +96,6 @@ class (FractionalOf w (Scalar w), VectorSpace w) => Waiting w where
 class Fractional a => FractionalOf v a where
   toFractionalOf :: v -> a
 
--- | An instance of @Deadline@ lets us choose between two values based
---   on a \"deadline\": the first value is chosen before the deadline
---   and the second value after.  The behavior at the precise moment
---   of the deadline is determined by the @l@ and @r@ type indices,
---   indicating whether the left-hand interval is closed (@l ~ C@, @r
---   ~ O@, in which case the first value is chosen at the precise
---   deadline), or the right (@l ~ O@, @r ~ C@, the second value is
---   chosen at the deadline).
-class (Clock t, Compat l r)
-  => Deadline (l :: EndpointType) (r :: EndpointType) t a where
-
-  -- | Choose one of two values based on the time in relation to a
-  --   given deadline.
-  choose :: Proxy l -- ^ Proxy for the left endpoint type, to drive
-                    --   instance selection
-         -> Proxy r -- ^ Proxy for the right endpoint type
-         -> t       -- ^ Deadline
-         -> t       -- ^ Current time
-         -> a       -- ^ Value before deadline
-         -> a       -- ^ Value after deadline
-         -> a
-
 ------------------------------------------------------------
 -- Time + Duration
 ------------------------------------------------------------
@@ -153,12 +127,6 @@ instance Clock Time where
 
 instance Fractional a => FractionalOf Time a where
   toFractionalOf (Time d) = fromRational d
-
-instance Deadline C O Time a where
-  choose _ _ deadline now a b = if now <= deadline then a else b
-
-instance Deadline O C Time a where
-  choose _ _ deadline now a b = if now <  deadline then a else b
 
 -- | An abstract type representing /elapsed time/ between two moments.
 --   Note that durations can be negative. Literal numeric values may
@@ -234,9 +202,3 @@ instance Shifty Time where
   type ShiftyTime Time = Time
 
   shift d = (.+^ d)
-
-instance AffineSpace t => Shifty (Endpoint e t) where
-  type ShiftyTime (Endpoint e t) = t
-
-  shift d = fmap (.+^ d)
-
