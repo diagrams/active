@@ -61,7 +61,7 @@ instance Arbitrary a => Arbitrary (Dynamic a) where
     mkDynamic <$> pure s <*> pure (s .+^ d) <*> arbitrary
 
 instance Show (Dynamic a) where
-  show (Dynamic e f) = "<" ++ show e ++ ">"
+  show (Dynamic e _) = "<" ++ show e ++ ">"
 
 instance Arbitrary a => Arbitrary (Active a) where
   arbitrary = oneof [ pure <$> arbitrary
