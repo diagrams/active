@@ -21,7 +21,7 @@ library
   exposed-modules:     Data.Active
   build-depends:       base >= 4.0 && < 4.8,
                        array >= 0.3 && < 0.6,
-                       semigroups >= 0.1 && < 0.13,
+                       semigroups >= 0.1 && < 0.14,
                        semigroupoids >= 1.2 && < 4.1,
                        vector-space >= 0.8 && < 0.9,
                        newtype >= 0.2 && < 0.3
