@@ -1,5 +1,10 @@
-0.1.0.15 (28 May 2014)
+0.1.0.16 (2 June 2014)
 ----------------------
+
+  * correct version constraint problems with previous release
+
+0.1.0.15 (28 May 2014) (BROKEN)
+-------------------------------
 
   * allow semigroups-0.15
 
