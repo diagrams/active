@@ -22,9 +22,9 @@ library
   build-depends:       base >= 4.0 && < 4.8,
                        array >= 0.3 && < 0.6,
                        semigroups >= 0.1 && < 0.16,
-                       semigroupoids >= 1.2 && < 3.2,
-                       vector-space >= 0.8 && < 0.9,
-                       newtype >= 0.2 && < 0.3
+                       semigroupoids >= 1.2 && < 5.0,
+                       lens,
+                       linear
   hs-source-dirs:      src
   default-language:    Haskell2010
 
@@ -35,9 +35,8 @@ test-suite active-tests
                        array >= 0.3 && < 0.6,
                        semigroups >= 0.1 && < 0.16,
                        semigroupoids >= 1.2 && < 3.2,
-                       vector-space >= 0.8 && < 0.9,
-                       newtype >= 0.2 && < 0.3,
-
+                       lens >= 4.0,
+                       linear >= 1.6,
                        QuickCheck >= 2.4.2 && < 2.8
     hs-source-dirs:    src, test
     default-language:  Haskell2010
