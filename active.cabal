@@ -20,11 +20,11 @@ source-repository head
 library
   exposed-modules:     Data.Active
   build-depends:       base >= 4.0 && < 4.8,
-                       array >= 0.3 && < 0.6,
+                       vector >= 0.10,
                        semigroups >= 0.1 && < 0.16,
                        semigroupoids >= 1.2 && < 5.0,
-                       lens,
-                       linear
+                       lens >= 4.0 && < 4.5,
+                       linear >= 1.10 && < 2.0
   hs-source-dirs:      src
   default-language:    Haskell2010
 
@@ -32,7 +32,7 @@ test-suite active-tests
     type:              exitcode-stdio-1.0
     main-is:           active-tests.hs
     build-depends:     base >= 4.0 && < 4.8,
-                       array >= 0.3 && < 0.6,
+                       vector >= 0.10,
                        semigroups >= 0.1 && < 0.16,
                        semigroupoids >= 1.2 && < 3.2,
                        lens >= 4.0,

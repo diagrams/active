@@ -152,10 +152,9 @@ import           Control.Applicative
 import           Control.Arrow       ((&&&))
 import           Control.Lens        hiding (backwards, (<.>))
 
-import           Data.Array
-
 import           Data.Functor.Apply
 import           Data.Semigroup      hiding (First (..))
+import qualified Data.Vector         as V
 
 import           Linear
 import           Linear.Affine
@@ -171,6 +170,7 @@ class (Affine t, Waiting (Diff t)) => Clock t where
   -- | Convert any value of a 'Real' type (including @Int@, @Integer@,
   --   @n@, @Float@, and @Double@) to a 'Time'.
   toTime :: (Real a, Fractional n) => a -> t n
+
   -- | Convert a 'Time' to a value of any 'Fractional' type (such as
   --   @n@, @Float@, or @Double@).
   fromTime :: (Real n, Fractional a) => t n -> a
@@ -220,9 +220,6 @@ instance Clock Time where
   firstTime = min
   lastTime  = max
 
--- instance Fractional a => FractionalOf Time a where
---   toFractionalOf (Time d) = fromn d
-
 instance Deadline Time a where
   -- choose tm deadline (if before / at deadline) (if after deadline)
   choose t1 t2 a b = if t1 <= t2 then a else b
@@ -271,8 +268,8 @@ newtype Era t n = Era (Min (t n), Max (t n))
 -- AJG: I explicitly implement this to make sure we use min and max,
 -- and not compare (which does not reify into a deep embedded structure).
 instance (Clock t, Ord n) => Semigroup (Era t n) where
-  Era (Min min1,Max max1) <> Era (Min min2,Max max2)
-    = Era (Min (firstTime min1 min2),Max (lastTime max1 max2))
+  Era (Min min1, Max max1) <> Era (Min min2, Max max2)
+    = Era (Min (firstTime min1 min2), Max (lastTime max1 max2))
 
 -- | Create an 'Era' by specifying start and end 'Time's.
 mkEra :: t n -> t n -> Era t n
@@ -563,6 +560,8 @@ clamp =
 clampBefore :: Active t n a -> Active t n a
 clampBefore = undefined
 
+--- XXX These are undefined!
+
 -- | \"Clamp\" an active value so that it is constant after the end
 --   of its era.  For example, @clampBefore 'ui'@ can be visualized as
 --
@@ -571,6 +570,7 @@ clampBefore = undefined
 --   See the documentation of 'clamp' for more information.
 clampAfter :: Active t n a -> Active t n a
 clampAfter = undefined
+
 
 -- | \"Trim\" an active value so that it is empty outside its era.
 --   @trim@ has no effect on constant values.
@@ -690,11 +690,10 @@ discrete :: (Clock t, Real n, Fractional n) => [a] -> Active t n a
 discrete [] = error "Data.Active.discrete must be called with a non-empty list."
 discrete xs = f <$> ui
   where f (t :: Rational)
-            | t <= 0    = arr ! 0
-            | t >= 1    = arr ! (n-1)
-            | otherwise = arr ! floor (t * fromIntegral n)
-        n   = length xs
-        arr = listArray (0, n-1) xs
+            | t <= 0    = V.unsafeHead v
+            | t >= 1    = V.unsafeLast v
+            | otherwise = V.unsafeIndex v $ floor (t * fromIntegral (V.length v))
+        v = V.fromList xs
 
 -- | @simulate r act@ simulates the 'Active' value @act@, returning a
 --   list of \"snapshots\" taken at regular intervals from the start
@@ -706,6 +705,7 @@ discrete xs = f <$> ui
 --   times), a list of length 1 is returned, containing the constant
 --   value.
 simulate :: (Clock t, Real n, Enum n, Fractional n) => n -> Active t n a -> [a]
+simulate 0    = const []
 simulate rate =
   onActive (:[])
            (\d -> map (runDynamic d . toTime)
