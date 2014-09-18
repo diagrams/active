@@ -240,9 +240,9 @@ duration = (.-.) <$> end <*> start
 --   'Active' will be most commonly used.  But you never know what
 --   uses people might find for things.
 
-data Dynamic n a = Dynamic { era        :: Era n
-                           , runDynamic :: Time n -> a
-                           }
+data Dynamic a = Dynamic { era        :: Era Rational
+                         , runDynamic :: Time Rational -> a
+                         }
   deriving Functor
 
 -- | 'Dynamic' is an instance of 'Apply' (/i.e./ 'Applicative' without
@@ -254,37 +254,33 @@ data Dynamic n a = Dynamic { era        :: Era n
 --   thing as an empty era (that is, 'Era' is not an instance of
 --   'Monoid').
 
-instance Ord n => Apply (Dynamic n) where
+instance Apply Dynamic where
   (Dynamic d1 f1) <.> (Dynamic d2 f2) = Dynamic (d1 <> d2) (f1 <.> f2)
 
 -- | @'Dynamic' a@ is a 'Semigroup' whenever @a@ is: the eras are
 --   combined according to their semigroup structure, and the values
 --   of type @a@ are combined pointwise.  Note that @'Dynamic' a@ cannot
 --   be an instance of 'Monoid' since 'Era' is not.
-instance (Ord n, Semigroup a) => Semigroup (Dynamic n a) where
+instance Semigroup a => Semigroup (Dynamic a) where
   Dynamic d1 f1 <> Dynamic d2 f2 = Dynamic (d1 <> d2) (f1 <> f2)
 
 -- | Create a 'Dynamic' from a start time, an end time, and a
 --   time-varying value.
-mkDynamic :: Time n -> Time n -> (Time n -> a) -> Dynamic n a
+mkDynamic :: Time Rational -> Time Rational -> (Time Rational -> a) -> Dynamic a
 mkDynamic s e = Dynamic (mkEra s e)
 
 -- | Fold for 'Dynamic'.
-onDynamic :: (Time n -> Time n -> (Time n -> a) -> b) -> Dynamic n a -> b
+onDynamic :: (Time Rational -> Time Rational -> (Time Rational -> a) -> b) -> Dynamic a -> b
 onDynamic f (Dynamic e d) = f (start e) (end e) d
 
 -- | Shift a 'Dynamic' value by a certain duration.
-shiftDynamic :: Num n => Duration n -> Dynamic n a -> Dynamic n a
+shiftDynamic :: Duration Rational -> Dynamic a -> Dynamic a
 shiftDynamic sh =
   onDynamic $ \s e d ->
     mkDynamic
       (s .+^ sh)
       (e .+^ sh)
       (\t -> d (t .-^ sh))
-
--- -- | take the first value until a deadline, then take the second value, inside a Dynamic.
--- transitionDeadline :: Ord n => t n -> Dynamic t n (a -> a -> a)
--- transitionDeadline dl = mkDynamic dl dl (`choose` dl)
 
 ------------------------------------------------------------
 --  Active
@@ -311,19 +307,19 @@ shiftDynamic sh =
 --
 --   The addition of constant values enable 'Monoid' and 'Applicative'
 --   instances for 'Active'.
-newtype Active n a = Active (MaybeApply (Dynamic n) a)
+newtype Active a = Active (MaybeApply Dynamic a)
   deriving (Functor, Apply, Applicative)
 
 makeWrapped ''Active
 makeWrapped ''MaybeApply
 
-active :: Iso' (Active n a) (Either (Dynamic n a) a)
+active :: Iso' (Active a) (Either (Dynamic a) a)
 active = _Wrapped . _Wrapped
 
 -- | Active values over a type with a 'Semigroup' instance are also an
 --   instance of 'Semigroup'.  Two active values are combined
 --   pointwise; the resulting value is constant iff both inputs are.
-instance (Ord n, Semigroup a) => Semigroup (Active n a) where
+instance Semigroup a => Semigroup (Active a) where
   (view active -> a) <> (view active -> b) = review active $ combine a b
    where
      combine (Right m1) (Right m2)
@@ -338,57 +334,57 @@ instance (Ord n, Semigroup a) => Semigroup (Active n a) where
      combine (Left d1) (Left d2)
        = Left (d1 <> d2)
 
-instance (Ord n, Monoid a, Semigroup a) => Monoid (Active n a) where
+instance (Monoid a, Semigroup a) => Monoid (Active a) where
   mempty  = Active (MaybeApply (Right mempty))
   mappend = (<>)
 
 -- | Create an 'Active' value from a 'Dynamic'.
-fromDynamic :: Dynamic n a -> Active n a
+fromDynamic :: Dynamic a -> Active a
 fromDynamic = Active . MaybeApply . Left
 
 -- | Create a dynamic 'Active' from a start time, an end time, and a
 --   time-varying value.
-mkActive :: Time n -> Time n -> (Time n -> a) -> Active n a
+mkActive :: Time Rational -> Time Rational -> (Time Rational -> a) -> Active a
 mkActive s e f = fromDynamic (mkDynamic s e f)
 
 -- | Fold for 'Active's.  Process an 'Active a', given a function to
 --   apply if it is a pure (constant) value, and a function to apply if
 --   it is a 'Dynamic'.
-onActive :: (a -> b) -> (Dynamic n a -> b) -> Active n a -> b
+onActive :: (a -> b) -> (Dynamic a -> b) -> Active a -> b
 onActive f _ (Active (MaybeApply (Right a))) = f a
 onActive _ f (Active (MaybeApply (Left d)))  = f d
 
 -- | Modify an 'Active' value using a case analysis to see whether it
 --   is constant or dynamic.
-modActive :: Ord n
-  => (a -> b)
-  -> (Dynamic n a -> Dynamic n b)
-  -> Active n a -> Active n b
+modActive
+  :: (a -> b)
+  -> (Dynamic a -> Dynamic b)
+  -> Active a -> Active b
 modActive f g = onActive (pure . f) (fromDynamic . g)
 
 -- | Interpret an 'Active' value as a function from time.
-runActive :: Active n a -> Time n -> a
+runActive :: Active a -> Time Rational -> a
 runActive = onActive const runDynamic
 
 -- | Get the value of an @Active a@ at the beginning of its era.
-activeStart :: Active n a -> a
+activeStart :: Active a -> a
 activeStart = onActive id (onDynamic $ \s _ d -> d s)
 
 -- | Get the value of an @Active a@ at the end of its era.
-activeEnd :: Active n a -> a
+activeEnd :: Active a -> a
 activeEnd = onActive id (onDynamic $ \_ e d -> d e)
 
 -- | Get the 'Era' of an 'Active' value (or 'Nothing' if it is
 --   a constant/pure value).
-activeEra :: Active n a -> Maybe (Era n)
+activeEra :: Active a -> Maybe (Era Rational)
 activeEra = onActive (const Nothing) (Just . era)
 
 -- | Test whether an 'Active' value is constant.
-isConstant :: Active n a -> Bool
+isConstant :: Active a -> Bool
 isConstant = onActive (const True) (const False)
 
 -- | Test whether an 'Active' value is 'Dynamic'.
-isDynamic :: Active n a -> Bool
+isDynamic :: Active a -> Bool
 isDynamic = onActive (const False) (const True)
 
 ------------------------------------------------------------
@@ -414,18 +410,17 @@ isDynamic = onActive (const False) (const True)
 --   era, use its 'Functor' and 'Applicative' instances.  For example,
 --   @(*2) \<$\> ui@ varies from @0@ to @2@ over the era @[0,1]@.  To
 --   alter the era, you can use 'stretch' or 'shift'.
--- TODO: Num=>Clock
-ui :: (Real n, Fractional n, Fractional a) => Active n a
+ui :: Fractional a => Active a
 ui = interval 0 1
 
 -- | @interval a b@ is an active value starting at time @a@, ending at
 --   time @b@, and taking the value @t@ at time @t@.
-interval :: (Real n, Fractional a) => Time n -> Time n -> Active n a
-interval a b = mkActive a b (fromRational . toRational . unTime)
+interval :: Fractional a => Time Rational -> Time Rational -> Active a
+interval a b = mkActive a b (fromRational . unTime)
 
 -- | @stretch s act@ \"stretches\" the active @act@ so that it takes
 --   @s@ times as long (retaining the same start time).
-stretch :: (Real n, Fractional n) => n -> Active n a -> Active n a
+stretch :: Rational -> Active a -> Active a
 stretch str =
   modActive id . onDynamic $ \s e d ->
     mkDynamic s (s .+^ (str *^ (e .-. s)))
@@ -436,21 +431,21 @@ stretch str =
 --   value is constant, or (3) the 'Active' value has zero duration.
 -- [AJG: conditions (1) and (3) no longer true: to consider changing]
 
-stretchTo :: (Fractional n, Real n) => Duration n -> Active n a -> Active n a
+stretchTo :: Duration Rational -> Active a -> Active a
 stretchTo d a
   | d <= 0                               = a
   | (duration <$> activeEra a) == Just 0 = a
-  | otherwise = maybe a (`stretch` a) ((fromRational . toRational . (d /) . duration) <$> activeEra a)
+  | otherwise = maybe a (`stretch` a) ((toRational . (d /) . duration) <$> activeEra a)
 
 -- | @a1 \`during\` a2@ 'stretch'es and 'shift's @a1@ so that it has the
 --   same era as @a2@.  Has no effect if either of @a1@ or @a2@ are constant.
-during :: (Fractional n, Real n) => Active n a -> Active n a -> Active n a
+during :: Active a -> Active a -> Active a
 during a1 a2 = maybe a1 (\(d,s) -> stretchTo d . atTime s $ a1)
                  ((duration &&& start) <$> activeEra a2)
 
 -- | @shift d act@ shifts the start time of @act@ by duration @d@.
 --   Has no effect on constant values.
-shift :: (Ord n, Num n) => Duration n -> Active n a -> Active n a
+shift :: Duration Rational -> Active a -> Active a
 shift sh = modActive id (shiftDynamic sh)
 
 -- | Reverse an active value so the start of its era gets mapped to
@@ -458,7 +453,7 @@ shift sh = modActive id (shiftDynamic sh)
 --   visualized as
 --
 --   <<http://www.cis.upenn.edu/~byorgey/hosted/backwards.png>>
-backwards :: (Ord n, Num n) => Active n a -> Active n a
+backwards :: Active a -> Active a
 backwards =
   modActive id . onDynamic $ \s e d ->
     mkDynamic s e
@@ -467,7 +462,7 @@ backwards =
 
 -- | Take a \"snapshot\" of an active value at a particular time,
 --   resulting in a constant value.
-snapshot :: Ord n => Time n -> Active n a -> Active n a
+snapshot :: Time Rational -> Active a -> Active a
 snapshot t a = pure (runActive a t)
 
 -- | \"Clamp\" an active value so that it is constant before and after
@@ -483,7 +478,7 @@ snapshot t a = pure (runActive a t)
 --   See also 'clampBefore' and 'clampAfter', which clamp only before
 --   or after the era, respectively.
 
-clamp :: Ord n => Active n a -> Active n a
+clamp :: Active a -> Active a
 clamp =
   modActive id . onDynamic $ \s e d ->
     mkDynamic s e
@@ -498,7 +493,7 @@ clamp =
 --   <<http://www.cis.upenn.edu/~byorgey/hosted/clampBefore.png>>
 --
 --   See the documentation of 'clamp' for more information.
-clampBefore :: Active n a -> Active n a
+clampBefore :: Active a -> Active a
 clampBefore = undefined
 
 --- XXX These are undefined!
@@ -509,7 +504,7 @@ clampBefore = undefined
 --   <<http://www.cis.upenn.edu/~byorgey/hosted/clampAfter.png>>
 --
 --   See the documentation of 'clamp' for more information.
-clampAfter :: Active n a -> Active n a
+clampAfter :: Active a -> Active a
 clampAfter = undefined
 
 
@@ -529,7 +524,7 @@ clampAfter = undefined
 --   See also 'trimBefore' and 'trimActive', which trim only before or
 --   after the era, respectively.
 
-trim :: (Ord n, Monoid a) => Active n a -> Active n a
+trim :: Monoid a => Active a -> Active a
 trim =
   modActive id . onDynamic $ \s e d ->
     mkDynamic s e
@@ -545,7 +540,7 @@ trim =
 --   <<http://www.cis.upenn.edu/~byorgey/hosted/trimBefore.png>>
 --
 --   See the documentation of 'trim' for more details.
-trimBefore :: (Ord n, Monoid a) => Active n a -> Active n a
+trimBefore :: Monoid a => Active a -> Active a
 trimBefore =
   modActive id . onDynamic $ \s e d ->
     mkDynamic s e
@@ -559,7 +554,7 @@ trimBefore =
 --   <<http://www.cis.upenn.edu/~byorgey/hosted/trimAfter.png>>
 --
 --   See the documentation of 'trim' for more details.
-trimAfter :: (Ord n, Monoid a) => Active n a -> Active n a
+trimAfter :: Monoid a => Active a -> Active a
 trimAfter =
   modActive id . onDynamic $ \s e d ->
     mkDynamic s e
@@ -570,7 +565,7 @@ trimAfter =
 -- | Set the era of an 'Active' value.  Note that this will change a
 --   constant 'Active' into a dynamic one which happens to have the
 --   same value at all times.
-setEra :: Era n -> Active n a -> Active n a
+setEra :: Era Rational -> Active a -> Active a
 setEra er =
   onActive
     (mkActive (start er) (end er) . const)
@@ -579,13 +574,13 @@ setEra er =
 -- | @atTime t a@ is an active value with the same behavior as @a@,
 --   shifted so that it starts at time @t@.  If @a@ is constant it is
 --   returned unchanged.
-atTime :: (Num n, Ord n) => Time n -> Active n a -> Active n a
+atTime :: Time Rational -> Active a -> Active a
 atTime t a = maybe a (\e -> shift (t .-. start e) a) (activeEra a)
 
 -- | @a1 \`after\` a2@ produces an active that behaves like @a1@ but is
 --   shifted to start at the end time of @a2@.  If either @a1@ or @a2@
 --   are constant, @a1@ is returned unchanged.
-after :: (Num n, Ord n) => Active n a -> Active n a -> Active n a
+after :: Active a -> Active a -> Active a
 after a1 a2 = maybe a1 ((`atTime` a1) . end) (activeEra a2)
 
 infixr 5 ->>
@@ -596,7 +591,7 @@ infixr 5 ->>
 -- | Sequence/overlay two 'Active' values: shift the second to start
 --   immediately after the first (using 'after'), then compose them
 --   (using '<>').
-(->>) :: (Num n, Ord n, Semigroup a) => Active n a -> Active n a -> Active n a
+(->>) :: Semigroup a => Active a -> Active a -> Active a
 a1 ->> a2 = a1 <> (a2 `after` a1)
 
 
@@ -607,7 +602,7 @@ a1 ->> a2 = a1 <> (a2 `after` a1)
 --   the value which acts like the first up to the common end/start
 --   point, then like the second after that.  If both are constant,
 --   return the first.
-(|>>) :: (Ord n, Num n) => Active n a -> Active n a -> Active n a
+(|>>) :: Active a -> Active a -> Active a
 a1 |>> a2 = (fromJust . getFirst) <$>
             (trimAfter (First . Just <$> a1) ->> trimBefore (First . Just <$> a2))
 
@@ -615,9 +610,8 @@ a1 |>> a2 = (fromJust . getFirst) <$>
 
 -- | Splice together a list of active values using '|>>'.  The list
 --   must be nonempty.
-movie :: (Ord n, Num n) => [Active n a] -> Active n a
+movie :: [Active a] -> Active a
 movie = foldr1 (|>>)
-
 
 ------------------------------------------------------------
 --  Discretization
@@ -631,7 +625,7 @@ movie = foldr1 (|>>)
 --   after time 1.
 --
 --   It is an error to call @discrete@ on the empty list.
-discrete :: (Real n, Fractional n) => [a] -> Active n a
+discrete :: [a] -> Active a
 discrete [] = error "Data.Active.discrete must be called with a non-empty list."
 discrete xs = f <$> ui
   where f (t :: Rational)
@@ -649,7 +643,7 @@ discrete xs = f <$> ui
 --   If the 'Active' value is constant (and thus has no start or end
 --   times), a list of length 1 is returned, containing the constant
 --   value.
-simulate :: (Real n, Enum n, Fractional n) => n -> Active n a -> [a]
+simulate :: Rational -> Active a -> [a]
 simulate 0    = const []
 simulate rate =
   onActive (:[])
