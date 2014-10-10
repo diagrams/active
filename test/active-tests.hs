@@ -3,7 +3,7 @@
 module Main where
 
 import           Control.Applicative
-import           Control.Monad       (when)
+import           Control.Monad       (unless)
 import           Data.Semigroup
 
 import           System.Exit         (exitFailure)
@@ -12,16 +12,17 @@ import           Test.QuickCheck
 import           Text.Printf         (printf)
 
 import           Data.Active
-import           Data.AffineSpace
-import           Data.VectorSpace
+
+import Linear.Affine
+import Linear.Vector
 
 main :: IO ()
 main = do
-    results <- mapM (\(s,t) -> printf "%-40s" s >> t) tests
-    when (not . all isSuccess $ results) $ exitFailure
+  results <- mapM (\(s,t) -> printf "%-40s" s >> t) tests
+  unless (all isSuccess results) exitFailure
   where
     isSuccess (Success{}) = True
-    isSuccess _ = False
+    isSuccess _           = False
     qc x = quickCheckWithResult (stdArgs { maxSuccess = 200 }) x
     tests = [ ("era/start",                   qc prop_era_start          )
             , ("era/end",                     qc prop_era_end            )
@@ -43,70 +44,72 @@ main = do
             , ("atTime/start",                qc prop_atTime_start       )
             , ("atTime/fun",                  qc prop_atTime_fun         )
             ]
+{-# ANN main ("HLint: ignore Eta reduce" :: String) #-}
+-- eta reducing qc breaks it
 
 instance Arbitrary Any where
   arbitrary = Any <$> arbitrary
 
-instance Arbitrary Time where
+instance (Arbitrary n, Fractional n, Real n) => Arbitrary (Time n) where
   arbitrary = fromRational <$> arbitrary
 
-instance CoArbitrary Time where
+instance (CoArbitrary n, Real n) => CoArbitrary (Time n) where
   coarbitrary t = coarbitrary (toRational t)
 
-instance Arbitrary Duration where
+instance (Arbitrary n, Fractional n, Real n) => Arbitrary (Duration n) where
   arbitrary = (fromRational . abs) <$> arbitrary
 
-instance (Clock t, Arbitrary (Diff t), CoArbitrary t, Arbitrary t, Arbitrary a) => Arbitrary (Dynamic t a) where
+instance Arbitrary a => Arbitrary (Dynamic a) where
   arbitrary = do
     s <- arbitrary
     d <- arbitrary
     mkDynamic <$> pure s <*> pure (s .+^ d) <*> arbitrary
 
-instance Show t => Show (Dynamic t a) where
+instance Show (Dynamic a) where
   show (Dynamic e _) = "<" ++ show e ++ ">"
 
-instance (Clock t, Arbitrary (Diff t), CoArbitrary t, Arbitrary t, Arbitrary a) => Arbitrary (Active t a) where
+instance Arbitrary a => Arbitrary (Active a) where
   arbitrary = oneof [ pure <$> arbitrary
                     , fromDynamic <$> arbitrary
                     ]
 
-instance (Show t, Show a) => Show (Active t a) where
+instance Show a => Show (Active a) where
   show = onActive (\c -> "<<" ++ show c ++ ">>")
-                  (\d -> show d)
+                  show
 
-prop_era_start :: Time -> Time -> Bool
+prop_era_start :: Time Rational -> Time Rational -> Bool
 prop_era_start t1 t2 = start (mkEra t1 t2) == t1
 
-prop_era_end :: Time -> Time -> Bool
+prop_era_end :: Time Rational -> Time Rational -> Bool
 prop_era_end t1 t2 = end (mkEra t1 t2) == t2
 
-prop_duration :: Time -> Time -> Bool
+prop_duration :: Time Rational -> Time Rational -> Bool
 prop_duration t1 t2 = duration (mkEra t1 t2) == (t2 .-. t1)
 
-prop_shiftDynamic_start :: Duration -> Dynamic Time Bool -> Bool
+prop_shiftDynamic_start :: Duration Rational -> Dynamic Bool -> Bool
 prop_shiftDynamic_start dur dyn
   = (start . era) (shiftDynamic dur dyn) == ((start . era) dyn .+^ dur)
 
-prop_shiftDynamic_end :: Duration -> Dynamic Time Bool -> Bool
+prop_shiftDynamic_end :: Duration Rational -> Dynamic Bool -> Bool
 prop_shiftDynamic_end dur dyn
   = (end . era) (shiftDynamic dur dyn) == ((end . era) dyn .+^ dur)
 
-prop_shiftDynamic_fun :: Duration -> Dynamic Time Bool -> Time -> Bool
+prop_shiftDynamic_fun :: Duration Rational -> Dynamic Bool -> Time Rational -> Bool
 prop_shiftDynamic_fun dur dyn t
   = runDynamic dyn t == runDynamic (shiftDynamic dur dyn) (t .+^ dur)
 
-prop_active_semi_hom :: Active Time Any -> Active Time Any -> Time -> Bool
+prop_active_semi_hom :: Active Any -> Active Any -> Time Rational -> Bool
 prop_active_semi_hom a1 a2 t =
   runActive a1 t <> runActive a2 t == runActive (a1 <> a2) t
 
-prop_ui_id :: Time -> Bool
-prop_ui_id t = runActive (ui :: Active Time Time) t == t
+prop_ui_id :: Time Rational -> Bool
+prop_ui_id t = runActive (ui :: Active (Time Rational)) t == t
 
-prop_stretch_start :: Rational -> Active Time Bool -> Bool
+prop_stretch_start :: Rational -> Active Bool -> Bool
 prop_stretch_start r a
   = (start <$> activeEra a) == (start <$> activeEra (stretch r a))
 
-prop_stretch_dur :: Rational -> Active Time Bool -> Bool
+prop_stretch_dur :: Rational -> Active Bool -> Bool
 prop_stretch_dur r a
   = (((r *^) . duration) <$> activeEra a) == (duration <$> activeEra (stretch r a))
 
@@ -116,41 +119,41 @@ prop_stretch_fun r (Blind a) t
   = runActive a t    runActive (stretch r t)
 -}
 
-prop_stretchTo_dur :: Positive Duration -> Active Time Bool -> Property
+prop_stretchTo_dur :: Positive (Duration Rational) -> Active Bool -> Property
 prop_stretchTo_dur (Positive dur) a
   = isDynamic a && ((duration <$> activeEra a) /= Just 0)
     ==> (duration <$> activeEra (stretchTo dur a)) == Just dur
 
-prop_during_const :: Active Time Bool -> Active Time Bool -> Property
+prop_during_const :: Active Bool -> Active Bool -> Property
 prop_during_const a1 a2 =
   (isConstant a1 || isConstant a2) ==> (start <$> activeEra (a1 `during` a2)) == (start <$> activeEra a1)
 
-prop_during_start :: Dynamic Time Bool -> Dynamic Time Bool -> Bool
+prop_during_start :: Dynamic Bool -> Dynamic Bool -> Bool
 prop_during_start d1 d2 =
   (start <$> activeEra (a1 `during` a2)) == (start <$> activeEra a2)
  where a1 = fromDynamic d1
        a2 = fromDynamic d2
 
-prop_during_end :: Dynamic Time Bool -> Dynamic Time Bool -> Bool
+prop_during_end :: Dynamic Bool -> Dynamic Bool -> Bool
 prop_during_end d1 d2 =
   (end <$> activeEra (a1 `during` a2)) == (end <$> activeEra a2)
  where a1 = fromDynamic d1
        a2 = fromDynamic d2
 
-prop_shift_start :: Duration -> Active Time Bool -> Bool
+prop_shift_start :: Duration Rational -> Active Bool -> Bool
 prop_shift_start d a =
   ((.+^ d) . start <$> activeEra a) == (start <$> activeEra (shift d a))
 
-prop_shift_end :: Duration -> Active Time Bool -> Bool
+prop_shift_end :: Duration Rational -> Active Bool -> Bool
 prop_shift_end d a =
   ((.+^ d) . end <$> activeEra a) == (end <$> activeEra (shift d a))
 
-prop_atTime_start :: Time -> Dynamic Time Bool -> Bool
+prop_atTime_start :: Time Rational -> Dynamic Bool -> Bool
 prop_atTime_start t dyn =
     (start <$> activeEra (atTime t a)) == Just t
   where a = fromDynamic dyn
 
-prop_atTime_fun :: Time -> Dynamic Time Bool -> Duration -> Bool
+prop_atTime_fun :: Time Rational -> Dynamic Bool -> Duration Rational -> Bool
 prop_atTime_fun t dyn d =
     runActive (atTime t a) (t .+^ d) == runActive a (s .+^ d)
   where a = fromDynamic dyn
