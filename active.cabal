@@ -23,8 +23,8 @@ library
                        vector >= 0.10,
                        semigroups >= 0.1 && < 0.16,
                        semigroupoids >= 1.2 && < 5.0,
-                       lens >= 4.0 && < 4.6,
-                       linear >= 1.10 && < 1.12
+                       lens >= 4.0 && < 4.7,
+                       linear >= 1.10 && < 1.15
   hs-source-dirs:      src
   default-language:    Haskell2010
 
@@ -35,8 +35,8 @@ test-suite active-tests
                        vector >= 0.10,
                        semigroups >= 0.1 && < 0.16,
                        semigroupoids >= 1.2 && < 5.0,
-                       lens >= 4.0 && < 4.6,
-                       linear >= 1.11.3 && < 1.12,
+                       lens >= 4.0 && < 4.7,
+                       linear >= 1.11.3 && < 1.15,
                        QuickCheck >= 2.4.2 && < 2.8
     hs-source-dirs:    src, test
     default-language:  Haskell2010
