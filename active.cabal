@@ -22,7 +22,7 @@ library
   build-depends:       base >= 4.0 && < 4.8,
                        array >= 0.3 && < 0.6,
                        semigroups >= 0.1 && < 0.17,
-                       semigroupoids >= 1.2 && < 4.3,
+                       semigroupoids >= 1.2 && < 4.4,
                        vector-space >= 0.8 && < 0.10,
                        newtype >= 0.2 && < 0.3
   hs-source-dirs:      src
@@ -34,7 +34,7 @@ test-suite active-tests
     build-depends:     base >= 4.0 && < 4.8,
                        array >= 0.3 && < 0.6,
                        semigroups >= 0.1 && < 0.17,
-                       semigroupoids >= 1.2 && < 4.3,
+                       semigroupoids >= 1.2 && < 4.4,
                        vector-space >= 0.8 && < 0.10,
                        newtype >= 0.2 && < 0.3,
 
