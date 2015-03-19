@@ -23,5 +23,6 @@ Shake
 *.blg
 *.cut
 ActiveDiagrams
-semantics/diagrams/*
-semantics/FARM/diagrams/*
+old/semantics/diagrams/*
+old/semantics/FARM/diagrams/*
+*.agdai

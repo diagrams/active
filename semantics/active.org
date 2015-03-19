@@ -1,0 +1,180 @@
+* Ideas for active (from talking with people, e.g. Kenny Foner, at Composeconf NYC, Jan/Feb 2015)
+
+2-category semantics for animations.
+
+Perhaps there should be not just one object, but one (unique) object
+for each *keyframe*?  Then composition ensures things match up.  Would
+have to introduce the idea of a "splice", which is a 0-duration
+animation between two different keyframes.
+
+Maybe the question about how animations match up at their ends is just
+not that important...?  Or maybe we want to introduce "infinitesimal
+splices" which have duration less than every positive duration but are
+not zero.  Then depending which side you add it on, you get one
+behavior or the other.  Though this destroys associativity...  Maybe
+what we want instead is two different kinds of splice, "left-biased"
+and "right-biased".
+* Emails to Nick Wu (March 2015)
+** Email 1
+
+As far as I can remember where we left things, we were considering the
+2-category where
+
++ there is a single 0-cell
++ 1-cells are durations (nonnegative real numbers or perhaps all real
+  numbers (?)), with composition given by addition.
++ there are only 2-cells from c to d when c = d.  A 2-cell represents
+  a time-varying value of a given duration.
+
+This gives us horizontal (sequential) and vertical (parallel)
+composition of animations, and an interchange law.  Fundamentally, one
+can *only* compose animations of the *same* duration.  Composing
+animations of different durations requires explicitly specifying how
+to first truncate the longer one, or to extend the shorter one by
+horizontally composing with something appropriate.
+
+We actually end up with something quite similar to what is described
+in Hudak's "Polymorphic Temporal Media", but I am hoping that the
+category theory angle will yield some additional insights/tools.
+
+Some thoughts, in no particular order and with no guarantee of
+coherence, on questions that need exploring:
+
+In my experience, in practice one most often wants to work with
+animations that have a duration but no absolute location in time. But
+it might sometimes be useful to think about animations which do have
+an absolute location in time.  This is related to the theory of affine
+spaces, e.g. points and vectors, which has already come up over and
+over again in diagrams.  Can we come up with a nice theory to explain
+how to deal with absolutely located animations, and what sorts of
+operations we can have on them?  This is actually where Andy and I
+started from, a long time ago, but you very quickly run into all sorts
+of thorny issues, which essentially boil down to how you "compose"
+points in time.  You can take the min, or take the max, but neither
+one is canonical.
+
+Can we extend the theory to encompass things with infinite duration?
+
+There still remains the tricky issue of what to do at splice points.
+Consider the exact semantics of the 2-cells in my description above.
+A 2-cell on the duration d, over some domain of values V, should be a
+function [0,d] -> V ... or perhaps [0,d) -> V?  Or (0,d] -> V?  ...?
+One solution is just to define them with a built-in bias, as [0,d) ->
+V, but it seems weird for animations to always be open at the end (and
+this does not mirror very well how animations are built in the real
+world).  Another solution is to define them as functions [0,d] -> V
+but build in a left- or right-bias when doing sequential composition,
+so the value of one at the splice point overrides the other.
+
+Another potential solution I was considering recently, inspired by the
+common practice of keyframing, might run something like this.  We
+modify our 2-category slightly: Instead of having a single object, it
+has one object for each element of V.  For every pair of objects v1,
+v2 \in V, we have a 1-cell v1 -> v2 for each duration,
+i.e. nonnegative real number.  Given d : v1 -> v2, a 2-cell f : d -> d
+is a function [0,d] -> V such that f(0) = v1 and f(d) = v2.  In other
+words, we encode the initial and final "frames" of an animation as
+part of its type, and only allow horizontal composition of animations
+whose frames match up.  This is nifty but leaves the question --- what
+about when you really *do* want a jump cut?  One idea goes as follows:
+between each pair of objects v1, v2 there will be a duration morphism
+of length 0.  One can add a special 2-cell 0 -> 0 which I will call a
+"splice".  In fact one should probably add two special 2-cells, a
+"left-biased splice" and a "right-biased splice".  These have a type
+like v1 -> v2 but will actually take on one or the other value.  Hmm,
+except I just realized composition of these splices is not
+associative.... well, back to the drawing board.
+
+** Email 2
+
+Aha, I have a better idea.  We can use the 0-cells to encode not only
+keyframe values, but in which direction(s) the animations are
+"continuous" from the keyframe.  Given a set of values V, we define a
+2-category of animations over V as follows:
+
++ For each v \in V, we have three 0-cells, called v_*, v_L, and v_R.
++ As before, between each pair of objects we have one 1-cell for each
+  nonnegative duration.
++ There are only endo-2-cells.  Given any duration d : v_1 -> v_2
+  there are 2-cells alpha : d -> d consisting of a function f, with
+  codomain V, defined on *at least* the open interval (0,d).  In
+  addition:
+    + If the source 0-cell is of the form v_* or v_R, then f is also
+      defined at 0, and f(0) = v.
+    + If the target 0-cell is of the form v_* or v_L, then f is also
+      defined at d, and f(d) = v.
++ Horizontal composition of 2-cells now "just works", because the
+  constraints on the functions ensure that there is a single,
+  well-defined value at every time, even at the splice points.
+  Vertical composition works the same as before.
+
+For example, suppose we have a chain of 1-cells
+
+v1_L --d1--> v2_R --d2--> v3_* --d3--> v4_L
+
+where each 1-cell d_i has an endo-2-cell alpha_i.  Then alpha_1 is
+defined on (0,d), alpha_2 (when shifted appropriately) is defined on
+[d1, d1+d2], and alpha_3 is defined on [d1+d2, d1+d2+d3]; moreover,
+alpha_2 and alpha_3 are constrained to agree at d1+d2 (they are both
+equal to v3).
+
+If we wanted we could also add a fourth kind of 0-cell, which does not
+constrain the animations on either side of it, but this seems deeply
+weird --- a value of infinitely short duration sandwiched between two
+animations.  Leaving it out also means there are never any "gaps"
+where the value taken by an animation at a point is specified only by
+the type of the 0-cell there, and cannot also be recovered as the
+output of some function in a 2-cell.
+
+I am not yet really sure how to turn this into a nice API/type system
+for a Haskell library, but I am pondering it.
+
+** Email 3
+
+One of the main challenges when embedding this as a library in Haskell
+is that it is very difficult to have types of animations actually
+indexed by durations (or, for that matter, values/keyframes).  So far
+I've just been thinking about what to do with the durations; I have
+some ideas for the keyframe thing but will tackle that later.
+
+One idea is to simply have a type for animations that does *not*
+reflect their duration, and have durations checked dynamically at
+runtime.  Assuming we have a primarily Applicative interface, this can
+actually be checked "up front", before actually generating any frames
+of animation or whatever, because we can statically analyze an entire
+Applicative computation before running it.
+
+Parallel composition corresponds to Applicative.<*>, and this is the
+point at which we check whether durations match up.  (In practice we
+can use Rational for durations so we have decidable equality.)  The
+interesting point is 'pure', which should be "duration polymorphic",
+that is, it constructs an Active value which constantly takes on the
+given value and has *any* duration.  But if we are checking durations
+dynamically, then this means we need to allow for "unresolved"
+durations, which may get resolved via unification when doing <*>.
+Specifically, I propose something like the following:
+
++ Durations are of two types:
+  + An exact, known rational value
+  + A rational *lower bound*
++ When composing Active values in parallel, if they all have exact
+  durations, we simply check that they are all equal; if any have
+  lower bound durations but at least one is exact, then we can resolve
+  all the lower bounds to be equal to the exact duration, and so on.
++ When composing Active values sequentially, they must all have an
+  exact duration except at most one with a lower bound duration.  This
+  is to avoid ambiguity: if we have an animation with a lower bound of
+  1, sequentially composed with one with a lower bound of 2, then if
+  we later compose these in parallel with an animation of duration 6,
+  we do not know how to resolve them to exact durations (should it be
+  duration 1 followed by 5?  2 followed by 4? etc.)
+
+To help with efficiency/parallelization, I am imagining a sort of
+"free" representation, where sequentially composed Active values are
+stored in a balanced tree (with internal nodes annotated by durations,
+for O(log n) sampling), and parallel composed values are stored as a
+free Applicative structure (or something like that).
+
+This seems somewhat convoluted but I think we can tell a nice story
+about where it "comes from".  Currently trying to hack something
+together to see how it works in practice.
