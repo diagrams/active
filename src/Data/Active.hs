@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                        #-}
 {-# LANGUAGE DeriveFunctor              #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
@@ -141,7 +142,10 @@ module Data.Active
 
        ) where
 
+#if __GLASGOW_HASKELL__ < 710
 import           Control.Applicative
+#endif
+
 import           Control.Arrow       ((&&&))
 import           Control.Lens        hiding (backwards, (<.>))
 
