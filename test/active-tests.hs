@@ -1,8 +1,12 @@
+{-# LANGUAGE CPP              #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Main where
 
+#if __GLASGOW_HASKELL__ < 710
 import           Control.Applicative
+#endif
+
 import           Control.Monad       (unless)
 import           Data.Semigroup
 
@@ -13,8 +17,8 @@ import           Text.Printf         (printf)
 
 import           Data.Active
 
-import Linear.Affine
-import Linear.Vector
+import           Linear.Affine
+import           Linear.Vector
 
 main :: IO ()
 main = do
