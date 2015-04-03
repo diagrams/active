@@ -1,3 +1,10 @@
+0.2.0.0
+----------------------
+
+- switch from `vector-space` to `linear`
+- allow `lens-4.9`
+- allow `base-4.8`
+
 0.1.0.18 (22 Feb 2015)
 ----------------------
 
