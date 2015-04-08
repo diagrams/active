@@ -1,6 +1,7 @@
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE KindSignatures             #-}
+{-# LANGUAGE PolyKinds                  #-}
 {-# LANGUAGE RankNTypes                 #-}
 {-# LANGUAGE TypeOperators              #-}
 
@@ -29,9 +30,14 @@ instance Monoid Duration where
 -- Lower bounded durations
 ------------------------------------------------------------
 
+-- | A given value can be known 'Exactly', or can represent a lower
+--   bound ('AtLeast').
 data Certainty = Exactly | AtLeast
   deriving (Eq, Show)
 
+-- | The semigroup for 'Certainty' corresponds to the natural additive
+--   semigroup on lower bounds (see 'LB').  That is, 'Exactly' is the
+--   identity element and 'AtLeast' is an annihilator.
 instance Semigroup Certainty where
   AtLeast <> _       = AtLeast
   _       <> AtLeast = AtLeast
@@ -57,10 +63,10 @@ newtype LB m = LB (Certainty, m)
 -- Natural transformations and higher-order functors
 ------------------------------------------------------------
 
--- Natural transformations.
+-- | Natural transformations.
 type (f ~> g) = forall a. f a -> g a
 
--- Higher-order functors
+-- | Higher-order functors.
 class HFunctor f where
   hmap :: (g ~> h) -> (f g ~> f h)
 
@@ -68,14 +74,14 @@ instance HFunctor Ap where
   hmap _   (Pure a) = Pure a
   hmap eta (Ap x f) = Ap (eta x) (hmap eta f)
 
--- Higher-order fixpoint.
-newtype Fix1 :: ((* -> *) -> (* -> *)) -> (* -> *) where
+-- | Higher-order fixpoint.
+newtype Fix1 (f :: (k -> *) -> (k -> *)) (a :: k) :: * where
   In :: f (Fix1 f) a -> Fix1 f a
 
 out :: Fix1 f ~> f (Fix1 f)
 out (In f) = f
 
--- Catamorphism for higher-order fixpoint.
+-- | Catamorphism for higher-order fixpoint.
 cata1 :: HFunctor f => (f r ~> r) -> (Fix1 f ~> r)
 cata1 phi = phi . hmap (cata1 phi) . out
 
