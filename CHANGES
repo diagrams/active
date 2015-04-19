@@ -1,5 +1,5 @@
-0.2.0.0
-----------------------
+0.2.0.0 (19 April 2015)
+-----------------------
 
 - switch from `vector-space` to `linear`
 - allow `lens-4.9`
