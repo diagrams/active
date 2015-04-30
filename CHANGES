@@ -1,3 +1,9 @@
+0.2.0.2 (30 April 2015)
+-----------------------
+
+- reinstate `toTime`, `fromTime`, `toDuration`, `fromDuration`
+  which got accidentally removed in 0.2
+
 0.2.0.1 (22 April 2015)
 -----------------------
 
