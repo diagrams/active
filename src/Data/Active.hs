@@ -8,8 +8,8 @@
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE TypeSynonymInstances       #-}
-{-# LANGUAGE ViewPatterns               #-}
 {-# LANGUAGE UndecidableInstances       #-}
+{-# LANGUAGE ViewPatterns               #-}
 -- UndecidableInstances needed for ghc < 707
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
@@ -87,8 +87,8 @@ module Data.Active
 
          -- ** Time and duration
 
-         Time
-       , Duration
+         Time, toTime, fromTime
+       , Duration, toDuration, fromDuration
 
          -- ** Eras
 
@@ -150,10 +150,10 @@ import           Control.Arrow       ((&&&))
 import           Control.Lens        hiding (backwards, (<.>))
 
 import           Data.Functor.Apply
-import           Data.Semigroup      hiding (First (..))
-import           Data.Monoid         (First (..))
-import qualified Data.Vector         as V
 import           Data.Maybe
+import           Data.Monoid         (First (..))
+import           Data.Semigroup      hiding (First (..))
+import qualified Data.Vector         as V
 
 import           Linear
 import           Linear.Affine
@@ -165,13 +165,19 @@ import           Linear.Affine
 
 -- | An abstract type for representing /points in time/.  Note that
 --   literal numeric values may be used as @Time@s, thanks to the the
---   'Num' and 'Fractional' instances.  'toTime' and 'fromTime' are
---   also provided for convenience in converting between @Time@ and
---   other numeric types.
+--   'Num' and 'Fractional' instances.
 newtype Time n = Time { unTime :: n }
   deriving (Eq, Ord, Show, Read, Enum, Num, Fractional, Real, RealFrac, Functor)
 
 makeWrapped ''Time
+
+-- | A convenient wrapper function to convert a numeric value into a time.
+toTime :: n -> Time n
+toTime = Time
+
+-- | A convenient unwrapper function to turn a time into a numeric value.
+fromTime :: Time n -> n
+fromTime = unTime
 
 instance Affine Time where
   type Diff Time = Duration
@@ -185,13 +191,19 @@ instance Affine Time where
 -- | An abstract type representing /elapsed time/ between two points
 --   in time.  Note that durations can be negative. Literal numeric
 --   values may be used as @Duration@s thanks to the 'Num' and
---   'Fractional' instances. 'toDuration' and 'fromDuration' are also
---   provided for convenience in converting between @Duration@s and
---   other numeric types.
+--   'Fractional' instances.
 newtype Duration n = Duration n
   deriving (Eq, Ord, Show, Read, Enum, Num, Fractional, Real, RealFrac, Functor)
 
 makeWrapped ''Duration
+
+-- | A convenient wrapper function to convert a numeric value into a duration.
+toDuration :: n -> Duration n
+toDuration = Duration
+
+-- | A convenient unwrapper function to turn a duration into a numeric value.
+fromDuration :: Duration n -> n
+fromDuration = op Duration
 
 instance Applicative Duration where
   pure = Duration
