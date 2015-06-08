@@ -8,7 +8,7 @@
 {-# LANGUAGE TypeOperators              #-}
 {-# LANGUAGE TypeSynonymInstances       #-}
 
-module Active where
+module Data.Active where
 
 import           Control.Applicative
 import           Control.Applicative.Free
@@ -75,9 +75,15 @@ type (f ~> g) = forall a. f a -> g a
 
 -- | Higher-order functors.
 class HFunctor f where
-  hmap :: (g ~> h) -> (f g ~> f h)
+  -- f sends Functors to Functors
+  ffmap :: Functor g => (a -> b) -> (f g a -> f g b)
+  -- f sends natural transformations to natural transformations
+  hmap  :: (g ~> h) -> (f g ~> f h)
 
 instance HFunctor Ap where
+  ffmap g (Pure a) = Pure (g a)
+  ffmap g (Ap x f) = Ap x (ffmap (g .) f)
+
   hmap _   (Pure a) = Pure a
   hmap eta (Ap x f) = Ap (eta x) (hmap eta f)
 
@@ -98,18 +104,15 @@ data Decorated (d :: *) (f :: (* -> *) -> * -> *) r (a :: *) where
   Deco :: d -> f r a -> Decorated d f r a
 
 
-class Functor2 (f :: (* -> *) -> (* -> *)) where
-  fmap2 :: Functor g => (a -> b) -> f g a -> f g b
+instance HFunctor f => Functor (Fix1 f) where
+  fmap g (In fFa) = In (ffmap g fFa)
 
-instance Functor2 f => Functor (Fix1 f) where
-  fmap g (In fFa) = In (fmap2 g fFa)
+instance HFunctor f => HFunctor (Decorated d f) where
+  ffmap f (Deco d fra) = Deco d (ffmap f fra)
+  hmap  f (Deco d fga) = Deco d (hmap f fga)
 
-instance Functor2 f => Functor2 (Decorated d f) where
-  fmap2 g (Deco d fra) = Deco d (fmap2 g fra)
 
-instance Functor2 Ap where
-  fmap2 g (Pure a) = Pure (g a)
-  fmap2 g (Ap x f) = Ap x (fmap2 (g .) f)
+-- instance Functor2 f => Functor2 (Decorated d f) where
 
 ------------------------------------------------------------
 -- Active
@@ -134,16 +137,15 @@ data ActiveF f a
   | DynErr ActiveErr     -- Dynamic error
 
 instance HFunctor ActiveF where
+  ffmap g (Par a) = Par (ffmap g a)
+  ffmap g (Seq a1 a2) = Seq (fmap g a1) (fmap g a2)
+  ffmap g (Prim d f) = Prim d (g . f)
+  ffmap _ (DynErr e) = DynErr e
+
   hmap eta (Par a)     = Par (hmap eta a)
   hmap eta (Seq a1 a2) = Seq (eta a1) (eta a2)
   hmap _   (Prim d f)  = Prim d f
   hmap _   (DynErr a)  = DynErr a
-
-instance Functor2 ActiveF where
-  fmap2 g (Par a) = Par (fmap2 g a)
-  fmap2 g (Seq a1 a2) = Seq (fmap g a1) (fmap g a2)
-  fmap2 g (Prim d f) = Prim d (g . f)
-  fmap2 _ (DynErr e) = DynErr e
 
 -- Decorated + Fix1 basically let us build 'Active' as a higher-order
 -- cofree comonad---because of the higher-order-ness we unfortunately
