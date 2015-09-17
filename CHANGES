@@ -1,3 +1,7 @@
+## [v0.2.0.6](https://github.com/diagrams/active/tree/v0.2.0.6) (2015-09-17)
+
+- allow `semigroups-0.17` in test suite
+
 ## [v0.2.0.5](https://github.com/diagrams/active/tree/v0.2.0.5) (2015-09-15)
 
 - allow `semigroups-0.17`
