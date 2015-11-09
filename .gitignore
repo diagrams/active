@@ -27,3 +27,4 @@ Shake
 ActiveDiagrams
 semantics/diagrams/*
 semantics/FARM/diagrams/*
+.diagrams-cache
