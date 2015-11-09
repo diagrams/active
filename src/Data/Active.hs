@@ -413,7 +413,7 @@ isDynamic = onActive (const False) (const True)
 --   at time @t@, and has as its era @[0,1]@. It is equivalent to
 --   @'interval' 0 1@, and can be visualized as follows:
 --
---   <<http://www.cis.upenn.edu/~byorgey/hosted/ui.png>>
+--   <<diagrams/src_Data_Active_uiDia.svg#diagram=uiDia&width=200>>
 --
 --   On the x-axis is time, and the value that @ui@ takes on is on the
 --   y-axis.  The shaded portion represents the era.  Note that the
@@ -470,7 +470,7 @@ shift sh = modActive id (shiftDynamic sh)
 --   the end and vice versa.  For example, @backwards 'ui'@ can be
 --   visualized as
 --
---   <<http://www.cis.upenn.edu/~byorgey/hosted/backwards.png>>
+--   <<diagrams/src_Data_Active_backwardsDia.svg#diagram=backwardsDia&width=200>>
 backwards :: Active a -> Active a
 backwards =
   modActive id . onDynamic $ \s e d ->
@@ -491,7 +491,7 @@ snapshot t a = pure (runActive a t)
 --
 --   For example, @clamp 'ui'@ can be visualized as
 --
---   <<http://www.cis.upenn.edu/~byorgey/hosted/clamp.png>>
+--   <<diagrams/src_Data_Active_clampDia.svg#diagram=clampDia&width=200>>
 --
 --   See also 'clampBefore' and 'clampAfter', which clamp only before
 --   or after the era, respectively.
@@ -508,7 +508,7 @@ clamp =
 -- | \"Clamp\" an active value so that it is constant before the start
 --   of its era. For example, @clampBefore 'ui'@ can be visualized as
 --
---   <<http://www.cis.upenn.edu/~byorgey/hosted/clampBefore.png>>
+--   <<diagrams/src_Data_Active_clampBeforeDia.svg#diagram=clampBeforeDia&width=200>>
 --
 --   See the documentation of 'clamp' for more information.
 clampBefore :: Active a -> Active a
@@ -519,7 +519,7 @@ clampBefore = undefined
 -- | \"Clamp\" an active value so that it is constant after the end
 --   of its era.  For example, @clampBefore 'ui'@ can be visualized as
 --
---   <<http://www.cis.upenn.edu/~byorgey/hosted/clampAfter.png>>
+--   <<diagrams/src_Data_Active_clampAfterDia.svg#diagram=clampAfterDia&width=200>>
 --
 --   See the documentation of 'clamp' for more information.
 clampAfter :: Active a -> Active a
@@ -531,7 +531,7 @@ clampAfter = undefined
 --
 --   For example, @trim 'ui'@ can be visualized as
 --
---   <<http://www.cis.upenn.edu/~byorgey/hosted/trim.png>>
+--   <<diagrams/src_Data_Active_trimDia.svg#diagram=trimDia&width=200>>
 --
 --   Actually, @trim ui@ is not well-typed, since it is not guaranteed
 --   that @ui@'s values will be monoidal (and usually they won't be)!
@@ -555,7 +555,7 @@ trim =
 -- | \"Trim\" an active value so that it is empty /before/ the start
 --   of its era. For example, @trimBefore 'ui'@ can be visualized as
 --
---   <<http://www.cis.upenn.edu/~byorgey/hosted/trimBefore.png>>
+--   <<diagrams/src_Data_Active_trimBeforeDia.svg#diagram=trimBeforeDia&width=200>>
 --
 --   See the documentation of 'trim' for more details.
 trimBefore :: Monoid a => Active a -> Active a
@@ -569,7 +569,7 @@ trimBefore =
 -- | \"Trim\" an active value so that it is empty /after/ the end
 --   of its era.  For example, @trimAfter 'ui'@ can be visualized as
 --
---   <<http://www.cis.upenn.edu/~byorgey/hosted/trimAfter.png>>
+--   <<diagrams/src_Data_Active_trimAfterDia.svg#diagram=trimAfterDia&width=200>>
 --
 --   See the documentation of 'trim' for more details.
 trimAfter :: Monoid a => Active a -> Active a
@@ -672,3 +672,37 @@ simulate rate =
                       )
            )
 
+------------------------------------------------------------
+-- Illustrations produced with diagrams-haddock
+--
+-- > d :: Diagram B -> Diagram B
+-- > d fun = (square 4 <> ends <> fun # lc red)
+-- >       # lineCap LineCapRound # lineJoin LineJoinRound
+-- >       # frame 1
+-- >   where ends = vert <> vert # translateX 1
+-- >                <> rect 1 4 # translateX (0.5) # opacity 0.2 # fc grey
+-- >         vert = vrule 4 # dashingG [0.1,0.1] 0 # lc grey
+-- >
+-- > uiDia = d $
+-- >   ((-2) ^& (-2)) ~~ (2 ^& 2)
+-- >
+-- > backwardsDia = d $
+-- >   (2 ^& (-1)) ~~ ((-1) ^& 2)
+-- >
+-- > clampDia = d $
+-- >   [(2,0), (1,1), (1,0)]
+-- >   # map r2 # fromOffsets # centerX
+-- >
+-- > clampBeforeDia = d $
+-- >   [(2,0), (2,2)]
+-- >   # map r2 # fromOffsets # centerX
+-- >
+-- > clampAfterDia = d $
+-- >   [(3,3), (1,0)]
+-- >   # map r2 # fromOffsets # centerX # translateY (-2)
+-- >
+-- > trimDia = d $ origin ~~ (1 ^& 1)
+-- >
+-- > trimBeforeDia = d $ origin ~~ (2 ^& 2)
+-- >
+-- > trimAfterDia = d $ ((-2) ^& (-2)) ~~ (1 ^& 1)
