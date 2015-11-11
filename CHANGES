@@ -1,3 +1,7 @@
+## [v0.2.0.8](https://github.com/diagrams/active/tree/v0.2.0.8) (2015-11-10)
+
+- allow `semigroups-0.18`
+
 ## [v0.2.0.7](https://github.com/diagrams/active/tree/v0.2.0.7) (2015-11-09)
 
 - fix image links in documentation
