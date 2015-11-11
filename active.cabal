@@ -22,7 +22,7 @@ library
   exposed-modules:     Data.Active
   build-depends:       base >= 4.0 && < 4.9,
                        vector >= 0.10,
-                       semigroups >= 0.1 && < 0.18,
+                       semigroups >= 0.1 && < 0.19,
                        semigroupoids >= 1.2 && < 5.1,
                        lens >= 4.0 && < 4.14,
                        linear >= 1.14 && < 1.21
@@ -34,7 +34,7 @@ test-suite active-tests
     main-is:           active-tests.hs
     build-depends:     base >= 4.0 && < 4.9,
                        vector >= 0.10,
-                       semigroups >= 0.1 && < 0.18,
+                       semigroups >= 0.1 && < 0.19,
                        semigroupoids >= 1.2 && < 5.1,
                        lens >= 4.0 && < 4.14,
                        linear >= 1.14 && < 1.21,
