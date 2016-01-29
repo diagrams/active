@@ -23,7 +23,7 @@
 -- Inspired by the work of Kevin Matlage and Andy Gill (/Every/
 -- /Animation Should Have a Beginning, a Middle, and an End/, Trends
 -- in Functional Programming,
--- 2010. <http://ittc.ku.edu/csdl/fpg/node/46>), this module defines a
+-- 2010. <http://ku-fpg.github.io/files/Matlage-10-BeginningMiddleEnd.pdf>), this module defines a
 -- simple abstraction for working with time-varying values.  A value
 -- of type @Active a@ is either a constant value of type @a@, or a
 -- time-varying value of type @a@ (/i.e./ a function from time to
