@@ -51,9 +51,6 @@ main = do
 {-# ANN main ("HLint: ignore Eta reduce" :: String) #-}
 -- eta reducing qc breaks it
 
-instance Arbitrary Any where
-  arbitrary = Any <$> arbitrary
-
 instance (Arbitrary n, Fractional n, Real n) => Arbitrary (Time n) where
   arbitrary = fromRational <$> arbitrary
 
