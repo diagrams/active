@@ -5,7 +5,7 @@ description:         "Active" abstraction for animated things with finite start 
 license:             BSD3
 license-file:        LICENSE
 author:              Brent Yorgey
-maintainer:          byorgey@cis.upenn.edu
+maintainer:          byorgey@gmail.com
 copyright:           (c) 2011-2015 Brent Yorgey
 category:            Data
 build-type:          Simple
