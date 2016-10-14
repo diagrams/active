@@ -1,3 +1,7 @@
+## [0.2.0.12](https://github.com/diagrams/active/tree/v0.2.0.12) (2016-10-14)
+
+- allow `lens-4.15`
+
 ## [v0.2.0.11](https://github.com/diagrams/active/tree/v0.2.0.11) (2016-08-01)
 
 - update test suite for `QuickCheck-2.9`
