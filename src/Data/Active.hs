@@ -11,7 +11,6 @@
 {-# LANGUAGE UndecidableInstances       #-}
 {-# LANGUAGE ViewPatterns               #-}
 -- UndecidableInstances needed for ghc < 707
-{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 -----------------------------------------------------------------------------
 -- |
@@ -329,10 +328,9 @@ newtype Active a = Active (MaybeApply Dynamic a)
   deriving (Functor, Apply, Applicative)
 
 makeWrapped ''Active
-makeWrapped ''MaybeApply
 
 active :: Iso' (Active a) (Either (Dynamic a) a)
-active = _Wrapped . _Wrapped
+active = _Wrapped . iso runMaybeApply MaybeApply
 
 -- | Active values over a type with a 'Semigroup' instance are also an
 --   instance of 'Semigroup'.  Two active values are combined
