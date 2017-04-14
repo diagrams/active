@@ -20,10 +20,10 @@ source-repository head
 
 library
   exposed-modules:     Data.Active
-  build-depends:       base >= 4.0 && < 4.10,
+  build-depends:       base >= 4.0 && < 4.11,
                        vector >= 0.10,
                        semigroups >= 0.1 && < 0.19,
-                       semigroupoids >= 1.2 && < 5.2,
+                       semigroupoids >= 1.2 && < 5.3,
                        lens >= 4.0 && < 4.16,
                        linear >= 1.14 && < 1.21
   hs-source-dirs:      src
