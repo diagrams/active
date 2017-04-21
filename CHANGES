@@ -2,6 +2,9 @@
 
 - allow `lens-4.15`
 
+Included in revision 1 on Hackage:
+- allow `semigroupoids-5.2`
+
 ## [v0.2.0.11](https://github.com/diagrams/active/tree/v0.2.0.11) (2016-08-01)
 
 - update test suite for `QuickCheck-2.9`
