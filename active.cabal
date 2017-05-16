@@ -1,5 +1,5 @@
 name:                active
-version:             0.2.0.12
+version:             0.2.0.13
 synopsis:            Abstractions for animation
 description:         "Active" abstraction for animated things with finite start and end times.
 license:             BSD3
