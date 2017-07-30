@@ -179,7 +179,7 @@ maxDuration (Duration _) Forever      = Forever
 maxDuration (Duration a) (Duration b) = Duration (max a b)
 
 -- | The minimum of two durations.
-minDuration :: (Num n, Ord n) => Duration f1 n -> Duration f2 n -> Duration (f1 ⊓ f2) n
+minDuration :: Ord n => Duration f1 n -> Duration f2 n -> Duration (f1 ⊓ f2) n
 minDuration Forever Forever           = Forever
 minDuration Forever (Duration b)      = Duration b
 minDuration (Duration a) Forever      = Duration a
