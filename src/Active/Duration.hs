@@ -58,9 +58,9 @@ data Finitude =
 --   Finitudes form a monoid under this operation with 'F' as the
 --   identity element.
 type family (f1 :: Finitude) ⊔ (f2 :: Finitude) :: Finitude where
-  f ⊔ f = f
-  F ⊔ f = f
-  I ⊔ f = I
+  f    ⊔ f = f
+  ('F) ⊔ f = f
+  ('I) ⊔ f = 'I
 
 -- | Intersection on type-level finitudes.  This is not quite as
 --   straightforward as union: the intersection of a finite set with
@@ -74,9 +74,9 @@ type family (f1 :: Finitude) ⊔ (f2 :: Finitude) :: Finitude where
 --   This operation is associative; 'Finitude' forms a monoid with 'I'
 --   as the identity element.
 type family (f1 :: Finitude) ⊓ (f2 :: Finitude) :: Finitude where
-  f ⊓ f = f
-  F ⊓ f = F
-  I ⊓ g = g
+  f    ⊓ f = f
+  ('F) ⊓ f = 'F
+  ('I) ⊓ g = g
 
 ------------------------------------------------------------
 -- Durations
@@ -90,15 +90,15 @@ data Duration :: Finitude -> * -> * where
 
   -- | A finite duration of a given nonnegative length.  The length
   --   could be zero.
-  Duration :: n -> Duration F n
+  Duration :: n -> Duration 'F n
 
   -- | An infinite duration.
-  Forever  ::      Duration I n
+  Forever  ::      Duration 'I n
 
 deriving instance Show n => Show (Duration f n)
 deriving instance Functor (Duration f)
 
-instance Applicative (Duration F) where
+instance Applicative (Duration 'F) where
   pure = Duration
   Duration f <*> Duration x = Duration (f x)
 
@@ -130,7 +130,7 @@ compareDuration (Duration n1) (Duration n2) = compare n1 n2
 --
 --   This instance also gives us the convenience of 'fromInteger', so
 --   numeric literals can be used as finite durations.
-instance Num n => Num (Duration F n) where
+instance Num n => Num (Duration 'F n) where
   fromInteger               = toDuration . fromInteger
   negate (Duration d)       = Duration (negate d)
   Duration d1 + Duration d2 = Duration (d1 + d2)
@@ -138,11 +138,11 @@ instance Num n => Num (Duration F n) where
   abs (Duration n)          = Duration (abs n)
   signum = error "signum on durations makes no sense"
 
-instance Additive (Duration F) where
+instance Additive (Duration 'F) where
   zero = Duration 0
 
 -- | A wrapper function to convert a numeric value into a finite duration.
-toDuration :: n -> Duration F n
+toDuration :: n -> Duration 'F n
 toDuration = Duration
 
 -- | An unwrapper function to turn a duration into a numeric value.
@@ -153,7 +153,7 @@ fromDuration Forever      = Nothing
 fromDuration (Duration n) = Just n
 
 -- | Like 'fromDuration' when you know you have a finite duration.
-fromDurationF :: Duration F n -> n
+fromDurationF :: Duration 'F n -> n
 fromDurationF (Duration n) = n
 
 -- | Add two durations.  If either one is infinite, so is the result;
@@ -166,7 +166,7 @@ addDuration (Duration a) (Duration b) = Duration (a + b)
 -- | Subtract a finite duration from another duration.  If the first
 --   duration is infinite, the result is also infinite.  If the second
 --   duration is longer than the first, the result is zero.
-subDuration :: (Num n, Ord n) => Duration f1 n -> Duration F n -> Duration f1 n
+subDuration :: (Num n, Ord n) => Duration f1 n -> Duration 'F n -> Duration f1 n
 subDuration Forever      _            = Forever
 subDuration (Duration a) (Duration b)
   | b <= a    = Duration (a - b)

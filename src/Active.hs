@@ -132,7 +132,7 @@ module Active
   , stretch, stretch', stretchTo, matchDuration
 
     -- ** Slicing and dicing
-  , cut, omit, slice
+  , cut, cutTo, omit, slice
 
   ) where
 
@@ -543,7 +543,7 @@ runActiveOpt a = Option . runActiveMay a
 --   "aaaa"
 
 withActive :: (Active 'F a -> b) -> (Active 'I a -> b) -> Active f a -> b
-withActive onFinite onInfinite a@(Active d f) =
+withActive onFinite onInfinite a@(Active d _) =
   case d of
     Duration _ -> onFinite a
     Forever    -> onInfinite a
@@ -567,7 +567,7 @@ duration (Active d _) = fromDuration d
 --   3 % 1
 --   >>> durationF (movie [lasting 3 'a', lasting 2 'b'])
 --   5 % 1
-durationF :: Active F a -> Rational
+durationF :: Active 'F a -> Rational
 durationF (Active d _) = fromDurationF d
 
 -- | Extract the value at the beginning of an 'Active'.
@@ -1097,7 +1097,7 @@ stack = sconcat . NE.fromList
 --   * You can use the provided 'stackAtDef' function instead, which
 --     uses a given default value in place of 'mempty'.
 
-stackAt :: (Monoid a, Semigroup a) => [(Rational, Active F a)] -> Active F a
+stackAt :: (Monoid a, Semigroup a) => [(Rational, Active 'F a)] -> Active 'F a
 stackAt [] = instant mempty
 stackAt ps = stack . map (uncurry delay) $ ps
 
@@ -1130,7 +1130,7 @@ stackAt ps = stack . map (uncurry delay) $ ps
 --   > stackAtDefEx :: ActF (Sum Rational)
 --   > stackAtDefEx = stackAtDef (Sum (1/2)) (zip [0,3] stackAtEx2Args)
 
-stackAtDef :: Semigroup a => a -> [(Rational, Active F a)] -> Active F a
+stackAtDef :: Semigroup a => a -> [(Rational, Active 'F a)] -> Active 'F a
 stackAtDef a as
   = option a id <$> stackAt ((map . second) (fmap (Option . Just)) as)
 
