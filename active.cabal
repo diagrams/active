@@ -54,6 +54,6 @@ library
 test-suite active-doctests
   type:                exitcode-stdio-1.0
   main-is:             active-doctest.hs
-  build-depends:       base, doctest >= 0.12 && < 0.13, active
+  build-depends:       base, directory, doctest
   hs-source-dirs:      test
   default-language:    Haskell2010

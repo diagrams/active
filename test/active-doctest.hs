@@ -1,4 +1,5 @@
-import Test.DocTest
+import           System.Directory
+import           Test.DocTest
 
 main :: IO ()
-main = doctest ["src/Active.hs"]
+main = withCurrentDirectory "src" $ doctest ["Active.hs"]
