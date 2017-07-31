@@ -1391,13 +1391,16 @@ stretch' s a
 --
 --   <<diagrams/src_Active_backwardsDia.svg#diagram=backwardsDia&width=450>>
 --
---   > backwardsEx :: ActiveF Rational
---   > backwardsEx = backwards (interval 0 3)
+--   > backwardsExArg :: ActF Double
+--   > backwardsExArg = cut 4 (sin'/3 * (dur <#> fromRational) + 2)
+--   >
+--   > backwardsEx :: ActF Double
+--   > backwardsEx = backwards backwardsExArg
 
 backwards :: Active 'F a -> Active 'F a
 backwards (Active (Duration d) f) =  Active (Duration d) (f . (d-))
 
--- > backwardsDia = illustrateActiveFun backwards (interval 0 3)
+-- > backwardsDia = illustrateActiveFun' 0.1 [] [] backwards backwardsExArg
 
 
 -- | Stretch the second active so it has the same duration as the
@@ -1446,15 +1449,18 @@ stretchTo n a@(Active (Duration d) _) = stretch (n / d) a
 --
 --   <<diagrams/src_Active_snapshotDia.svg#diagram=snapshotDia&width=450>>
 --
+--   > snapshotExArg :: ActI Double
+--   > snapshotExArg = cos' + 2
+--   >
 --   > snapshotEx :: ActI Double
---   > snapshotEx = snapshot (1/8) cos'
+--   > snapshotEx = snapshot (9/8) snapshotExArg
 --
 --   >>> take 3 (samples 1 (snapshot (9/8) cos'))
 --   [0.7071067811865477,0.7071067811865477,0.7071067811865477]
 snapshot :: Rational -> Active f a -> Active 'I a
 snapshot t a = always (runActive a t)
 
--- > snapshotDia = illustrateActiveFun' 0.1 [(9/8,CC)] [] (snapshot (1/8)) cos'
+-- > snapshotDia = illustrateActiveFun' 0.1 [(9/8,CC)] [] (snapshot (9/8)) snapshotExArg
 
 
 -- | @cut d a@ cuts the given 'Active' @a@ (which can be finite or
