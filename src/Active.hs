@@ -618,10 +618,11 @@ samples 0  _ = error "Active.samples: Frame rate can't equal zero"
 samples fr (Active (Duration d) f) = map f . takeWhile (<= d) . map (/toRational fr) $ [0 ..]
 
   -- We'd like to just say (map f [0, 1/n .. d]) above but that
-  -- doesn't work, because of the weird behavior of Enum with floating
-  -- point: the last element of the list might actually be a bit
-  -- bigger than d.  This way we also avoid the error that can
-  -- accumulate by repeatedly adding 1/n.
+  -- doesn't work, because of the weird semantics of Enum: the last
+  -- element of the list might actually be a bit bigger than d.  For
+  -- example, if we replace the above definition with (map f [0, 1/n
+  -- .. d]), then samples 1 (lasting 2.9 ()) = [(),(),(),()], whereas
+  -- it should have a length of 3.
 
 samples fr (Active Forever      f) = map (f . (/toRational fr)) $ [0 ..]
 
@@ -641,14 +642,11 @@ samples fr (Active Forever      f) = map (f . (/toRational fr)) $ [0 ..]
 --
 -- The only nuance is what happens at the precise point of overlap
 -- (recall that finite 'Active' values are defined on a /closed/
--- interval).  If one were to use @Double@ values as durations, it
--- probably wouldn't matter what happened at the precise point of
--- overlap, since the probability of sampling at that exact point
--- would be very small.  But since we are using rational durations, it
--- matters quite a bit, since one might reasonably sample at a frame
--- rate which evenly divides the durations used in constructing the
--- 'Active', and hence end up sampling precisely on the points of
--- overlap between primitive 'Active' values.
+-- interval).  Since durations are rational numbers, we might
+-- reasonably sample at a frame rate which evenly divides the
+-- durations used in constructing the 'Active', and hence end up
+-- sampling precisely on the points of overlap between primitive
+-- 'Active' values.
 --
 -- The answer is that ('->-') requires a 'Semigroup' instance for the
 -- type 'a', and when composing @x ->- y@, the value at the end of @x@
