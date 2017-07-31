@@ -132,11 +132,12 @@ compareDuration (Duration n1) (Duration n2) = compare n1 n2
 --   numeric literals can be used as finite durations.
 instance Num n => Num (Duration 'F n) where
   fromInteger               = toDuration . fromInteger
-  negate (Duration d)       = Duration (negate d)
   Duration d1 + Duration d2 = Duration (d1 + d2)
-  (*)    = error "multiplying durations makes no sense"
   abs (Duration n)          = Duration (abs n)
-  signum = error "signum on durations makes no sense"
+
+  negate (Duration d)       = error "negating durations makes no sense"
+  (*)                       = error "multiplying durations makes no sense"
+  signum                    = error "signum on durations makes no sense"
 
 instance Additive (Duration 'F) where
   zero = Duration 0
