@@ -135,7 +135,7 @@ instance Num n => Num (Duration 'F n) where
   Duration d1 + Duration d2 = Duration (d1 + d2)
   abs (Duration n)          = Duration (abs n)
 
-  negate (Duration d)       = error "negating durations makes no sense"
+  negate                    = error "negating durations makes no sense"
   (*)                       = error "multiplying durations makes no sense"
   signum                    = error "signum on durations makes no sense"
 
