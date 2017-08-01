@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveFunctor       #-}
 {-# LANGUAGE FlexibleInstances   #-}
-{-# LANGUAGE GADTSyntax          #-}
+{-# LANGUAGE GADTs               #-}
 {-# LANGUAGE KindSignatures      #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 

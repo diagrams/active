@@ -1,5 +1,5 @@
 {-# LANGUAGE DeriveFunctor  #-}
-{-# LANGUAGE GADTSyntax     #-}
+{-# LANGUAGE GADTs          #-}
 {-# LANGUAGE KindSignatures #-}
 
 -----------------------------------------------------------------------------
