@@ -79,15 +79,19 @@ module Active
     -- * The Active type
   , Active
 
-    -- * Primitives
+    -- * Building actives
   , activeF, activeI, active
   , instant, lasting, always
   , ui, ui', interval, interval', dur, dur'
-  , sin', cos'
   , (<#>)
   , discreteNE, discrete
 
-    -- * Running/sampling
+    -- * Convenient primitives
+
+  , sin', cos'
+  , ramp, cosRamp
+
+    -- * Running/sampling actives
 
   , runActive, runActiveMay, runActiveOpt
   , duration, durationF, isFinite
@@ -363,6 +367,44 @@ cos' :: Floating n => Active n
 cos' = cos (2*pi*dur')
 
 -- > cos'Dia = illustrateActive' 0.1 [] cos'
+
+
+-- | Particularly when animating motion, it looks bad to have things
+--   simply move linearly from one point to another; it looks much
+--   nicer if they accelerate away from their starting point and then
+--   decelerate as they reach their goal.  This can be achieved by
+--   linearly interpolating between the points according to the output
+--   of some ramp function.
+--
+--   @ramp@ has duration 1 and takes on values in the interval \([0,1]\).
+--   It happens to correspond to the specific function
+--
+--   \(f(t) = -20t^7 + 70t^6 - 84t^5 + 35t^4\),
+--
+--   which is the antiderivative of \(140t^3(1-t)^3\).  I got this
+--   function from Clayton Shonkwiler (https://shonkwiler.org/).
+--
+--   <<diagrams/src_Active_rampDia.svg#diagram=rampDia&width=200>>
+--
+--   > rampEx :: Active Rational
+--   > rampEx = stretch 3 (3 * ramp)
+ramp :: Active Rational
+ramp = ui <#> \t -> (((-20 * t + 70) * t - 84) * t + 35) * t^4
+
+-- > rampDia = illustrateActive' 0.1 [] rampEx
+
+
+-- | An alternative ramp function based on a portion of a cosine
+--   curve; produces spring-like motion.
+--
+--   <<diagrams/src_Active_cosRampDia.svg#diagram=cosRampDia&width=200>>
+--
+--   > cosRampEx :: Active Double
+--   > cosRampEx = stretch 3 (3 * cosRamp)
+cosRamp :: Active Double
+cosRamp = ui <#> \t -> (-cos (fromRational t * pi) + 1)/2
+
+-- > cosRampDia = illustrateActive' 0.1 [] cosRampEx
 
 
 -- | @interval a b@ varies linearly from \( a \) to \( b \) over a
