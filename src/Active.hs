@@ -1,13 +1,8 @@
-{-# LANGUAGE DataKinds            #-}
-{-# LANGUAGE DeriveFunctor        #-}
-{-# LANGUAGE FlexibleInstances    #-}
-{-# LANGUAGE GADTs                #-}
-{-# LANGUAGE KindSignatures       #-}
-{-# LANGUAGE ScopedTypeVariables  #-}
-{-# LANGUAGE StandaloneDeriving   #-}
-{-# LANGUAGE TypeFamilies         #-}
-{-# LANGUAGE TypeOperators        #-}
-{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE DeriveFunctor       #-}
+{-# LANGUAGE FlexibleInstances   #-}
+{-# LANGUAGE GADTSyntax          #-}
+{-# LANGUAGE KindSignatures      #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 -----------------------------------------------------------------------------
 -- |
@@ -16,7 +11,7 @@
 -- License     :  BSD-style (see LICENSE)
 -- Maintainer  :  byorgey@gmail.com
 --
--- active is a small EDSL for building continuous, time-varying values
+-- @active@ is a small EDSL for building continuous, time-varying values
 -- of arbitrary type. It is particularly useful for building media
 -- such as animations, audio clips, and the like, but it is often
 -- useful to have other values that vary over time (vectors, colors,
@@ -26,63 +21,68 @@
 -- Some of the important concepts/features of the library include:
 --
 -- * Every 'Active' value has a /duration/, which is either a
---   nonnegative rational number, or infinity.
--- * An 'Active' value with duration
---   \(d\) can be thought of as a function \([0,d] \to a\), assigning a
---   value to each instant on the closed interval \([0,d]\).
--- * 'Active' values are /time-invariant/, that is, they do not have a
+--   nonnegative rational number, or infinite.
+-- * An @Active@ value with finite duration \(d\) can be thought of as
+--   a function \([0,d] \to a\), assigning a value to each instant on
+--   the closed interval \([0,d]\); an @Active@ with infinite duration
+--   assigns a value to every nonnegative time.
+-- * @Active@ values are /time-invariant/, that is, they do not have a
 --   fixed, absolute starting time.  Put another way, time is always
---   relative: one can say that `a` should start two seconds after `b`
+--   relative: one can say that `a` should start two seconds after `b`,
 --   but one cannot say that `a` should start at 2pm on Thursday.
--- * 'Active' values can be composed both in sequence and in parallel,
+-- * @Active@ values can be composed both in sequence and in parallel,
 --   with special attention paid to how underlying values should be
 --   composed when there is overlap.
+-- * The 'Applicative' instance can be used to apply time-varying
+--   functions to time-varying values.
+-- * Time-varying numeric values can be conveniently manipulated via
+--   appropriate 'Num', 'Fractional', and 'Floating' instances.
 --
--- Throughout this Haddock documentation, various primitive 'Active'
+-- Throughout this Haddock documentation, various primitive @Active@
 -- values and combinators are illustrated using graphical
 -- representations of time-varying numeric values, that is, values of
--- type @Active f d@ for some numeric type @d@.  They are drawn with
+-- type @Active d@ for some numeric type @d@.  They are drawn with
 -- time increasing along the x-axis and numeric value on the y-axis.
--- For example, the 'Active' of duration 3 which has value \(t/2\) at
+-- For example, the @Active@ of duration 3 which has value \(t/2\) at
 -- time \(t\) would be drawn like this:
 --
 -- <<diagrams/src_Active_exampleDia.svg#diagram=exampleDia&width=200>>
 --
 -- Some combinators are also illustrated by showing "before" and
 -- "after" diagrams, to visualize their effect.  For example, the
--- 'backwards' combinator reverses a finite 'Active' in time; it could
+-- 'backwards' combinator reverses a finite @Active@ in time; it could
 -- be illustrated thus:
 --
--- <<diagrams/src_Active_exampleCombDia.svg#diagram=exampleCombDia&width=450>>
+-- <<diagrams/src_Active_backwardsDia.svg#diagram=backwardsDia&width=450>>
 --
--- Often, the meaning of combining @Active f a@ values depends on a
+-- Often, the meaning of combining @Active a@ values depends on a
 -- 'Semigroup' instance for @a@.  Most of the illustrations use the
 -- 'Sum' semigroup over the underlying numeric type.  For example, the
--- operation of combining two 'Active' values in parallel is
+-- operation of combining two @Active@ values in parallel is
 -- illustrated by adding their respective values:
 --
 -- <<diagrams/src_Active_parUDia.svg#diagram=parUDia&width=450>>
 --
 -- The code for producing these diagrams isn't particularly pretty,
--- but you can look at it if you like---just view the source of this
+-- but you can look at it if you like: just view the source of this
 -- module and scroll all the way to the bottom.
 --
 -----------------------------------------------------------------------------
 
 module Active
   ( -- * Durations
-    -- | A few things are re-exported from the "Active.Duration"
-    --   module for convenience.
+    -- | A few things from the "Active.Duration" module are
+    --   re-exported for convenience.
 
-    Finitude(..), Duration(..), toDuration
+    Duration(..), toDuration
 
     -- * The Active type
-  , Active, ActF, ActI
+  , Active
 
     -- * Primitives
   , activeF, activeI, active
   , instant, lasting, always
-  , ui, interval, dur
+  , ui, ui', interval, interval', dur, dur'
   , sin', cos'
   , (<#>)
   , discreteNE, discrete
@@ -90,9 +90,8 @@ module Active
     -- * Running/sampling
 
   , runActive, runActiveMay, runActiveOpt
-  , withActive
-  , duration, durationF
-  , start, end, samples
+  , duration, durationF, isFinite
+  , start, end, endMay, samples
 
     -- * Sequential composition
     -- $seq
@@ -118,18 +117,16 @@ module Active
     -- ** Intersecting parallel composition
     -- $inter
 
-  , IApplicative(..), iliftA2
-
   , parI, (<∩>)
 
     -- * Modifying
 
     -- ** Playing with time
-  , backwards, snapshot, delay
+  , backwards, backwardsMay, snapshot, delay
 
     -- ** Stretching
 
-  , stretch, stretch', stretchTo, matchDuration
+  , stretch, stretchTo, matchDuration, matchDurationMay
 
     -- ** Slicing and dicing
   , cut, cutTo, omit, slice
@@ -138,28 +135,24 @@ module Active
 
 import           Data.Coerce
 
-import           Data.Bifunctor       (second)
-import           Data.List.NonEmpty   (NonEmpty (..))
-import qualified Data.List.NonEmpty   as NE
-import           Data.Maybe           (fromJust)
+import           Control.Applicative
+import           Data.Bifunctor      (second)
+import           Data.List.NonEmpty  (NonEmpty (..))
+import qualified Data.List.NonEmpty  as NE
+import           Data.Maybe          (fromJust, fromMaybe)
 import           Data.Semigroup
-import qualified Data.Vector          as V
+import qualified Data.Vector         as V
 import           Linear.Vector
 
 import           Active.Duration
-import           Control.IApplicative
 
 
 ------------------------------------------------------------
 --  Active
 ------------------------------------------------------------
 
--- | A value of type @Active f a@ is a time-varying value of type
+-- | A value of type @Active a@ is a time-varying value of type
 --   @a@ with a given duration.
---
---   * @f@ is an index indicating whether the duration is finite or
---   infinite.
---   * @a@ is the type of the values.
 --
 --   If the duration is infinite, it can be thought of as a function
 --   \( [0,+\infty) \to a \); if it has a finite duration \( d \), it
@@ -167,18 +160,18 @@ import           Control.IApplicative
 --   particular that the interval is /closed/ on both ends: the
 --   function is defined at \(0\) as well as at the duration \(d\)).
 --
---   @Active f@ is a @Functor@, and @Active@ is an 'IApplicative'; if
---   @a@ is a 'Semigroup' then @Active f a@ is as well.  @Active I a@
---   is an instance of 'Num', 'Fractional', and 'Floating' as long as
---   there is a corresponding instance for @a@.  These instances are
---   described in much more detail in the sections on sequential and
---   parallel composition below.
+--   @Active@ is an 'Applicative' 'Functor'; if @a@ is a 'Semigroup'
+--   then @Active a@ is as well.  @Active a@ is an instance of 'Num',
+--   'Fractional', and 'Floating' as long as there is a corresponding
+--   instance for @a@.  All these instances are described in much more
+--   detail in the sections on sequential and parallel composition
+--   below.
 --
 --   This definition is intentionally abstract, since the
 --   implementation may change in the future to enable additional
 --   optimizations.
 --
---   Semantically, an 'Active' only needs to be defined on the
+--   Semantically, an @Active@ only needs to be defined on the
 --   interval \([0,d]\), although in Haskell there is no way to
 --   enforce this with types.  For example,
 --
@@ -202,19 +195,9 @@ import           Control.IApplicative
 --   impossible to observe this since the 'Active' has a duration of
 --   only 3.
 
-data Active :: Finitude -> * -> * where
-  Active   :: Duration f Rational -> (Rational -> a) -> Active f a
+data Active :: * -> * where
+  Active   :: Duration Rational -> (Rational -> a) -> Active a
   deriving Functor
-
--- | The type of finite 'Active' values; a convenient synonym for
---   @Active 'F@, so you can use the library without having to turn on
---   @DataKinds@.
-type ActF = Active 'F
-
--- | The type of infinite 'Active' values; a convenient synonym for
---   @Active 'I@, so you can use the library without having to turn on
---   @DataKinds@.
-type ActI = Active 'I
 
 --------------------------------------------------
 -- Constructing
@@ -222,22 +205,22 @@ type ActI = Active 'I
 -- | Smart constructor for finite 'Active' values, given a finite
 --   numeric duration \(d\) and a function from \([0,d] \to a\).
 --
---   @'activeF' d f = ('cut' d 'dur')    '<#>' f
---            = ('interval' 0 d) '<#>' f@
+--   @'activeF' d f = 'cut' d 'dur'    '<#>' f
+--            = 'interval' 0 d '<#>' f@
 --
 --   In the example below, @activeF 2 (^2)@ constructs the Active
 --   value which lasts for 2 time units and takes on the value
---   \( t^2 \) at time \( t \).  Note that an alternative, perhaps more
---   idiomatic way to construct the same value would be @'cut' 2
---   ('dur'^2)@.
+--   \( t^2 \) at time \( t \).  Note that some alternative, perhaps more
+--   idiomatic ways to construct the same value would be @('interval'
+--   0 2)^2@, or @'cut' 2 ('dur'^2)@.
 --
 --   <<diagrams/src_Active_activeFDia.svg#diagram=activeFDia&width=200>>
 --
---   > activeFEx :: ActF Rational
+--   > activeFEx :: Active Rational
 --   > activeFEx = activeF 2 (^2)
 
-activeF :: Rational -> (Rational -> a) -> Active 'F a
-activeF d = Active (Duration d)
+activeF :: Rational -> (Rational -> a) -> Active a
+activeF = Active . Duration
 
 -- > activeFDia = illustrateActive' 0.1 [] activeFEx
 
@@ -248,13 +231,13 @@ activeF d = Active (Duration d)
 --
 --   <<diagrams/src_Active_activeIDia.svg#diagram=activeIDia&width=200>>
 --
---   > activeIEx :: ActI Double
+--   > activeIEx :: Active Double
 --   > activeIEx = activeI (sqrt . fromRational)
 --
---   Since @Active 'I a@ is an instance of 'Floating' whenever @a@ is,
+--   Since @Active a@ is an instance of 'Floating' whenever @a@ is,
 --   @activeI (sqrt . fromRational)@ can alternatively be written as
---   @sqrt (fromRational '<$>' 'dur')@.
-activeI :: (Rational -> a) -> Active 'I a
+--   @sqrt 'dur''@.
+activeI :: (Rational -> a) -> Active a
 activeI = Active Forever
 
 -- > activeIDia = illustrateActive' 0.1 [] activeIEx
@@ -262,7 +245,7 @@ activeI = Active Forever
 
 -- | Generic smart constructor for 'Active' values, given a 'Duration'
 --   and a function on the appropriate interval.
-active :: Duration f Rational -> (Rational -> a) -> Active f a
+active :: Duration Rational -> (Rational -> a) -> Active a
 active = Active
 
 
@@ -272,10 +255,10 @@ active = Active
 --
 --   <<diagrams/src_Active_instantDia.svg#diagram=instantDia&width=200>>
 --
---   > instantEx :: ActF Rational
+--   > instantEx :: Active Rational
 --   > instantEx = instant 2
 
-instant :: a -> Active 'F a
+instant :: a -> Active a
 instant = lasting 0
 
 -- > instantDia = illustrateActive instantEx
@@ -288,14 +271,14 @@ instant = lasting 0
 --
 --   <<diagrams/src_Active_lastingDia.svg#diagram=lastingDia&width=200>>
 --
---   > lastingEx :: ActF Rational
+--   > lastingEx :: Active Rational
 --   > lastingEx = lasting 3 2
 --
 --   This reads particularly nicely when used with postfix function
 --   application, a la @(#)@ from the diagrams library.  For example:
 --
 --   @
--- c :: ActF Char
+-- c :: Active Char
 -- c = movie
 --   [ 'a' # lasting 2
 --   , 'b' # lasting 3
@@ -304,7 +287,7 @@ instant = lasting 0
 -- @
 --
 
-lasting :: Rational -> a -> Active 'F a
+lasting :: Rational -> a -> Active a
 lasting d = activeF d . const
 
 -- > lastingDia = illustrateActive lastingEx
@@ -313,10 +296,18 @@ lasting d = activeF d . const
 -- | The unit interval: the identity function on the interval \( [0,1] \).
 --
 --   <<diagrams/src_Active_uiDia.svg#diagram=uiDia&width=200>>
-ui :: Active 'F Rational
+ui :: Active Rational
 ui = active 1 id
 
 -- > uiDia = illustrateActive ui
+
+-- | The unit interval with any @Fractional@ type, provided for
+--   convenience.  For an explanation of why this is not the default,
+--   see the documentation for 'dur''.
+--
+--   @ui' = 'ui' '<#>' fromRational@
+ui' :: Fractional d => Active d
+ui' = ui <#> fromRational
 
 
 -- | An infinite sine wave with a period of @1@, that is,
@@ -355,8 +346,8 @@ ui = active 1 id
 --   ***********
 --   ************
 
-sin' :: Floating n => Active 'I n
-sin' = dur <#> \n -> sin (2*pi*fromRational n)
+sin' :: Floating n => Active n
+sin' = sin (2*pi*dur')
 
 -- > sin'Dia = illustrateActive' 0.1 [] sin'
 
@@ -368,8 +359,8 @@ sin' = dur <#> \n -> sin (2*pi*fromRational n)
 --
 --   <<diagrams/src_Active_cos'Dia.svg#diagram=cos'Dia&width=200>>
 
-cos' :: Floating n => Active 'I n
-cos' = dur <#> \n -> cos (2*pi*fromRational n)
+cos' :: Floating n => Active n
+cos' = cos (2*pi*dur')
 
 -- > cos'Dia = illustrateActive' 0.1 [] cos'
 
@@ -380,15 +371,15 @@ cos' = dur <#> \n -> cos (2*pi*fromRational n)
 --
 --   <<diagrams/src_Active_intervalDia.svg#diagram=intervalDia&width=200>>
 --
---   > intervalEx1 :: ActF Rational
+--   > intervalEx1 :: Active Rational
 --   > intervalEx1 = interval 1 4
 --
 --   <<diagrams/src_Active_intervalDia2.svg#diagram=intervalDia2&width=200>>
 --
---   > intervalEx2 :: ActF Rational
+--   > intervalEx2 :: Active Rational
 --   > intervalEx2 = interval 4 2
 
-interval :: Rational -> Rational -> Active 'F Rational
+interval :: Rational -> Rational -> Active Rational
 interval a b
   | a <= b    = active (toDuration (b - a)) (a+)
   | otherwise = active (toDuration (a - b)) (a-)
@@ -396,17 +387,44 @@ interval a b
 -- > intervalDia  = illustrateActive intervalEx1
 -- > intervalDia2 = illustrateActive intervalEx2
 
+-- | The 'interval' from @a@ to @b@ with any @Fractional@ type, provided
+--   for convenience.  For an explanation of why this is not the
+--   default, see the documentation for 'dur''.
+--
+--   @interval' a b = 'interval' a b '<#>' fromRational@
+interval' :: Fractional d => Rational -> Rational -> Active d
+interval' a b = interval a b <#> fromRational
 
 -- | @dur@ is the infinite active value representing the function
 --   \( d \mapsto d \).  It is called @dur@ since it can be thought of as
 --   representing "the current duration" at any point in time.
 --
+--   @dur = activeI id@
+--
 --   <<diagrams/src_Active_durDia.svg#diagram=durDia&width=200>>
 
-dur :: Active 'I Rational
-dur = active Forever fromRational
+dur :: Active Rational
+dur = activeI id
 
 -- > durDia = illustrateActive dur
+
+-- | The duration, with any @Fractional@ type, provided for
+--   convenience.
+--
+--   The reason this is not the default is that if the type @d@ ends
+--   up being unconstrained, Haskell will default to using @Double@,
+--   which can lead to unexpected results due to floating-point error.
+--   It's safest to stick to @dur@ unless you know you want a type
+--   other than @Rational@ (such as @Double@).
+--
+--   >>> samples 1 (cut 2 dur)
+--   [0 % 1,1 % 1,2 % 1]
+--   >>> samples 1 (cut 2 dur')  -- defaults to Double
+--   [0.0,1.0,2.0]
+--
+--   @dur' = 'dur' '<#>' fromRational@
+dur' :: Fractional d => Active d
+dur' = dur <#> fromRational
 
 
 infixl 8 <#>
@@ -429,8 +447,8 @@ infixl 8 <#>
 --
 --   <<diagrams/src_Active_pamfDia.svg#diagram=pamfDia&width=200>>
 --
---   > pamfEx :: ActF (Sum Double)
---   > pamfEx = interval 0 3 <#> (Sum . fromRational)
+--   > pamfEx :: Active (Sum Double)
+--   > pamfEx = interval' 0 3 <#> Sum
 --   >          `parI`
 --   >          (sin'/2) <#> Sum
 
@@ -447,17 +465,18 @@ infixl 8 <#>
 --   is "open on the right", that is, at the precise moment when
 --   switching from one value to the next, the second value is taken.
 --
---   See also 'discrete', which takes a list instead of a 'NonEmpty'.
+--   See also 'discrete', which takes a list instead of a 'NonEmpty'
+--   for convenience.
 --
 --   If you want the result to last longer than 1 unit, you can use
 --   'stretch'.
 --
 --   <<diagrams/src_Active_discreteNEDia.svg#diagram=discreteNEDia&width=200>>
 --
---   > discreteNEEx :: ActF Rational
+--   > discreteNEEx :: Active Rational
 --   > discreteNEEx = stretch 4 (discreteNE (1 :| [2,3]))
 
-discreteNE :: NonEmpty a -> Active 'F a
+discreteNE :: NonEmpty a -> Active a
 discreteNE (a :| as) = (Active 1 f)
   where
     f t
@@ -469,12 +488,13 @@ discreteNE (a :| as) = (Active 1 f)
 -- > discreteNEDia = illustrateActive' (1/2) [(4/3,OC),(8/3,OC)] discreteNEEx
 
 
--- | Like 'discreteNE', but with a list for convenience.  Calling
---   'discrete' on the empty list is a runtime error.
+-- | Like 'discreteNE', but with a list for convenience.
+--
+--   __Partial__: throws an error when applied to the empty list.
 --
 --   >>> samples 30 (discrete ['a'..'e'])
 --   "aaaaaabbbbbbccccccddddddeeeeeee"
-discrete :: [a] -> Active 'F a
+discrete :: [a] -> Active a
 discrete [] = error "Active.discrete must be called with a non-empty list."
 discrete (a : as) = discreteNE (a :| as)
 
@@ -484,20 +504,22 @@ discrete (a : as) = discreteNE (a :| as)
 
 -- | The semantic function for 'Active': interpret an 'Active' value
 --   as a function from durations.  Looked at another way, this is how
---   you can sample an 'Active' value at a given duration.  Note that
---   attempting to evaluate a finite active past its duration results
---   in a runtime error. (Unfortunately, in Haskell it would be very
---   difficult to rule this out statically.)
+--   you can sample an 'Active' value at a given time.
 --
---   >>> let act = movie [lasting 2 "hello", lasting 3 "world"] :: ActF String
+--   __Partial__: attempting to evaluate a finite active past its
+--   duration results in a runtime error. (Unfortunately, in Haskell
+--   it would be very difficult to rule this out statically.)  See
+--   also 'runActiveMay'.
+--
+--   >>> let act = movie [lasting 2 "hello", lasting 3 "world"] :: Active String
 --   >>> runActive act 1
 --   "hello"
 --   >>> runActive act 4
 --   "world"
 
-runActive :: Active f a -> (Rational -> a)
+runActive :: Active a -> (Rational -> a)
 runActive (Active d f) t
-  = case compareDuration (Duration t') d of
+  = case compare (Duration t') d of
       GT -> error "Active.runActive: Active value evaluated past its duration."
       _  -> f t'
   where
@@ -506,7 +528,7 @@ runActive (Active d f) t
 -- | Like 'runActive', but return a total function that returns
 --   @Nothing@ when queried outside its range.
 --
---   >>> let act = movie [lasting 2 "hello", lasting 3 "world"] :: ActF String
+--   >>> let act = movie [lasting 2 "hello", lasting 3 "world"] :: Active String
 --   >>> runActiveMay act 1
 --   Just "hello"
 --   >>> runActiveMay act 4
@@ -514,9 +536,9 @@ runActive (Active d f) t
 --   >>> runActiveMay act 6
 --   Nothing
 
-runActiveMay :: Active f a -> (Rational -> Maybe a)
+runActiveMay :: Active a -> (Rational -> Maybe a)
 runActiveMay (Active d f) t
-  = case compareDuration (Duration t') d of
+  = case compare (Duration t') d of
       GT -> Nothing
       _  -> Just (f t')
   where
@@ -526,27 +548,13 @@ runActiveMay (Active d f) t
 --   Sometimes this is more convenient since the 'Monoid' instance for
 --   'Option' only requires a 'Semigroup' constraint on its type
 --   argument.
-runActiveOpt :: Active f a -> (Rational -> Option a)
+runActiveOpt :: Active a -> (Rational -> Option a)
 runActiveOpt a = Option . runActiveMay a
 
--- | Do a case analysis on an 'Active' value of unknown finitude,
---   doing one thing if it is finite and another if it is infinite.
---
---   As an example, the @makeFinite@ function defined below leaves the
---   duration of finite actives alone, but cuts infinite actives down
---   to have a default duration of 3.
---
---   >>> let makeFinite :: Active f a -> ActF a; makeFinite = withActive id (cut 3)
---   >>> samples 1 (makeFinite (lasting 7 'a'))
---   "aaaaaaaa"
---   >>> samples 1 (makeFinite (always 'a'))
---   "aaaa"
-
-withActive :: (Active 'F a -> b) -> (Active 'I a -> b) -> Active f a -> b
-withActive onFinite onInfinite a@(Active d _) =
-  case d of
-    Duration _ -> onFinite a
-    Forever    -> onInfinite a
+-- | Test whether an @Active@ is finite.
+isFinite :: Active a -> Bool
+isFinite (Active Forever _) = False
+isFinite _                  = True
 
 -- | Extract the duration of an 'Active' value.  Returns 'Nothing' for
 --   infinite values.
@@ -557,29 +565,31 @@ withActive onFinite onInfinite a@(Active d _) =
 --   Just (5 % 1)
 --   >>> duration (always 'a')
 --   Nothing
-duration :: Active f a -> Maybe Rational
+duration :: Active a -> Maybe Rational
 duration (Active d _) = fromDuration d
 
--- | Extract the duration of an 'Active' value that is known to be
---   finite.
+-- | (Unsafely) extract the duration of an @Active@ value that you know
+--   to be finite.  __Partial__: throws an error if given an infinite
+--   argument.
 --
 --   >>> durationF (lasting 3 'a')
 --   3 % 1
---   >>> durationF (movie [lasting 3 'a', lasting 2 'b'])
---   5 % 1
-durationF :: Active 'F a -> Rational
-durationF (Active d _) = fromDurationF d
+durationF :: Active a -> Rational
+durationF = fromMaybe (error "Active.durationF called on infinite active") . duration
 
--- | Extract the value at the beginning of an 'Active'.
+-- | Extract the value at the beginning of an @Active@.
 --
 --   >>> start (always 3)
 --   3
 --   >>> start (omit 2 (stretch 3 dur))
 --   2 % 3
-start :: Active f a -> a
+start :: Active a -> a
 start (Active _ f) = f 0
 
 -- | Extract the value at the end of a finite 'Active'.
+--
+--   __Partial__: throws an error on infinite actives.  See also
+--   'endMay'.
 --
 --   >>> end (activeF 3 (^2))
 --   9 % 1
@@ -587,20 +597,31 @@ start (Active _ f) = f 0
 --   1 % 1
 --   >>> end (cut 3 $ movie [lasting 1 'a', lasting 3 'b', lasting 2 'c'])
 --   'b'
+end :: Active a -> a
+end = fromMaybe (error "Active.end called on infinite active") . endMay
 
-end :: Active 'F a -> a
-end (Active (Duration d) f) = f d
+-- | A safe, total variant of 'end'; returns the value at the end of a
+--   finite @Active@, or @Nothing@ if its argument is infinite.
+--
+--   >>> endMay (activeF 3 (^2))
+--   Just (9 % 1)
+--   >>> endMay dur
+--   Nothing
+endMay :: Active a -> Maybe a
+endMay (Active (Duration d) f) = Just $ f d
+endMay (Active Forever      _) = Nothing
+
 
 -- | Generate a list of "frames" or "samples" taken at regular
 --   intervals from an 'Active' value.  The first argument is the
 --   "frame rate", or number of samples per unit time.  That is,
 --   @samples f a@ samples @a@ at times
 --   \( 0, \frac 1 f, \frac 2 f, \dots \),
---   ending at the last multiple of \(1/f\) which is not
---   greater than the duration.  The list of samples will be infinite
+--   ending at the last multiple of \(1/f\) which is /not
+--   greater than/ the duration.  The list of samples will be infinite
 --   iff the 'Active' is.
 --
---   >>> samples 2 (interval 0 3 <#> (^2))
+--   >>> samples 2 (interval 0 3 ^ 2)
 --   [0 % 1,1 % 4,1 % 1,9 % 4,4 % 1,25 % 4,9 % 1]
 --   >>> samples 1 (lasting 3 ())
 --   [(),(),(),()]
@@ -613,7 +634,7 @@ end (Active (Duration d) f) = f d
 --
 --   <<diagrams/src_Active_samplesDia.svg#diagram=samplesDia&width=200>>
 
-samples :: Rational -> Active f a -> [a]
+samples :: Rational -> Active a -> [a]
 samples 0  _ = error "Active.samples: Frame rate can't equal zero"
 samples fr (Active (Duration d) f) = map f . takeWhile (<= d) . map (/toRational fr) $ [0 ..]
 
@@ -660,6 +681,11 @@ samples fr (Active Forever      f) = map (f . (/toRational fr)) $ [0 ..]
 -- from its left-hand argument (using 'Last'); ('>>-') does the
 -- converse (using 'First').
 --
+-- In some situations, when composing active values sequentially, one
+-- wants to /accumulate/ the ending values of previous actives and
+-- combine them with subsequent ones; this is accomplished with
+-- ('-<>-') and 'accumulate'.
+--
 -- Finite 'Active' values form a semigroup under horizontal
 -- composition as long as the value type @a@ is a 'Semigroup';
 -- additionally, if @a@ is a 'Monoid', then finite active values are
@@ -674,7 +700,7 @@ infixr 4 ->-, ->>, >>-, -<>-
 --------------------------------------------------
 -- Stitching
 
--- | "Stitching" sequential composition.
+-- | \"Stitching\" sequential composition.
 --
 --   @x ->- y@ is the active which behaves first as @x@, and then as
 --   @y@; the total duration is the sum of the durations of @x@ and
@@ -682,7 +708,10 @@ infixr 4 ->-, ->>, >>-, -<>-
 --   is the composition of @x@ and @y@'s values with respect to the
 --   underlying 'Semigroup', that is, they are combined with ('<>').
 --
---   Note that @x@ must be finite, but @y@ may be infinite.
+--   If @x@ is infinite, @x ->- y = x@.
+--
+--   @'instant' 'mempty'@ is the identity for ('->-'),
+--   whenever the underlying type is a 'Monoid'.
 --
 --   See also 'stitchNE' and 'stitch', which combine an entire list of
 --   'Active' values using this operator, and the 'Sequential'
@@ -691,14 +720,14 @@ infixr 4 ->-, ->>, >>-, -<>-
 --
 --   <<diagrams/src_Active_seqMDia.svg#diagram=seqMDia&width=200>>
 --
---   > seqMEx :: ActI (Sum Rational)
+--   > seqMEx :: Active (Sum Rational)
 --   > seqMEx = interval 0 2 <#> Sum ->- always 3 <#> Sum
 --
 --   In the above example, the values at the endpoints of the two
 --   actives are combined via summing.  This particular example is a
---   bit silly---it is hard to imagine wanting this behavior.  Here
---   are some examples of cases where this combining behavior might be
---   more desirable:
+--   bit silly; it is hard to imagine wanting this specific behavior
+--   for @Active Rational@ values.  However, here are some examples of
+--   cases where stitching sequential composition might be more desirable:
 --
 --   * Imagine making an animation in which one diagram disappears
 --     just as another one appears. We might explicitly want a single
@@ -712,7 +741,7 @@ infixr 4 ->-, ->>, >>-, -<>-
 --
 --       <<diagrams/src_Active_seqMMaxDia.svg#diagram=seqMMaxDia&width=200>>
 --
---       > seqMMaxEx :: ActF (Max Rational)
+--       > seqMMaxEx :: Active (Max Rational)
 --       > seqMMaxEx = lasting 1 (Max 3) ->- lasting 1 (Max 2) ->- lasting 1 (Max 4)
 --
 --   More generally, although explicit uses of this combinator may be
@@ -720,8 +749,9 @@ infixr 4 ->-, ->>, >>-, -<>-
 --   those combinators are implemented in terms of this one, via the
 --   'Last' and 'First' semigroups.
 
-(->-) :: Semigroup a => Active 'F a -> Active f a -> Active f a
-(Active d1@(Duration n1) f1) ->- (Active d2 f2) = Active (addDuration d1 d2) f
+(->-) :: Semigroup a => Active a -> Active a -> Active a
+a@(Active Forever _)         ->- _              = a
+(Active d1@(Duration n1) f1) ->- (Active d2 f2) = Active (d1 + d2) f
   where
     f n | n <  n1   = f1 n
         | n == n1   = f1 n <> f2 0
@@ -731,10 +761,10 @@ infixr 4 ->-, ->>, >>-, -<>-
 -- > seqMMaxDia = illustrateActive' (1/4) [(1,CO),(2,OC)] $ getMax <$> seqMMaxEx
 
 
--- | A newtype wrapper for finite 'Active' values.  The 'Semigroup'
+-- | A newtype wrapper for 'Active' values.  The 'Semigroup'
 --   and 'Monoid' instances for this wrapper use stitching sequential
---   composition (that is, ('->-')) rather than parallel composition.
-newtype Sequential a = Sequential { getSequential :: Active 'F a }
+--   composition (that is, ('->-')).
+newtype Sequential a = Sequential { getSequential :: Active a }
 
 instance Semigroup a => Semigroup (Sequential a) where
   Sequential a1 <> Sequential a2 = Sequential (a1 ->- a2)
@@ -746,24 +776,28 @@ instance (Monoid a, Semigroup a) => Monoid (Sequential a) where
   mconcat ss = Sequential (stitch (coerce ss))
 
 
--- | "Stitch" a nonempty list of finite actives together, via ('->-'),
---   so values are combined via the 'Semigroup' instance at the splice
---   points.  (See also 'movieNE' and 'stitch'.)  Uses a balanced fold which can be
---   more efficient than the usual linear fold.
-stitchNE :: Semigroup a => NonEmpty (Active 'F a) -> Active 'F a
-stitchNE = getSequential . foldB1 . coerce
-
-
--- | A variant of 'stitchNE' defined on lists instead of 'NonEmpty'
---   for convenience; @stitch []@ is a runtime error.
+-- | \"Stitch\" a nonempty list of finite actives together, via
+--   ('->-'), so values are combined via the 'Semigroup' instance at
+--   the splice points.  (See also 'movieNE' and 'stitch'.)  Uses a
+--   balanced fold which can make 'samples' more efficient than the
+--   usual linear fold.
 --
 --   <<diagrams/src_Active_stitchDia.svg#diagram=stitchDia&width=200>>
 --
---   > stitchEx :: ActF (Max Rational)
---   > stitchEx = stitch . map (fmap Max . lasting 1) $ [3,1,4,5,2]
+--   > import Data.List.NonEmpty (NonEmpty((:|)))
+--   > stitchEx :: Active (Max Rational)
+--   > stitchEx = stitchNE . fmap (fmap Max . lasting 1) $ 3 :| [1,4,5,2]
+stitchNE :: Semigroup a => NonEmpty (Active a) -> Active a
+stitchNE = getSequential . foldB1 . coerce
 
-stitch :: Semigroup a => [Active 'F a] -> Active 'F a
-stitch []     = error "Active.stitch: Can't make empty stitch!"
+
+-- | A variant of 'stitchNE' defined on lists instead of 'NonEmpty'.
+--
+--   @stitch []@ yields @'instant' 'mempty'@, the identity element for
+--   ('->-').
+
+stitch :: (Monoid a, Semigroup a) => [Active a] -> Active a
+stitch []     = instant mempty
 stitch (a:as) = stitchNE (a :| as)
 
 -- > stitchDia = illustrateActive' (1/4) [(1,CO),(2,OC),(3,OC),(4,CO)] $ getMax <$> stitchEx
@@ -775,15 +809,17 @@ stitch (a:as) = stitchNE (a :| as)
 -- | Sequential composition, preferring the value from the right-hand
 --   argument at the instant of overlap.
 --
+--   If @x@ is infinite, @x ->> y = x@.
+--
 --   <<diagrams/src_Active_seqRDia.svg#diagram=seqRDia&width=200>>
 --
---   > seqREx :: ActI Rational
+--   > seqREx :: Active Rational
 --   > seqREx = interval 0 2 ->> always 3
 --
 --   >>> samples 1 (cut 4 (interval 0 2 ->> always 3))
 --   [0 % 1,1 % 1,3 % 1,3 % 1,3 % 1]
-(->>) :: forall f a. Active 'F a -> Active f a -> Active f a
-a1 ->> a2 = coerce ((coerce a1 ->- coerce a2) :: Active f (Last a))
+(->>) :: forall a. Active a -> Active a -> Active a
+a1 ->> a2 = coerce ((coerce a1 ->- coerce a2) :: Active (Last a))
 
 -- > seqRDia = illustrateActive' (1/4) [(2,OC)] seqREx
 
@@ -791,15 +827,17 @@ a1 ->> a2 = coerce ((coerce a1 ->- coerce a2) :: Active f (Last a))
 -- | Sequential composition, preferring the value from the left-hand
 --   argument at the instant of overlap.
 --
+--   If @x@ is infinite, @x >>- y = x@.
+--
 --   <<diagrams/src_Active_seqLDia.svg#diagram=seqLDia&width=200>>
 --
---   > seqLEx :: ActI Rational
+--   > seqLEx :: Active Rational
 --   > seqLEx = interval 0 2 >>- always 3
 --
 --   >>> samples 1 (cut 4 (interval 0 2 >>- always 3))
 --   [0 % 1,1 % 1,2 % 1,3 % 1,3 % 1]
-(>>-) :: forall f a. Active 'F a -> Active f a -> Active f a
-a1 >>- a2 = coerce ((coerce a1 ->- coerce a2) :: Active f (First a))
+(>>-) :: forall a. Active a -> Active a -> Active a
+a1 >>- a2 = coerce ((coerce a1 ->- coerce a2) :: Active (First a))
 
 -- > seqLDia = illustrateActive' (1/4) [(2,CO)] seqLEx
 
@@ -808,21 +846,23 @@ a1 >>- a2 = coerce ((coerce a1 ->- coerce a2) :: Active f (First a))
 --   sequencing them one after another via ('->>'), so the value of
 --   the right-hand 'Active' is taken at each splice point.  See also
 --   'movie'.
-movieNE :: forall a. NonEmpty (Active 'F a) -> Active 'F a
-movieNE scenes = coerce (stitchNE (coerce scenes :: NonEmpty (Active 'F (Last a))))
+movieNE :: forall a. NonEmpty (Active a) -> Active a
+movieNE scenes = coerce (stitchNE (coerce scenes :: NonEmpty (Active (Last a))))
 
 
 -- | A variant of 'movieNE' defined on lists instead of 'NonEmpty' for
---   convenience; @movie []@ is a runtime error.
+--   convenience.
+--
+--   __Partial__: @movie []@ throws an error.
 --
 --   <<diagrams/src_Active_movieDia.svg#diagram=movieDia&width=200>>
 --
---   > movieEx :: ActF Rational
+--   > movieEx :: Active Rational
 --   > movieEx = movie [lasting 1 3, lasting 1 2, interval 0 2 # stretch 0.5, lasting 1 4]
 
-movie :: forall a. [Active 'F a] -> Active 'F a
+movie :: forall a. [Active a] -> Active a
 movie []     = error "Active.movie: Can't make empty movie!"
-movie scenes = coerce (stitch (coerce scenes :: [Active 'F (Last a)]))
+movie (a:as) = coerce (stitchNE (coerce (a :| as) :: NonEmpty (Active (Last a))))
 
 -- > {-# LANGUAGE TupleSections #-}
 -- > movieDia = illustrateActive' (1/4) (map (,OC) [1..4]) movieEx
@@ -836,7 +876,12 @@ movie scenes = coerce (stitch (coerce scenes :: [Active 'F (Last a)]))
 --   @x -<>- y@ first behaves as @x@, and then behaves as @y@, except
 --   that the final value of @x@ is combined via ('<>') with /every/
 --   value from @y@.  So the final value of @x@ "accumulates" into the
---   next 'Active' value being composed.
+--   next @Active@ value being composed.
+--
+--   If @x@ is infinite, then @x -<>- y = x@.
+--
+--   @'instant' 'mempty'@ is the identity for ('-<>-'),
+--   whenever the underlying type is a 'Monoid'.
 --
 --   See also 'accumulateNE' and 'accumulate' which perform
 --   accumulating sequential composition of a whole list.
@@ -854,13 +899,13 @@ movie scenes = coerce (stitch (coerce scenes :: [Active 'F (Last a)]))
 --
 --   <<diagrams/src_Active_seqADia.svg#diagram=seqADia&width=200>>
 --
---   > seqAEx :: ActF (Sum Rational)
+--   > seqAEx :: Active (Sum Rational)
 --   > seqAEx = stair -<>- stair -<>- stair
 --   >   where
 --   >     stair = (ui ->> lasting 0.5 1) <#> Sum
 --
 --   >>> :m +Data.Ratio
---   >>> let x = active 3 Sum :: ActF (Sum Rational)
+--   >>> let x = active 3 Sum :: Active (Sum Rational)
 --   >>> let a1 = x ->- x
 --   >>> let a2 = x -<>- x
 --   >>> map (numerator . getSum) (samples 1 a1)
@@ -868,8 +913,9 @@ movie scenes = coerce (stitch (coerce scenes :: [Active 'F (Last a)]))
 --   >>> map (numerator . getSum) (samples 1 a2)
 --   [0,1,2,3,4,5,6]
 --
-(-<>-) :: Semigroup a => Active 'F a -> Active f a -> Active f a
-(Active d1@(Duration n1) f1) -<>- (Active d2 f2) = Active (addDuration d1 d2) f
+(-<>-) :: Semigroup a => Active a -> Active a -> Active a
+a@(Active Forever _)         -<>- _              = a
+(Active d1@(Duration n1) f1) -<>- (Active d2 f2) = Active (d1 + d2) f
   where
     f n | n < n1    = f1 n
         | otherwise = f1 n1 <> f2 (n - n1)
@@ -881,7 +927,7 @@ movie scenes = coerce (stitch (coerce scenes :: [Active 'F (Last a)]))
 --   and 'Monoid' instances for this wrapper use accumulating
 --   sequential composition (that is, ('-<>-') rather than parallel
 --   composition.
-newtype Accumulating a = Accumulating { getAccumulating :: Active 'F a }
+newtype Accumulating a = Accumulating { getAccumulating :: Active a }
 
 instance Semigroup a => Semigroup (Accumulating a) where
   Accumulating a1 <> Accumulating a2 = Accumulating (a1 ->- a2)
@@ -895,14 +941,15 @@ instance (Monoid a, Semigroup a) => Monoid (Accumulating a) where
 -- | "Accumulate" a nonempty list of finite actives together in
 --   sequence, via ('-<>-'), so the end value from each component
 --   'Active' accumulates into the next.  Uses a balanced fold which
---   can be more efficient than the usual linear fold.
-accumulateNE :: Semigroup a => NonEmpty (Active 'F a) -> Active 'F a
+--   can make 'samples' more efficient than the usual linear fold.
+accumulateNE :: Semigroup a => NonEmpty (Active a) -> Active a
 accumulateNE = getAccumulating . foldB1 . coerce
 
--- | A variant of 'accumulateNE' defined on lists instead of 'NonEmpty'
---   for convenience; @accumulate []@ is a runtime error.
-accumulate :: Semigroup a => [Active 'F a] -> Active 'F a
-accumulate []     = error "Active.accumulate: Can't accumulate empty list!"
+-- | A variant of 'accumulateNE' defined on lists instead of
+--   'NonEmpty'. @accumulate []@ yields @'instant' 'mempty'@, the
+--   identity element for ('-<>-').
+accumulate :: (Semigroup a, Monoid a) => [Active a] -> Active a
+accumulate []     = instant mempty
 accumulate (a:as) = accumulateNE (a :| as)
 
 ------------------------------------------------------------
@@ -948,12 +995,12 @@ accumulate (a:as) = accumulateNE (a :| as)
 -- * It keeps as much information as possible.
 --
 -- * When an identity element exists, it is the same as for sequential stitching
---   composition (`->-`) (namely, @instant mempty@).
+--   composition ('->-') (namely, @'instant' 'mempty'@).
 --
 -- * It is easy to implement intersecting parallel composition in
 --   terms of unioning parallel composition: just compute the minimum
---   duration and use 'cut' to make the arguments the same length
---   before composing.  Conversely, it is relatively unsatisfactory to
+--   duration and use 'cutTo' to make the arguments the same length
+--   before composing.  Conversely, it is somewhat unsatisfactory to
 --   implement unioning parallel composition in terms of intersecting:
 --   one can first pad with 'mempty' to make the arguments the same
 --   duration before composing; however, this would require the
@@ -962,11 +1009,11 @@ accumulate (a:as) = accumulateNE (a :| as)
 --
 -- However, despite these advantages, it does not make sense to take
 -- unioning parallel composition as primitive and implement
--- intersecting parallel composition in terms of it, because we want
--- to be able to generalize intersecting parallel composition to an
--- 'Applicative' instance, which cannot be implemented in terms of
--- unioning parallel composition; see the discussion in the section on
--- intersecting composition below.
+-- intersecting parallel composition in terms of it, because we
+-- actually want to generalize intersecting parallel composition to an
+-- 'Applicative' instance for 'Active', which cannot be implemented in
+-- terms of unioning parallel composition. See the discussion in the
+-- section on intersecting composition below.
 
 
 infixr 6 <∪>
@@ -975,26 +1022,25 @@ infixr 6 `parU`
 -- | Unioning parallel composition.  The duration of @x \`parU\` y@ is
 --   the /maximum/ of the durations of @x@ and @y@.  Where they are
 --   both defined, the values are combined with ('<>').  Where only
---   one is defined, its value is simply copied.  Notice that 'parU'
---   may be applied to active values of any finitude; the finitude of
---   the result is computed appropriately.
+--   one is defined, its value is simply copied.
+--
+--   @'instant' 'mempty'@ is the identity for 'parU',
+--   whenever the underlying type is a 'Monoid'.
 --
 --   <<diagrams/src_Active_parUDia.svg#diagram=parUDia&width=450>>
 --
---   > parUExA, parUExB, parUEx :: ActF (Sum Double)
---   > parUExA = interval 0 3 <#> fromRational <#> Sum
---   > parUExB = (1 + cos'/8) # cut 2          <#> Sum
+--   > parUExA, parUExB, parUEx :: Active (Sum Double)
+--   > parUExA = interval' 0 3        <#> Sum
+--   > parUExB = (1 + cos'/8) # cut 2 <#> Sum
 --   >
 --   > parUEx  = parUExA `parU` parUExB
 --
 --   This is the default combining operation for the 'Semigroup' and
---   'Monoid' instances for 'Active'.  Note, however, that 'parU' has
---   a strictly more general type than ('<>'), which requires the two
---   arguments to have the same finitude.
+--   'Monoid' instances for 'Active', that is, @('<>') = 'parU'@.
 
-parU :: Semigroup a => Active f1 a -> Active f2 a -> Active (f1 ⊔ f2) a
+parU :: Semigroup a => Active a -> Active a -> Active a
 a1@(Active d1 _) `parU` a2@(Active d2 _)
-  = Active (d1 `maxDuration` d2)
+  = Active (d1 `max` d2)
            (\t -> fromJust . getOption $ runActiveOpt a1 t <> runActiveOpt a2 t)
                   -- fromJust is safe since the (Nothing, Nothing) case
                   -- can't happen: at least one of a1 or a2 will be defined everywhere
@@ -1007,50 +1053,51 @@ a1@(Active d1 _) `parU` a2@(Active d2 _)
 
 
 -- | An infix Unicode synonym for 'parU'.
-(<∪>) :: Semigroup a => Active f1 a -> Active f2 a -> Active (f1 ⊔ f2) a
+(<∪>) :: Semigroup a => Active a -> Active a -> Active a
 (<∪>) = parU
 
 
--- | If @a@ is a 'Semigroup', then 'Active f a' forms a 'Semigroup'
---   under unioning parallel composition.  Notice that the two
---   arguments of ('<>') are restricted to be either both finite or
---   both infinite; ('parU') is strictly more general since it can
---   combine active values with different finitudes.
-instance Semigroup a => Semigroup (Active f a) where
-  (<>) = (<∪>)
+-- | If @a@ is a 'Semigroup', then @Active a@ forms a 'Semigroup'
+--   under unioning parallel composition, that is, @('<>') = 'parU'@.
+--   Note that the choice of /which/ semigroup structure to pick for
+--   the 'Semigroup' instance is somewhat arbitrary.
+instance Semigroup a => Semigroup (Active a) where
+  (<>) = parU
 
--- | If @a@ is a 'Monoid', then 'Active F a' forms a 'Monoid' under
+-- | If @a@ is a 'Monoid', then @Active a@ forms a 'Monoid' under
 --   unioning parallel composition.  The identity element is
 --   @'instant' 'mempty'@, the same as the identity element for the
 --   sequential composition monoid (see 'Sequential').
-instance (Monoid a, Semigroup a) => Monoid (Active 'F a) where
-  mempty = instant mempty
+instance (Monoid a, Semigroup a) => Monoid (Active a) where
+  mempty  = instant mempty
   mappend = (<>)
 
 
 -- | \"Stack\" a nonempty list of active values via unioning parallel
---   composition.  This is actually just a synonym for 'sconcat'.
-stackNE :: Semigroup a => NonEmpty (Active f a) -> Active f a
+--   composition.  (This is actually a synonym for 'sconcat'.)
+stackNE :: Semigroup a => NonEmpty (Active a) -> Active a
 stackNE = sconcat
 
 
--- | Like 'stackNE', but on a list for convenience.  Calling 'stack'
---   on the empty list is a runtime error.
+-- | \"Stack\" a list of active values via unioning parallel
+--   composition.  @stack []@ results in @'instant' 'mempty'@, the
+--   identity element for 'parU'.
 --
 --   <<diagrams/src_Active_stackDia.svg#diagram=stackDia&width=450>>
 --
---   > stackExArgs :: [ActF (Sum Double)]
+--   > stackExArgs :: [Active (Sum Double)]
 --   > stackExArgs = map (<#> Sum)
---   >   [ interval 0 3              <#> fromRational
---   >   , (1 + cos'/8)      # cut 2
---   >   , (((dur - 2)/2)^2) # cut 4 <#> fromRational
+--   >   [ interval' 0 3
+--   >   , (1 + cos'/8)       # cut 2
+--   >   , (((dur' - 2)/2)^2) # cut 4
 --   >   ]
 --   >
---   > stackEx :: ActF (Sum Double)
+--   > stackEx :: Active (Sum Double)
 --   > stackEx = stack stackExArgs
 
-stack :: Semigroup a => [Active f a] -> Active f a
-stack = sconcat . NE.fromList
+stack :: (Semigroup a, Monoid a) => [Active a] -> Active a
+stack []     = instant mempty
+stack (a:as) = stackNE (a :| as)
 
 --   > stackDia = drawChain
 --   >   [ illustrateActives' 0.1 [[],[],[]] (map (<#> getSum) stackExArgs)
@@ -1066,7 +1113,7 @@ stack = sconcat . NE.fromList
 --
 --   <<diagrams/src_Active_stackAtDia.svg#diagram=stackAtDia&width=700>>
 --
---   > stackAtEx :: ActF (Sum Double)
+--   > stackAtEx :: Active (Sum Double)
 --   > stackAtEx = stackAt (zip [0, 2, 1/2] stackExArgs)
 --
 --   @stackAt@ requires the underlying type to be a 'Monoid'.  This is
@@ -1079,14 +1126,14 @@ stack = sconcat . NE.fromList
 --
 --   <<diagrams/src_Active_stackAtDia2.svg#diagram=stackAtDia2&width=700>>
 --
---   > stackAtEx2Args :: [ActF (Sum Rational)]
+--   > stackAtEx2Args :: [Active (Sum Rational)]
 --   > stackAtEx2Args = map (<#> Sum) [ interval 0 2, lasting 2 1 ]
 --   >
---   > stackAtEx2 :: ActF (Sum Rational)
+--   > stackAtEx2 :: Active (Sum Rational)
 --   > stackAtEx2 = stackAt (zip [0,3] stackAtEx2Args)
 --
 --   If you want to use 'stackAt' on actives with an underlying type
---   that is not a 'Monoid', you have a few options:
+--   that is a 'Semigroup' but not a 'Monoid', you have a few options:
 --
 --   * You can explicitly wrap your underlying values in 'Option',
 --     which will turn a 'Semigroup' into a 'Monoid' and use @Option
@@ -1095,7 +1142,7 @@ stack = sconcat . NE.fromList
 --   * You can use the provided 'stackAtDef' function instead, which
 --     uses a given default value in place of 'mempty'.
 
-stackAt :: (Monoid a, Semigroup a) => [(Rational, Active 'F a)] -> Active 'F a
+stackAt :: (Monoid a, Semigroup a) => [(Rational, Active a)] -> Active a
 stackAt [] = instant mempty
 stackAt ps = stack . map (uncurry delay) $ ps
 
@@ -1125,10 +1172,10 @@ stackAt ps = stack . map (uncurry delay) $ ps
 --
 --   <<diagrams/src_Active_stackAtDefDia.svg#diagram=stackAtDefDia&width=700>>
 --
---   > stackAtDefEx :: ActF (Sum Rational)
+--   > stackAtDefEx :: Active (Sum Rational)
 --   > stackAtDefEx = stackAtDef (Sum (1/2)) (zip [0,3] stackAtEx2Args)
 
-stackAtDef :: Semigroup a => a -> [(Rational, Active 'F a)] -> Active 'F a
+stackAtDef :: Semigroup a => a -> [(Rational, Active a)] -> Active a
 stackAtDef a as
   = option a id <$> stackAt ((map . second) (fmap (Option . Just)) as)
 
@@ -1146,125 +1193,83 @@ stackAtDef a as
 
 -- $inter
 --
--- Intersecting parallel composition composes actives in parallel, but
--- the result is defined only where /both/ inputs are defined.  One
--- place this is particularly useful is in creating an infinite
--- (perhaps static or repeating) "background" value and then composing
--- it with a finite "foreground" value.  It is also the only possible
+-- Another way we can compose actives in parallel is to yield a result
+-- that is defined only where /both/ inputs are defined.  One
+-- situation in which this is particularly useful is in creating an
+-- infinite (perhaps static or repeating) "background" value and then
+-- composing it with a finite "foreground" value; the duration of the
+-- infinite background will be automatically truncated to match that
+-- of the foreground.
+--
+-- Intersecting parallel composition is also the only reasonable
 -- semantics for an 'Applicative' instance: given a time-varying
 -- function and a time-varying argument, we can only produce a
 -- time-varying result when /both/ function and argument are defined.
 --
--- However, because of its 'Finitude' type parameter, an actual
--- 'Applicative' instance for 'Active' would be unsatisfactory:
+-- In fact, the 'Applicative' instance for 'Active' can be taken as
+-- the most fundamental form of intersecting parallel composition.  It
+-- works in much the same way as 'ZipList':
 --
--- * There is no way to implement @pure :: a -> Active F a@; the only
---   sensible duration to choose would be 0, but this would not
---   satisfy the 'Applicative' laws.
+-- * @pure :: a -> Active a@ creates an infinite constant.
 --
--- * Given this, we could only make an @instance Applicative (Active
---   I)@.  Although this would work, it would be unsatisfactory to be
---   restricted to applying only infinite time-varying functions to
---   infinite time-varying values; we would like to use the
---   @Applicative@ interface to work with finite durations as well.
---
--- In fact, 'Active' is an /indexed applicative functor/, where the
--- applicative structure on active values is mirrored by a /monoidal/
--- structure on the 'Finitude' type indices.  It works in much the
--- same way as 'ZipList', if there were a version of 'ZipList' that
--- tracked finitude at the type level. In particular:
---
--- * @ipure :: a -> Active I a@ creates an infinite constant.
---
--- * @('<:*>') :: Active f1 (a -> b) -> Active f2 a -> Active (f1 ⊓
---   f2) b@ applies a time-varying function to a time-varying
+-- * @('<*>') :: Active (a -> b) -> Active a -> Active b@
+--   applies a time-varying function to a time-varying
 --   argument; the duration of the result is the minimum of the
---   durations of the inputs, and the finitude of the result is
---   computed appropriately at the type level.
+--   durations of the inputs.
 --
--- Note that one can still use the normal 'fmap'/('<$>'), since
--- mapping leaves duration unchanged.  For example, here is how we
--- could add two time-varying numbers:
+-- For example, here is how we can add two time-varying numbers:
 --
 -- >>> let a = interval 0 3; b = always 2
--- >>> samples 1 ((+) <$> a <:*> b)
+-- >>> samples 1 ((+) <$> a <*> b)
 -- [2 % 1,3 % 1,4 % 1,5 % 1]
 --
 -- In the example, @a@ is finite and @b@ is infinite; adding them
--- produces a finite result.  Instead of writing @(+) \<$\> a \<:*\>
--- b@ we could also have written @'iliftA2' (+) a b@.
+-- produces a finite result.
 --
--- There are 'Num', 'Fractional', and 'Floating' instances for @Active
--- I a@. Unfortunately, we can only have instances for @Active I@, for
--- the same reason that we could only make an 'Applicative' instance
--- for @Active I@; there is no way to implement 'fromInteger' and
--- 'fromRational' for finite actives.  Ideally we would have an @INum@
--- class, parallel to @IApplicative@, but we would lose built-in support
--- for numeric constants.
+-- There are also 'Num', 'Fractional', and 'Floating' instances for
+-- @Active a@ whenever there is a corresponding instance for @a@;
+-- these work by lifting all the operations pointwise, via the
+-- 'Applicative' instance.  Using the 'Num' instance, the example
+-- given above can be much more simply written as
 --
--- At any rate, for infinite values at least, these instances allow us
--- to write things like
---
--- >>> samples 3 (cut 1 (cos (pi * (dur <#> fromRational) / 2)))
--- [1.0,0.8660254037844387,0.5000000000000001,6.123233995736766e-17]
---
--- rather than the more verbose, but equivalent,
---
--- >>> let a = cos <$> ((*) <$> ipure pi <:*> ((/) <$> (dur <#> fromRational) <:*> ipure 2))
--- >>> samples 3 (cut 1 a)
--- [1.0,0.8660254037844387,0.5000000000000001,6.123233995736766e-17]
+-- >>> let a = interval 0 3; b = always 2
+-- >>> samples 1 (a + b)
+-- [2 % 1,3 % 1,4 % 1,5 % 1]
 
 
-instance IFunctor Active where
-  imap f (Active d1 g) = Active d1 (f . g)
-
--- | @'Active'@ is an 'IApplicative', somewhat akin to 'ZipList':
+-- | @Active@ values with an underlying numeric type can be treated as
+--   numeric; all the arithmetic operations are lifted pointwise via
+--   the 'Applicative' instance (see also the 'Fractional' and
+--   'Floating' instances).  For example, this allows writing things
+--   like
 --
---   * 'ipure' creates an infinite constant value.
---   * @f '<:*>' x@ applies @f@ to @x@ pointwise, taking the minimum
---     duration of @f@ and @x@.
-instance IApplicative Active where
-  type Id = 'I
-  type (:*:) i j = i ⊓ j
-  ipure = always
-  Active d1 f1 <:*> Active d2 f2 = Active (d1 `minDuration` d2) (f1 <*> f2)
-
--- | Infinite 'Active' values can be treated as numeric. (See also the
---   'Fractional' and 'Floating' instances.)  For example, this allows
---   writing things like
---
---   >>> samples 3 (cut 1 (cos (pi * (dur <#> fromRational) / 2)))
+--   >>> samples 3 (cut 1 (cos (pi * dur' / 2)))
 --   [1.0,0.8660254037844387,0.5000000000000001,6.123233995736766e-17]
 --
 --   rather than the more verbose, but equivalent,
 --
---   >>> let a = cos <$> ((*) <$> ipure pi <:*> ((/) <$> (dur <#> fromRational) <:*> ipure 2))
+--   >>> let a = cos <$> ((*) <$> pure pi <*> ((/) <$> dur' <*> pure 2))
 --   >>> samples 3 (cut 1 a)
 --   [1.0,0.8660254037844387,0.5000000000000001,6.123233995736766e-17]
---
---   Note that it is not possible to have an instance for @Active F@,
---   since there would be no sensible way to implement 'fromInteger'.
---   Ideally we would have an @INum@ class, parallel to
---   'IApplicative', but we would lose built-in support for numeric
---   constants.
-instance Num a => Num (Active 'I a) where
-  fromInteger = ipure . fromInteger
-  (+)         = iliftA2 (+)
-  (*)         = iliftA2 (*)
+
+instance Num a => Num (Active a) where
+  fromInteger = pure . fromInteger
+  (+)         = liftA2 (+)
+  (*)         = liftA2 (*)
   negate      = fmap negate
   abs         = fmap abs
   signum      = fmap signum
 
-instance Fractional a => Fractional (Active 'I a) where
-  fromRational = ipure . fromRational
-  (/) = iliftA2 (/)
+instance Fractional a => Fractional (Active a) where
+  fromRational = pure . fromRational
+  (/) = liftA2 (/)
 
-instance Floating a => Floating (Active 'I a) where
-  pi    = ipure pi
+instance Floating a => Floating (Active a) where
+  pi    = pure pi
   exp   = fmap exp
   log   = fmap log
   sqrt  = fmap sqrt
-  (**)  = iliftA2 (**)
+  (**)  = liftA2 (**)
   sin   = fmap sin
   cos   = fmap cos
   asin  = fmap asin
@@ -1277,17 +1282,28 @@ instance Floating a => Floating (Active 'I a) where
   atanh = fmap atanh
 
 -- | @'always' x@ creates an infinite 'Active' which is constantly
---   'x'.  Note this is a synonym for 'ipure'.
+--   'x'.  Note this is a synonym for 'pure'.
 --
 --   <<diagrams/src_Active_alwaysDia.svg#diagram=alwaysDia&width=200>>
 --
---   > alwaysEx :: ActI Rational
+--   > alwaysEx :: Active Rational
 --   > alwaysEx = always 2
 
-always :: a -> Active 'I a
+always :: a -> Active a
 always = Active Forever . const
 
 -- > alwaysDia = illustrateActive alwaysEx
+
+
+-- | @'Active'@ is an 'Applicative' functor, somewhat akin to
+--   'ZipList':
+--
+--   * 'pure' creates an infinite constant value.
+--   * @f '<*>' x@ applies @f@ to @x@ pointwise, taking the minimum
+--     duration of @f@ and @x@.
+instance Applicative Active where
+  pure = always
+  Active d1 f1 <*> Active d2 f2 = Active (d1 `min` d2) (f1 <*> f2)
 
 
 infixr 6 `parI`
@@ -1296,26 +1312,29 @@ infixr 6 <∩>
 -- | Intersecting parallel composition.  The duration of @x \`parI\`
 --   y@ is the /minimum/ of the durations of @x@ and @y@.
 --
---   This is often useful for composing infinite "backgrounds" with
+--   @'always' 'mempty'@ is the identity for 'parI', whenever the
+--   underlying type is a 'Monoid'.
+--
+--   'parI' is often useful for composing infinite "backgrounds" with
 --   finite "foregrounds", where we only care about the duration of
 --   the foreground and simply want the background to be long enough
 --   to match.
 --
---   Note that this is a special case of the 'IApplicative' instance
---   for 'Active'; in fact, it is equivalent to @'iliftA2' ('<>')@.
+--   Note that this is a special case of the 'Applicative' instance
+--   for 'Active'; in fact, it is equivalent to @'liftA2' ('<>')@.
 --
---   @parI = iliftA2 (<>)@
+--   @parI = liftA2 (<>)@
 --
 --   <<diagrams/src_Active_parIDia.svg#diagram=parIDia&width=450>>
 --
---   > parIExA, parIExB, parIEx :: ActF (Sum Double)
---   > parIExA = interval 0 3 <#> fromRational <#> Sum
---   > parIExB = (1 + cos'/8) # cut 2          <#> Sum
+--   > parIExA, parIExB, parIEx :: Active (Sum Double)
+--   > parIExA = interval' 0 3        <#> Sum
+--   > parIExB = (1 + cos'/8) # cut 2 <#> Sum
 --   >
 --   > parIEx = parIExA `parI` parIExB
 
-parI :: Semigroup a => Active f1 a -> Active f2 a -> Active (f1 ⊓ f2) a
-parI = iliftA2 (<>)
+parI :: Semigroup a => Active a -> Active a -> Active a
+parI = liftA2 (<>)
 
 -- > parIDia = drawChain
 -- >   [ illustrateActives' 0.1 [[],[]] $ map (<#> getSum) [parIExA, parIExB]
@@ -1324,28 +1343,25 @@ parI = iliftA2 (<>)
 
 
 -- | An infix Unicode synonym for 'parI'.
-(<∩>) :: Semigroup a => Active f1 a -> Active f2 a -> Active (f1 ⊓ f2) a
+(<∩>) :: Semigroup a => Active a -> Active a -> Active a
 (<∩>) = parI
 
 --------------------------------------------------
 -- Other combinators
 
--- | Do the actual stretching of an 'Active' value by a given positive
---   constant.  Unsafe because it does not check whether the constant
---   is positive.  This is not exported, only used to implement
---   'stretch' and 'stretch''.
-unsafeStretch :: Rational -> Active f a -> Active f a
-unsafeStretch s (Active d f) = Active (s *^ d) (f . (/s))
-
--- | Stretch an active value by a positive factor.  For example,
+-- | Stretch an active value by a given factor.  For example,
 --   @'stretch' 2 a@ is twice as long as @a@ (and hence half as fast).
 --   Conversely, @'stretch' (1/2) a@ is half as long as @a@ (twice as
---   fast).
+--   fast).  Stretching a finite active by a negative factor also
+--   reverses it in time.
 --
---   This actually works perfectly well on infinite active values,
---   despite the fact that it no longer makes sense to say that the
---   result is "x times as long" as the input; it simply stretches out
---   the values in time.
+--   Stretching by a positive factor works perfectly well on infinite
+--   active values, despite the fact that it no longer makes sense to
+--   say that the result is "x times as long" as the input; it simply
+--   stretches out the values in time.
+--
+--   __Partial__: throws an error if stretching an infinite active by
+--   a negative factor, or stretching anything by zero.
 --
 --   <<diagrams/src_Active_stretchDia.svg#diagram=stretchDia&width=450>>
 --
@@ -1356,69 +1372,66 @@ unsafeStretch s (Active d f) = Active (s *^ d) (f . (/s))
 --   [0 % 1,1 % 3,2 % 3,1 % 1]
 --   >>> take 4 (samples 1 (stretch (1/2) dur))
 --   [0 % 1,2 % 1,4 % 1,6 % 1]
-stretch :: Rational -> Active f a -> Active f a
-stretch s a
-  | s <= 0    = error "Active.stretch: Nonpositive stretch factor.  Use stretch' instead."
-  | otherwise = unsafeStretch s a
+stretch :: Rational -> Active a -> Active a
+stretch s a@(Active d f)
+  | s < 0 = case isFinite a of
+      True  -> stretch (-s) (backwards a)
+      False -> error "Active.stretch: negative stretch on infinite active"
+  | s == 0 = error "Active.stretch: stretch factor of zero"
+  | otherwise = Active (s *^ d) (f . (/s))
 
 -- > stretchDia = illustrateActiveFun (stretch 3) ui
 
 
--- | Like 'stretch', but allows negative stretch factors, which
---   reverse the active.  As a result, it is restricted to only finite
---   actives.
+-- | Flip a finite @Active@ value so it runs backwards.
 --
---   <<diagrams/src_Active_stretch'Dia.svg#diagram=stretch'Dia&width=450>>
---
---   > stretch'Ex :: ActiveF Rational
---   > stretch'Ex = stretch' (-3) ui
---
---   >>> samples 1 (stretch' (-3) ui)
---   [1 % 1,2 % 3,1 % 3,0 % 1]
-stretch' :: Rational -> Active 'F a -> Active 'F a
-stretch' s a
-  | s > 0     = unsafeStretch s a
-  | s < 0     = unsafeStretch (abs s) (backwards a)
-  | otherwise = error "Active.stretch': stretch factor of 0"
-
--- > stretch'Dia = illustrateActiveFun (stretch' (-3)) ui
-
-
--- | Flip an 'Active' value so it runs backwards.  For obvious
---   reasons, this only works on finite 'Active'\s.
+--   __Partial__: throws an error on infinite arguments.  See also
+--   'backwardsMay'.
 --
 --   @backwards . backwards = id@
 --
 --   <<diagrams/src_Active_backwardsDia.svg#diagram=backwardsDia&width=450>>
 --
---   > backwardsExArg :: ActF Double
---   > backwardsExArg = cut 4 (sin'/3 * (dur <#> fromRational) + 2)
+--   > backwardsExArg :: Active Double
+--   > backwardsExArg = cut 4 (sin'/3 * dur' + 2)
 --   >
---   > backwardsEx :: ActF Double
+--   > backwardsEx :: Active Double
 --   > backwardsEx = backwards backwardsExArg
 
-backwards :: Active 'F a -> Active 'F a
-backwards (Active (Duration d) f) =  Active (Duration d) (f . (d-))
+backwards :: Active a -> Active a
+backwards
+  = fromMaybe (error "Active.backwards called on infinite active")
+  . backwardsMay
 
 -- > backwardsDia = illustrateActiveFun' 0.1 [] [] backwards backwardsExArg
 
+-- | A total, safe variant of 'backwards'.  Finite actives are turned
+--   backwards; an infinite argument results in @Nothing@.
+backwardsMay :: Active a -> Maybe (Active a)
+backwardsMay (Active (Duration d) f) = Just $ Active (Duration d) (f . (d-))
+backwardsMay _ = Nothing
+
 
 -- | Stretch the second active so it has the same duration as the
---   first.
+--   first.  If both actives are infinite, do nothing.
+--
+--   __Partial__: throws an error if one of the arguments is finite
+--   and the other infinite.  See also 'matchDurationMay'.
 --
 --   <<diagrams/src_Active_matchDurationDia.svg#diagram=matchDurationDia&width=450>>
 --
---   > mdExA :: ActF (Sum Double)
---   > mdExA = movie [ interval 1 3 ] <#> fromRational <#> Sum
+--   > mdExA :: Active (Sum Double)
+--   > mdExA = interval' 1 3 <#> Sum
 --   >
---   > mdExB :: ActF (Sum Double)
+--   > mdExB :: Active (Sum Double)
 --   > mdExB = (cos'/3) # cut 5 <#> Sum
 --   >
---   > mdEx :: ActF (Sum Double)
+--   > mdEx :: Active (Sum Double)
 --   > mdEx = matchDuration mdExA mdExB
 
-matchDuration :: Active 'F a -> Active 'F b -> Active 'F b
-matchDuration (Active (Duration d1) _) b@(Active (Duration d2) _) = stretch (d1/d2) b
+matchDuration :: Active a -> Active b -> Active b
+matchDuration a b = fromMaybe (error "Active.matchDuration called on arguments of different finitude") $
+  matchDurationMay a b
 
 -- > matchDurationDia = drawChain
 -- >   [ illustrateActives' 0.1 [[],[]] $ map (<#> getSum) [mdExA, mdExB]
@@ -1426,38 +1439,66 @@ matchDuration (Active (Duration d1) _) b@(Active (Duration d2) _) = stretch (d1/
 -- >   ]
 
 
+-- | A total, safe variant of 'matchDuration' which returns @Nothing@
+--   when given one finite and one infinite argument.
+matchDurationMay :: Active a -> Active b -> Maybe (Active b)
+matchDurationMay (Active Forever _)       b@(Active Forever _)
+  = Just b
+matchDurationMay (Active (Duration d1) _) b@(Active (Duration d2) _)
+  = Just $ stretch (d1/d2) b
+matchDurationMay _ _ = Nothing
+
+
 -- | Stretch a finite active by whatever factor is required so that it
 --   ends up with the given duration.
 --
+--   __Partial__: throws an error on an infinite active.  See also
+--   'stretchToMay'.
+--
+--   @duration (stretchTo d a) = d@ (when @a@ is finite)
+--
 --   <<diagrams/src_Active_stretchToDia.svg#diagram=stretchToDia&width=200>>
 --
---   > stretchToEx :: ActF Rational
+--   > stretchToEx :: Active Rational
 --   > stretchToEx = interval 0 3 # stretchTo 5
 --
---   >>> durationF (stretchTo 5 (interval 0 3))
---   5 % 1
-stretchTo :: Rational -> Active 'F a -> Active 'F a
-stretchTo n a@(Active (Duration d) _) = stretch (n / d) a
+--   >>> duration (stretchTo 5 (interval 0 3))
+--   Just (5 % 1)
+stretchTo :: Rational -> Active a -> Active a
+stretchTo d
+  = fromMaybe (error "Active.stretchTo called on infinite active")
+  . stretchToMay d
 
 -- > stretchToDia = illustrateActive stretchToEx
 
 
+-- | A safe, total variant of 'stretchTo'.  Performs 'stretchTo' on a
+--   finite argument, and returns @Nothing@ for an infinite argument.
+--   For example, if you want to stretch finite actives but leave
+--   infinite ones alone, you could write @fromMaybe <*> stretchToMay s@.
+stretchToMay :: Rational -> Active a -> Maybe (Active a)
+stretchToMay n a@(Active (Duration d) _) = Just $ stretch (n / d) a
+stretchToMay _ (Active Forever _)        = Nothing
+
 -- | Take a "snapshot" of a given 'Active' at a particular time,
 --   freezing the resulting value into an infinite constant.
+--
+--   __Partial__: throws an error if given a time outside the duration
+--   of the active.
 --
 --   @snapshot t a = always (runActive a t)@
 --
 --   <<diagrams/src_Active_snapshotDia.svg#diagram=snapshotDia&width=450>>
 --
---   > snapshotExArg :: ActI Double
+--   > snapshotExArg :: Active Double
 --   > snapshotExArg = cos' + 2
 --   >
---   > snapshotEx :: ActI Double
+--   > snapshotEx :: Active Double
 --   > snapshotEx = snapshot (9/8) snapshotExArg
 --
 --   >>> take 3 (samples 1 (snapshot (9/8) cos'))
 --   [0.7071067811865477,0.7071067811865477,0.7071067811865477]
-snapshot :: Rational -> Active f a -> Active 'I a
+snapshot :: Rational -> Active a -> Active a
 snapshot t a = always (runActive a t)
 
 -- > snapshotDia = illustrateActiveFun' 0.1 [(9/8,CC)] [] (snapshot (9/8)) snapshotExArg
@@ -1472,47 +1513,55 @@ snapshot t a = always (runActive a t)
 --
 --   <<diagrams/src_Active_cutDia.svg#diagram=cutDia&width=450>>
 --
---   > cutEx :: ActF Double
+--   > cutEx :: Active Double
 --   > cutEx = cut 1.7 cos'
 --
 --   >>> samples 1 (cut 2 dur)
 --   [0 % 1,1 % 1,2 % 1]
 --   >>> samples 1 (cut 3 (interval 0 1))
 --   [0 % 1,1 % 1]
-cut :: Rational -> Active f a -> Active 'F a
-cut c (Active d f) = Active (Duration c `minDuration` d) f
+cut :: Rational -> Active a -> Active a
+cut c (Active d f) = Active (Duration c `min` d) f
 
 -- > cutDia = illustrateActiveFun' 0.1 [] [] (cut 1.7) cos'
 
 
--- | @cutTo a1 a2@ cuts @a2@ to match the duration of @a1@, unless
+-- | @cutTo a1 a2@ 'cut'\s @a2@ to match the duration of @a1@, unless
 --   @a2@ is already shorter than @a1@ in which case @cutTo a1 = id@.
---
---   @cutTo = cut . durationF@
-cutTo :: Active 'F a -> Active f a -> Active 'F a
-cutTo = cut . durationF
+cutTo :: Active a -> Active a -> Active a
+cutTo a1
+  | isFinite a1 = cut (durationF a1)
+  | otherwise   = id
 
 
 -- | @omit d a@ omits the first @d@ time units from @a@. The result is
 --   only defined if @d@ is less than or equal to the duration of @a@.
---   This is analogous to 'drop' on lists.
+--   This is analogous to 'drop' on lists, except that unlike 'drop',
+--   it is partial: there is no "empty @Active@" to serve as the
+--   analogue to @[]@.
+--
+--   __Partial__: throws an error if @d@ is longer than @a@.
 --
 --   <<diagrams/src_Active_omitDia.svg#diagram=omitDia&width=450>>
 --
---   > omitEx :: ActF Rational
+--   > omitEx :: Active Rational
 --   > omitEx = omit 1.3 (interval 0 3)
 
-omit :: Rational -> Active f a -> Active f a
-omit o (Active d f) = Active (d `subDuration` (Duration o)) (f . (+o))
+omit :: Rational -> Active a -> Active a
+omit o (Active d f)
+  | Duration o > d = error "Active.omit: time to omit longer than the duration of the given active"
+  | otherwise = Active (d `subDuration` (Duration o)) (f . (+o))
 
 -- > omitDia = illustrateActiveFun (omit 1.3) (interval 0 3)
 
 
 -- | @slice s e@ "slices out" a finite portion of an 'Active' starting
---   at time @s@ and ending at time @e@.  If the start time is greater
---   than the end time, the resulting slice is reversed in time.  The
---   result is only defined if \( \min(s,e) \leq d \) where \( d \) is
---   the duration of the active.
+--   at time @s@ and ending at time (at most) @e@.  If the start time
+--   is greater than the end time, the resulting slice is reversed in
+--   time.
+--
+--   __Partial__: the result is only defined if \( \min(s,e) \leq d \) where
+--   \( d \) is the duration of the active.
 --
 --   @
 -- slice s e = cut (e - s) . omit s   (if e >= s)
@@ -1521,37 +1570,39 @@ omit o (Active d f) = Active (d `subDuration` (Duration o)) (f . (+o))
 --
 --   <<diagrams/src_Active_sliceDia.svg#diagram=sliceDia&width=450>>
 --
---   > sliceEx :: ActF Rational
+--   > sliceEx :: Active Rational
 --   > sliceEx = slice 1.3 2.8 (interval 0 4)
 --
 --   <<diagrams/src_Active_sliceDia2.svg#diagram=sliceDia2&width=450>>
 --
---   > sliceEx2 :: ActF Rational
+--   > sliceEx2 :: Active Rational
 --   > sliceEx2 = slice 2.8 1.3 (interval 0 4)
 
-slice :: Rational -> Rational -> Active f a -> Active 'F a
-slice s e
-  | e >= s    = cut (e - s) . omit s
-  | otherwise = backwards . slice e s
+slice :: Rational -> Rational -> Active a -> Active a
+slice s e a@(Active d _)
+  -- Could just defer the error to 'omit', but that might confuse
+  -- users who would wonder why they got an error message about 'omit'
+  -- even though they never used that function.
+  | Duration (min s e) > d = error "Active.slice: starting time greater than the duration of the given active"
+  | e >= s    = cut (e - s) . omit s $ a
+  | otherwise = backwards . slice e s $ a
 
 -- > sliceDia = illustrateActiveFun (slice 1.3 2.8) (interval 0 4)
 -- > sliceDia2 = illustrateActiveFun (slice 2.8 1.3) (interval 0 4)
 
 
--- | "Delay" an 'Active' by a certain duration, by precomposing it
---   with the given duration of 'mempty'. This only makes sense for
---   @Active f a@ values where @a@ is a 'Monoid'.
+-- | \"Delay\" an 'Active' by a certain duration, by precomposing it
+--   with the given duration of 'mempty'.
 --
 --   @delay d a = lasting d mempty ->- a@
 --
 --   <<diagrams/src_Active_delayDia.svg#diagram=delayDia&width=450>>
 --
---   > delayExA, delayEx :: ActF (Sum Rational)
+--   > delayExA, delayEx :: Active (Sum Rational)
 --   > delayExA = interval 0 2 <#> Sum
---   >
 --   > delayEx  = delay 1 delayExA
 
-delay :: (Monoid a, Semigroup a) => Rational -> Active f a -> Active f a
+delay :: (Monoid a, Semigroup a) => Rational -> Active a -> Active a
 delay d = (lasting d mempty ->-)
 
 -- > delayDia = drawChain
@@ -1598,25 +1649,30 @@ foldB1 (a :| as) = maybe a (a <>) (foldBM as)
 -- >   where
 -- >     hashes = atPoints (iterateN 5 (translateX 1) (1 ^& 0)) (repeat (vrule 0.15))
 -- >
--- > illustrateActiveSum :: RealFrac d => Active f (Sum d) -> Diagram B
+-- > illustrateActiveSum :: RealFrac d => Active (Sum d) -> Diagram B
 -- > illustrateActiveSum = illustrateActive . fmap getSum
 -- >
--- > illustrateActive :: RealFrac d => Active f d -> Diagram B
+-- > illustrateActive :: RealFrac d => Active d -> Diagram B
 -- > illustrateActive = illustrateActive' (1/2) []
 -- >
 -- > type Discontinuity = (Rational, DiscontinuityType)
 -- > data DiscontinuityType = OC | CO | OO | CC | N
 -- >
--- > illustrateActive' :: RealFrac d => Rational -> [Discontinuity] -> Active f d -> Diagram B
+-- > illustrateActive' :: RealFrac d => Rational -> [Discontinuity] -> Active d -> Diagram B
 -- > illustrateActive' r ds a = illustrateActiveRaw r ds a <> axes
 -- >
--- > illustrateActiveRaw :: RealFrac d => Rational -> [Discontinuity] -> Active f d -> Diagram B
+-- > withActive :: (Active a -> b) -> (Active a -> b) -> Active a -> b
+-- > withActive f i a
+-- >   | isFinite a = f a
+-- >   | otherwise  = i a
+-- >
+-- > illustrateActiveRaw :: RealFrac d => Rational -> [Discontinuity] -> Active d -> Diagram B
 -- > illustrateActiveRaw pd discs = lwO 1 . frame 0.5 . withActive (endPt <> base) base . fmap realToFrac
 -- >   where
 -- >     endPt act
 -- >       = closedPt
 -- >         # moveTo (fromRational (durationF act) ^& end act)
--- >     base :: Active f Double -> Diagram B
+-- >     base :: Active Double -> Diagram B
 -- >     base act = foldMap drawSegment segments
 -- >       where
 -- >         portionToIllustrate = act # cut 5.5
@@ -1643,12 +1699,12 @@ foldB1 (a :| as) = maybe a (a <>) (foldBM as)
 -- >                   # moveTo (fromRational s ^& runActive act s)
 -- >               ]
 -- >
--- > illustrateActiveFun :: RealFrac d => (Active f d -> Active f2 d) -> Active f d -> Diagram B
+-- > illustrateActiveFun :: RealFrac d => (Active d -> Active d) -> Active d -> Diagram B
 -- > illustrateActiveFun = illustrateActiveFun' (1/2) [] []
 -- >
 -- > illustrateActiveFun'
 -- >   :: RealFrac d => Rational -> [Discontinuity] -> [Discontinuity]
--- >   -> (Active f d -> Active f2 d) -> Active f d -> Diagram B
+-- >   -> (Active d -> Active d) -> Active d -> Diagram B
 -- > illustrateActiveFun' pd ds1 ds2 f act = drawChain
 -- >   [ illustrateActive' pd ds1 act
 -- >   , illustrateActive' pd ds2 (f act)
@@ -1662,13 +1718,12 @@ foldB1 (a :| as) = maybe a (a <>) (foldBM as)
 -- > openPt   = circle 0.1 # lc red   # fc white
 -- >
 
--- > illustrateActives :: RealFrac d => [Active f d] -> Diagram B
+-- > illustrateActives :: RealFrac d => [Active d] -> Diagram B
 -- > illustrateActives = beneath axes . foldMap (illustrateActiveRaw (1/2) [])
 -- >
--- > illustrateActives' :: RealFrac d => Rational -> [[Discontinuity]] -> [Active f d] -> Diagram B
+-- > illustrateActives' :: RealFrac d => Rational -> [[Discontinuity]] -> [Active d] -> Diagram B
 -- > illustrateActives' r dss
 -- >   = beneath axes . mconcat
 -- >   . zipWith (illustrateActiveRaw r) dss
 
 -- > exampleDia = illustrateActive (interval 0 3 <#> (/2))
--- > exampleCombDia = illustrateActiveFun backwards (interval 0 3 <#> (/2))

@@ -27,26 +27,15 @@ source-repository head
   location: https://github.com/diagrams/active.git
 
 library
-  exposed-modules:     Control.IApplicative,
-                       Active,
+  exposed-modules:     Active,
                        Active.Duration
-  other-extensions:    ConstraintKinds,
-                       DataKinds,
-                       FlexibleContexts,
+  other-extensions:    FlexibleContexts,
                        FlexibleInstances,
-                       GADTs,
-                       KindSignatures,
-                       MultiParamTypeClasses,
-                       PolyKinds,
-                       RankNTypes,
-                       StandaloneDeriving,
-                       TypeFamilies,
-                       TypeOperators,
-                       UndecidableInstances
+                       GADTSyntax,
+                       KindSignatures
   build-depends:       base >= 4.6 && < 4.11,
                        semigroups >= 0.1 && < 0.19,
-                       vector >= 0.10 && < 0.12,
-                       split >= 0.2 && < 0.3,
+                       vector >= 0.10 && < 0.13,
                        linear >= 1.14 && < 1.21
   hs-source-dirs:      src
   default-language:    Haskell2010
