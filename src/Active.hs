@@ -142,7 +142,6 @@ import           Data.Coerce
 import           Control.Applicative
 import           Data.Bifunctor      (second)
 import           Data.List.NonEmpty  (NonEmpty (..))
-import qualified Data.List.NonEmpty  as NE
 import           Data.Maybe          (fromJust, fromMaybe)
 import           Data.Semigroup
 import qualified Data.Vector         as V
@@ -389,7 +388,7 @@ cos' = cos (2*pi*dur')
 --   > rampEx :: Active Rational
 --   > rampEx = stretch 3 (3 * ramp)
 ramp :: Active Rational
-ramp = ui <#> \t -> (((-20 * t + 70) * t - 84) * t + 35) * t^4
+ramp = ui <#> \t -> (((-20 * t + 70) * t - 84) * t + 35) * t^(4 :: Integer)
 
 -- > rampDia = illustrateActive' 0.1 [] rampEx
 
