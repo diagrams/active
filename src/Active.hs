@@ -382,7 +382,7 @@ cos' = cos (2*pi*dur')
 --   \(f(t) = -20t^7 + 70t^6 - 84t^5 + 35t^4\),
 --
 --   which is the antiderivative of \(140t^3(1-t)^3\).  I got this
---   function from Clayton Shonkwiler (https://shonkwiler.org/).
+--   function from <http://shonkwiler.org/ Clayton Shonkwiler>.
 --
 --   <<diagrams/src_Active_rampDia.svg#diagram=rampDia&width=200>>
 --
