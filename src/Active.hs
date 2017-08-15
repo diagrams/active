@@ -548,9 +548,9 @@ discrete (a : as) = discreteNE (a :| as)
 --   you can sample an 'Active' value at a given time.
 --
 --   __Partial__: attempting to evaluate a finite active past its
---   duration results in a runtime error. (Unfortunately, in Haskell
---   it would be very difficult to rule this out statically.)  See
---   also 'runActiveMay'.
+--   duration, or at a negative time, results in a runtime
+--   error. (Unfortunately, in Haskell it would be very difficult to
+--   rule this out statically.)  See also 'runActiveMay'.
 --
 --   >>> let act = movie [lasting 2 "hello", lasting 3 "world"] :: Active String
 --   >>> runActive act 1
@@ -560,11 +560,12 @@ discrete (a : as) = discreteNE (a :| as)
 
 runActive :: Active a -> (Rational -> a)
 runActive (Active d f) t
-  = case compare (Duration t') d of
+  | t < 0
+    = error $ "Active.runActive: Active value evaluated at negative time "
+              ++ show t
+  | otherwise = case compare (Duration t) d of
       GT -> error "Active.runActive: Active value evaluated past its duration."
-      _  -> f t'
-  where
-    t' = toRational t
+      _  -> f t
 
 -- | Like 'runActive', but return a total function that returns
 --   @Nothing@ when queried outside its range.
@@ -576,14 +577,15 @@ runActive (Active d f) t
 --   Just "world"
 --   >>> runActiveMay act 6
 --   Nothing
+--   >>> runActiveMay act (-2)
+--   Nothing
 
 runActiveMay :: Active a -> (Rational -> Maybe a)
 runActiveMay (Active d f) t
-  = case compare (Duration t') d of
+  | t < 0     = Nothing
+  | otherwise = case compare (Duration t) d of
       GT -> Nothing
-      _  -> Just (f t')
-  where
-    t' = toRational t
+      _  -> Just (f t)
 
 -- | Like 'runActiveMay', but return an 'Option' instead of 'Maybe'.
 --   Sometimes this is more convenient since the 'Monoid' instance for
