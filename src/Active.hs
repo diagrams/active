@@ -679,7 +679,7 @@ endMay (Active Forever      _) = Nothing
 
 samples :: Rational -> Active a -> [a]
 samples 0  _ = error "Active.samples: Frame rate can't equal zero"
-samples fr (Active (Duration d) f) = map f . takeWhile (<= d) . map (/toRational fr) $ [0 ..]
+samples fr (Active (Duration d) f) = map f . takeWhile (<= d) . map (/fr) $ [0 ..]
 
   -- We'd like to just say (map f [0, 1/n .. d]) above but that
   -- doesn't work, because of the weird semantics of Enum: the last
@@ -688,7 +688,7 @@ samples fr (Active (Duration d) f) = map f . takeWhile (<= d) . map (/toRational
   -- .. d]), then samples 1 (lasting 2.9 ()) = [(),(),(),()], whereas
   -- it should have a length of 3.
 
-samples fr (Active Forever      f) = map (f . (/toRational fr)) $ [0 ..]
+samples fr (Active Forever      f) = map (f . (/fr)) $ [0 ..]
 
 -- > samplesDia = illustrateActive' (1/2) [(1,CC),(2,CC)] (lasting 3 2)
 
