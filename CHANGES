@@ -2,6 +2,9 @@
 
 - fix for `lens-4.15.2`
 
+Hackage revision 1:
+- allow `lens-4.16` and `QuickCheck-2.11`
+
 ## [0.2.0.12](https://github.com/diagrams/active/tree/v0.2.0.12) (2016-10-14)
 
 - allow `lens-4.15`
