@@ -25,6 +25,7 @@ Shake
 *.bbl
 *.blg
 *.cut
+*.out
 ActiveDiagrams
 semantics/diagrams/*
 semantics/FARM/diagrams/*
