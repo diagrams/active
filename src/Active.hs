@@ -198,9 +198,35 @@ import           Active.Duration
 --   impossible to observe this since the 'Active' has a duration of
 --   only 3.
 
+type Dur = Duration Rational
+
 data Active :: * -> * where
-  Active   :: Duration Rational -> (Rational -> a) -> Active a
-  deriving Functor
+  Prim     :: Dur -> (Rational -> a) -> Active a
+  Discrete :: Dur -> NonEmpty a -> Active a
+  Fmap     :: Dur -> (a -> b) -> Active a -> Active b
+  Stitch   :: Semigroup a => Dur -> Active a -> Active a -> Active a
+  Pure     :: a -> Active a
+  Ap       :: Dur -> Active (a -> b) -> Active a -> Active b
+  Par      :: Semigroup a => Dur -> Active a -> Active a -> Active a
+  Rev      :: Active a -> Active a
+  Stretch  :: Dur -> Rational -> Active a -> Active a
+  Cut      :: Dur -> Active a -> Active a
+
+getDuration :: Active a -> Dur
+getDuration (Prim d _)      = d
+getDuration (Discrete d _)  = d
+getDuration (Fmap d _ _)    = d
+getDuration (Stitch d _ _)  = d
+getDuration (Pure _)        = Forever
+getDuration (Ap d _ _)      = d
+getDuration (Par d _ _)     = d
+getDuration (Rev a)         = getDuration a
+getDuration (Stretch d _ _) = d
+getDuration (Cut d _ _)     = d
+
+instance Functor Active where
+  fmap f (Fmap d g a) = Fmap d (f . g) a
+  fmap f a            = Fmap (getDuration a) f a
 
 --------------------------------------------------
 -- Constructing
@@ -223,7 +249,7 @@ data Active :: * -> * where
 --   > activeFEx = activeF 2 (^2)
 
 activeF :: Rational -> (Rational -> a) -> Active a
-activeF = Active . Duration
+activeF = Prim . Duration
 
 -- > activeFDia = illustrateActive' 0.1 [] activeFEx
 
@@ -241,7 +267,7 @@ activeF = Active . Duration
 --   @activeI (sqrt . fromRational)@ can alternatively be written as
 --   @sqrt 'dur''@.
 activeI :: (Rational -> a) -> Active a
-activeI = Active Forever
+activeI = Prim Forever
 
 -- > activeIDia = illustrateActive' 0.1 [] activeIEx
 
@@ -249,7 +275,7 @@ activeI = Active Forever
 -- | Generic smart constructor for 'Active' values, given a 'Duration'
 --   and a function on the appropriate interval.
 active :: Duration Rational -> (Rational -> a) -> Active a
-active = Active
+active = Prim
 
 
 -- | A value of duration zero.
@@ -518,12 +544,13 @@ infixl 8 <#>
 --   > discreteNEEx = stretch 4 (discreteNE (1 :| [2,3]))
 
 discreteNE :: NonEmpty a -> Active a
-discreteNE (a :| as) = (Active 1 f)
-  where
-    f t
-      | t == 1    = V.unsafeLast v
-      | otherwise = V.unsafeIndex v $ floor (t * fromIntegral (V.length v))
-    v = V.fromList (a:as)
+discreteNE = Discrete 1
+-- discreteNE (a :| as) = Prim 1 f
+--   where
+--     f t
+--       | t == 1    = V.unsafeLast v
+--       | otherwise = V.unsafeIndex v $ floor (t * fromIntegral (V.length v))
+--     v = V.fromList (a:as)
 
 -- > import Data.List.NonEmpty (NonEmpty(..))
 -- > discreteNEDia = illustrateActive' (1/2) [(4/3,OC),(8/3,OC)] discreteNEEx
@@ -559,13 +586,38 @@ discrete (a : as) = discreteNE (a :| as)
 --   "world"
 
 runActive :: Active a -> (Rational -> a)
-runActive (Active d f) t
+runActive a t
   | t < 0
     = error $ "Active.runActive: Active value evaluated at negative time "
               ++ show t
-  | otherwise = case compare (Duration t) d of
+  | otherwise = case compare (Duration t) (getDuration a) of
       GT -> error "Active.runActive: Active value evaluated past its duration."
-      _  -> f t
+      _  -> go a t
+  where
+    go :: Active x -> Rational -> x
+    go (Prim _ f)    t = f t
+    go (Fmap _ f a)  t = f (go a t)
+
+    go (Stitch _ a1 a2) t = case getDuration a1 of
+      Forever -> go a1 t
+      Duration d1
+        | t <  d1   -> go a1 t
+        | t == d1   -> go a1 t <> go a2 0
+        | otherwise -> go a2 (t - d1)
+    go (Pure a) _   = a
+    go (Ap _ af ax)  t = go af t (go ax t)
+    go (Par _ a1 a2) t =
+      let t' = Duration t in
+      case (compareDuration t' (getDuration a1), compareDuration t' (getDuration a2)) of
+        (LT, LT) -> go a1 t <> go a2 t
+        (LT, _ ) -> go a1 t
+        (_ , LT) -> go a2 t
+        _        -> error "Active.runActive: internal error, duration past both in Par"
+    go (Rev a) t =
+      let Duration d = getDuration a in
+      go a (d - t)
+    go (Stretch _ k a) t = go a (t/k)
+    go (Cut _ a) t       = go a t
 
 -- | Like 'runActive', but return a total function that returns
 --   @Nothing@ when queried outside its range.
@@ -581,9 +633,9 @@ runActive (Active d f) t
 --   Nothing
 
 runActiveMay :: Active a -> (Rational -> Maybe a)
-runActiveMay (Active d f) t
+runActiveMay a t
   | t < 0     = Nothing
-  | otherwise = case compare (Duration t) d of
+  | otherwise = case compare (Duration t) (getDuration a) of
       GT -> Nothing
       _  -> Just (f t)
 
@@ -596,8 +648,7 @@ runActiveOpt a = Option . runActiveMay a
 
 -- | Test whether an @Active@ is finite.
 isFinite :: Active a -> Bool
-isFinite (Active Forever _) = False
-isFinite _                  = True
+isFinite = not . isForever . getDuration
 
 -- | Extract the duration of an 'Active' value.  Returns 'Nothing' for
 --   infinite values.
@@ -609,7 +660,7 @@ isFinite _                  = True
 --   >>> duration (always 'a')
 --   Nothing
 duration :: Active a -> Maybe Rational
-duration (Active d _) = fromDuration d
+duration = fromDuration . getDuration
 
 -- | (Unsafely) extract the duration of an @Active@ value that you know
 --   to be finite.  __Partial__: throws an error if given an infinite
@@ -627,7 +678,7 @@ durationF = fromMaybe (error "Active.durationF called on infinite active") . dur
 --   >>> start (omit 2 (stretch 3 dur))
 --   2 % 3
 start :: Active a -> a
-start (Active _ f) = f 0
+start a = runActive f 0
 
 -- | Extract the value at the end of a finite 'Active'.
 --
@@ -651,9 +702,9 @@ end = fromMaybe (error "Active.end called on infinite active") . endMay
 --   >>> endMay dur
 --   Nothing
 endMay :: Active a -> Maybe a
-endMay (Active (Duration d) f) = Just $ f d
-endMay (Active Forever      _) = Nothing
-
+endMay a = case getDuration a of
+  Forever    -> Nothing
+  Duration d -> Just $ runActive a d
 
 -- | Generate a list of "frames" or "samples" taken at regular
 --   intervals from an 'Active' value.  The first argument is the
@@ -678,17 +729,19 @@ endMay (Active Forever      _) = Nothing
 --   <<diagrams/src_Active_samplesDia.svg#diagram=samplesDia&width=200>>
 
 samples :: Rational -> Active a -> [a]
-samples 0  _ = error "Active.samples: Frame rate can't equal zero"
-samples fr (Active (Duration d) f) = map f . takeWhile (<= d) . map (/fr) $ [0 ..]
+samples = undefined  -- XXX!!
 
-  -- We'd like to just say (map f [0, 1/n .. d]) above but that
-  -- doesn't work, because of the weird semantics of Enum: the last
-  -- element of the list might actually be a bit bigger than d.  For
-  -- example, if we replace the above definition with (map f [0, 1/n
-  -- .. d]), then samples 1 (lasting 2.9 ()) = [(),(),(),()], whereas
-  -- it should have a length of 3.
+-- samples 0  _ = error "Active.samples: Frame rate can't equal zero"
+-- samples fr (Active (Duration d) f) = map f . takeWhile (<= d) . map (/fr) $ [0 ..]
 
-samples fr (Active Forever      f) = map (f . (/fr)) $ [0 ..]
+--   -- We'd like to just say (map f [0, 1/n .. d]) above but that
+--   -- doesn't work, because of the weird semantics of Enum: the last
+--   -- element of the list might actually be a bit bigger than d.  For
+--   -- example, if we replace the above definition with (map f [0, 1/n
+--   -- .. d]), then samples 1 (lasting 2.9 ()) = [(),(),(),()], whereas
+--   -- it should have a length of 3.
+
+-- samples fr (Active Forever      f) = map (f . (/fr)) $ [0 ..]
 
 -- > samplesDia = illustrateActive' (1/2) [(1,CC),(2,CC)] (lasting 3 2)
 
@@ -793,12 +846,13 @@ infixr 4 ->-, ->>, >>-, -<>-
 --   'Last' and 'First' semigroups.
 
 (->-) :: Semigroup a => Active a -> Active a -> Active a
-a@(Active Forever _)         ->- _              = a
-(Active d1@(Duration n1) f1) ->- (Active d2 f2) = Active (d1 + d2) f
-  where
-    f n | n <  n1   = f1 n
-        | n == n1   = f1 n <> f2 0
-        | otherwise = f2 (n - n1)
+a ->- b = Stitch (getDuration a + getDuration b) a b
+-- a@(Active Forever _)         ->- _              = a
+-- (Active d1@(Duration n1) f1) ->- (Active d2 f2) = Active (d1 + d2) f
+--   where
+--     f n | n <  n1   = f1 n
+--         | n == n1   = f1 n <> f2 0
+--         | otherwise = f2 (n - n1)
 
 -- > seqMDia = illustrateActive' (1/4) [(2,OO)] $ getSum <$> seqMEx
 -- > seqMMaxDia = illustrateActive' (1/4) [(1,CO),(2,OC)] $ getMax <$> seqMMaxEx
@@ -957,11 +1011,13 @@ movie (a:as) = coerce (stitchNE (coerce (a :| as) :: NonEmpty (Active (Last a)))
 --   [0,1,2,3,4,5,6]
 --
 (-<>-) :: Semigroup a => Active a -> Active a -> Active a
-a@(Active Forever _)         -<>- _              = a
-(Active d1@(Duration n1) f1) -<>- (Active d2 f2) = Active (d1 + d2) f
-  where
-    f n | n < n1    = f1 n
-        | otherwise = f1 n1 <> f2 (n - n1)
+x -<>- y = x ->> ((end x <>) <$> y)  -- XXX make into a primitive??
+
+-- a@(Active Forever _)         -<>- _              = a
+-- (Active d1@(Duration n1) f1) -<>- (Active d2 f2) = Active (d1 + d2) f
+--   where
+--     f n | n < n1    = f1 n
+--         | otherwise = f1 n1 <> f2 (n - n1)
 
 -- > seqADia = illustrateActive' (0.1) [(1.5,CC),(3,CC)] (getSum <$> seqAEx)
 
@@ -1082,9 +1138,11 @@ infixr 6 `parU`
 --   'Monoid' instances for 'Active', that is, @('<>') = 'parU'@.
 
 parU :: Semigroup a => Active a -> Active a -> Active a
-a1@(Active d1 _) `parU` a2@(Active d2 _)
-  = Active (d1 `max` d2)
-           (\t -> fromJust . getOption $ runActiveOpt a1 t <> runActiveOpt a2 t)
+x `parU` y = Par (getDuration x `max` getDuration y) x y
+
+-- a1@(Active d1 _) `parU` a2@(Active d2 _)
+--   = Active (d1 `max` d2)
+--            (\t -> fromJust . getOption $ runActiveOpt a1 t <> runActiveOpt a2 t)
                   -- fromJust is safe since the (Nothing, Nothing) case
                   -- can't happen: at least one of a1 or a2 will be defined everywhere
                   -- on the interval between 0 and the maximum of their durations.
@@ -1119,7 +1177,7 @@ instance (Monoid a, Semigroup a) => Monoid (Active a) where
 -- | \"Stack\" a nonempty list of active values via unioning parallel
 --   composition.  (This is actually a synonym for 'sconcat'.)
 stackNE :: Semigroup a => NonEmpty (Active a) -> Active a
-stackNE = sconcat
+stackNE = sconcat  -- XXX should we use foldB?
 
 
 -- | \"Stack\" a list of active values via unioning parallel
@@ -1333,7 +1391,7 @@ instance Floating a => Floating (Active a) where
 --   > alwaysEx = always 2
 
 always :: a -> Active a
-always = Active Forever . const
+always = pure
 
 -- > alwaysDia = illustrateActive alwaysEx
 
@@ -1345,8 +1403,8 @@ always = Active Forever . const
 --   * @f '<*>' x@ applies @f@ to @x@ pointwise, taking the minimum
 --     duration of @f@ and @x@.
 instance Applicative Active where
-  pure = always
-  Active d1 f1 <*> Active d2 f2 = Active (d1 `min` d2) (f1 <*> f2)
+  pure    = Pure
+  f <*> x = Ap (getDuration f `min` getDuration x) f x
 
 
 infixr 6 `parI`
@@ -1416,12 +1474,14 @@ parI = liftA2 (<>)
 --   >>> take 4 (samples 1 (stretch (1/2) dur))
 --   [0 % 1,2 % 1,4 % 1,6 % 1]
 stretch :: Rational -> Active a -> Active a
-stretch s a@(Active d f)
+stretch s a
   | s < 0 = case isFinite a of
       True  -> stretch (-s) (backwards a)
       False -> error "Active.stretch: negative stretch on infinite active"
   | s == 0 = error "Active.stretch: stretch factor of zero"
-  | otherwise = Active (s *^ d) (f . (/s))
+  | otherwise = Stretch (s *^ getDuration a) s a
+
+    -- (f . (/s))
 
 -- > stretchDia = illustrateActiveFun (stretch 3) ui
 
@@ -1451,8 +1511,13 @@ backwards
 -- | A total, safe variant of 'backwards'.  Finite actives are turned
 --   backwards; an infinite argument results in @Nothing@.
 backwardsMay :: Active a -> Maybe (Active a)
-backwardsMay (Active (Duration d) f) = Just $ Active (Duration d) (f . (d-))
-backwardsMay _ = Nothing
+backwardsMay (Rev a) = Just a
+backwardsMay a
+  | isFinite a = Rev a
+  | otherwise  = Nothing
+
+-- (Active (Duration d) f) = Just $ Active (Duration d) (f . (d-))
+
 
 
 -- | Stretch the second active so it has the same duration as the
@@ -1485,11 +1550,10 @@ matchDuration a b = fromMaybe (error "Active.matchDuration called on arguments o
 -- | A total, safe variant of 'matchDuration' which returns @Nothing@
 --   when given one finite and one infinite argument.
 matchDurationMay :: Active a -> Active b -> Maybe (Active b)
-matchDurationMay (Active Forever _)       b@(Active Forever _)
-  = Just b
-matchDurationMay (Active (Duration d1) _) b@(Active (Duration d2) _)
-  = Just $ stretch (d1/d2) b
-matchDurationMay _ _ = Nothing
+matchDurationMay x y = case (getDuration x, getDuration y) of
+  (Forever, Forever)         -> Just y
+  (Duration d1, Duration d2) -> Just $ stretch (d1/d2) b
+  _                          -> Nothing
 
 
 -- | Stretch a finite active by whatever factor is required so that it
@@ -1520,8 +1584,10 @@ stretchTo d
 --   For example, if you want to stretch finite actives but leave
 --   infinite ones alone, you could write @fromMaybe <*> stretchToMay s@.
 stretchToMay :: Rational -> Active a -> Maybe (Active a)
-stretchToMay n a@(Active (Duration d) _) = Just $ stretch (n / d) a
-stretchToMay _ (Active Forever _)        = Nothing
+stretchToMay n a = case getDuration a of
+  Forever    -> Nothing
+  Duration d -> Just $ stretch (n/d) a
+
 
 -- | Take a "snapshot" of a given 'Active' at a particular time,
 --   freezing the resulting value into an infinite constant.
