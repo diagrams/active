@@ -3,6 +3,7 @@
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE KindSignatures      #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE RoleAnnotations     #-}
 
 -----------------------------------------------------------------------------
 -- |
@@ -75,6 +76,7 @@ module Active
     --   re-exported for convenience.
 
     Duration(..), toDuration
+  , Dur
 
     -- * The Active type
   , Active
@@ -154,6 +156,10 @@ import           Active.Duration
 --  Active
 ------------------------------------------------------------
 
+-- | @Duration Rational@ is common enough that it's worth giving it a
+--   short type synonym for convenience.
+type Dur = Duration Rational
+
 -- | A value of type @Active a@ is a time-varying value of type
 --   @a@ with a given duration.
 --
@@ -179,7 +185,7 @@ import           Active.Duration
 --   enforce this with types.  For example,
 --
 -- @
--- activeF 3 (\d -> if d <= 3 then d*2 else error "o noes!")
+-- activeF 3 (\\d -> if d <= 3 then d*2 else error "o noes!")
 -- @
 --
 --   is considered a well-defined, total 'Active' value, even though
@@ -188,7 +194,7 @@ import           Active.Duration
 --   'Active' past its duration.
 --
 -- @
--- >> let a = activeF 3 (\d -> if d <= 5 then d*2 else error "o noes!")
+-- >> let a = activeF 3 (\\d -> if d <= 5 then d*2 else error "o noes!")
 -- >> runActive a 4
 -- *** Exception: Active.runActive: Active value evaluated past its duration.
 -- @
@@ -198,11 +204,10 @@ import           Active.Duration
 --   impossible to observe this since the 'Active' has a duration of
 --   only 3.
 
-type Dur = Duration Rational
-
 data Active :: * -> * where
+
   Prim     :: Dur -> (Rational -> a) -> Active a
-  Discrete :: Dur -> NonEmpty a -> Active a
+  Discrete :: V.Vector a -> Active a
   Fmap     :: Dur -> (a -> b) -> Active a -> Active b
   Stitch   :: Semigroup a => Dur -> Active a -> Active a -> Active a
   Pure     :: a -> Active a
@@ -211,10 +216,37 @@ data Active :: * -> * where
   Rev      :: Active a -> Active a
   Stretch  :: Dur -> Rational -> Active a -> Active a
   Cut      :: Dur -> Active a -> Active a
+  Omit     :: Dur -> Rational -> Active a -> Active a
+
+type role Active nominal
+  -- Note nominal is required because of the Semigroup constraints in
+  -- Stitch and Par.  In particular, just because a and b have the
+  -- same runtime representation *doesn't* mean Active a and Active b
+  -- have the same runtime representation: a and b might have
+  -- different Semigroup instances, so the runtime representation of
+  -- Active a and Active b might contain different Semigroup
+  -- dictionaries.
+  --
+  -- This role annotation could be inferred, but we leave it explicit
+  -- here for purposes of documentation.
+
+-- XXX to think about: mapTime function?
+-- i.e.   (Dur -> Dur) -> Active a -> Active a?
+--
+-- What does this make possible?  What does it make difficult?
+--
+-- essentially Active is a profunctor  Dur -> a.
+
+-- XXX think about laws relating cut, omit, backwards.
+
+-- XXX idea to try (benchmark?): include an Iso in Stitch and Par so
+-- the semigroup instance can be for a different, isomorphic type.
+-- I.e. build in the common pattern of doing
+--   unBlah <$> ((blah <$> a1) <> (blah <$> a2)).
 
 getDuration :: Active a -> Dur
 getDuration (Prim d _)      = d
-getDuration (Discrete d _)  = d
+getDuration (Discrete _)    = 1
 getDuration (Fmap d _ _)    = d
 getDuration (Stitch d _ _)  = d
 getDuration (Pure _)        = Forever
@@ -222,7 +254,8 @@ getDuration (Ap d _ _)      = d
 getDuration (Par d _ _)     = d
 getDuration (Rev a)         = getDuration a
 getDuration (Stretch d _ _) = d
-getDuration (Cut d _ _)     = d
+getDuration (Cut  d _)      = d
+getDuration (Omit d _ _)    = d
 
 instance Functor Active where
   fmap f (Fmap d g a) = Fmap d (f . g) a
@@ -544,13 +577,7 @@ infixl 8 <#>
 --   > discreteNEEx = stretch 4 (discreteNE (1 :| [2,3]))
 
 discreteNE :: NonEmpty a -> Active a
-discreteNE = Discrete 1
--- discreteNE (a :| as) = Prim 1 f
---   where
---     f t
---       | t == 1    = V.unsafeLast v
---       | otherwise = V.unsafeIndex v $ floor (t * fromIntegral (V.length v))
---     v = V.fromList (a:as)
+discreteNE (a :| as) = Discrete $ V.fromList (a:as)
 
 -- > import Data.List.NonEmpty (NonEmpty(..))
 -- > discreteNEDia = illustrateActive' (1/2) [(4/3,OC),(8/3,OC)] discreteNEEx
@@ -596,6 +623,10 @@ runActive a t
   where
     go :: Active x -> Rational -> x
     go (Prim _ f)    t = f t
+
+    go (Discrete v)  1 = V.unsafeLast v
+    go (Discrete v)  t = V.unsafeIndex v $ floor (t * fromIntegral (V.length v))
+
     go (Fmap _ f a)  t = f (go a t)
 
     go (Stitch _ a1 a2) t = case getDuration a1 of
@@ -608,7 +639,7 @@ runActive a t
     go (Ap _ af ax)  t = go af t (go ax t)
     go (Par _ a1 a2) t =
       let t' = Duration t in
-      case (compareDuration t' (getDuration a1), compareDuration t' (getDuration a2)) of
+      case (compare t' (getDuration a1), compare t' (getDuration a2)) of
         (LT, LT) -> go a1 t <> go a2 t
         (LT, _ ) -> go a1 t
         (_ , LT) -> go a2 t
@@ -618,6 +649,7 @@ runActive a t
       go a (d - t)
     go (Stretch _ k a) t = go a (t/k)
     go (Cut _ a) t       = go a t
+    go (Omit _ o a) t    = go a (o + t)
 
 -- | Like 'runActive', but return a total function that returns
 --   @Nothing@ when queried outside its range.
@@ -637,7 +669,7 @@ runActiveMay a t
   | t < 0     = Nothing
   | otherwise = case compare (Duration t) (getDuration a) of
       GT -> Nothing
-      _  -> Just (f t)
+      _  -> Just (runActive a t)
 
 -- | Like 'runActiveMay', but return an 'Option' instead of 'Maybe'.
 --   Sometimes this is more convenient since the 'Monoid' instance for
@@ -678,7 +710,7 @@ durationF = fromMaybe (error "Active.durationF called on infinite active") . dur
 --   >>> start (omit 2 (stretch 3 dur))
 --   2 % 3
 start :: Active a -> a
-start a = runActive f 0
+start a = runActive a 0
 
 -- | Extract the value at the end of a finite 'Active'.
 --
@@ -705,6 +737,32 @@ endMay :: Active a -> Maybe a
 endMay a = case getDuration a of
   Forever    -> Nothing
   Duration d -> Just $ runActive a d
+
+mod' :: Rational -> Rational -> Rational
+mod' n d = n - fromIntegral (floor (n/d)) * d
+
+-- | @Ray c0 k c n@ represents the (potentially infinite) sequence of
+--   finite durations @[ kt+c | t <- [0 .. n-1] ]@ (@n = Forever@
+--   means infinite), taken from an interval beginning at @c0@.
+data Ray = Ray Rational Rational Rational (Duration Int)
+  deriving Show
+
+rayPoints :: Ray -> [Rational]
+rayPoints (Ray _ k c Forever)      = map (\t -> k*t + c) $ [0 ..]
+rayPoints (Ray _ k c (Duration n)) = take n . map (\t -> k*t + c) $ [0 ..]
+
+primRay :: Dur -> Ray
+primRay d = Ray 1 0 (floor <$> d)
+
+-- cutRay d does XXX
+-- want to find n such that  k*n + c 
+
+-- cutRay :: Dur -> Ray -> Ray
+-- cutRay x (Ray k c d)  = Ray k c (x `min` d)
+
+-- -- Assumption: x <= duration of the ray
+-- omitRay :: Rational -> Ray -> Ray
+-- omitRay x (Ray k c d) = Ray k (mod' (c - x) k) (d `subDuration` Duration x)
 
 -- | Generate a list of "frames" or "samples" taken at regular
 --   intervals from an 'Active' value.  The first argument is the
@@ -916,7 +974,7 @@ stitch (a:as) = stitchNE (a :| as)
 --   >>> samples 1 (cut 4 (interval 0 2 ->> always 3))
 --   [0 % 1,1 % 1,3 % 1,3 % 1,3 % 1]
 (->>) :: forall a. Active a -> Active a -> Active a
-a1 ->> a2 = coerce ((coerce a1 ->- coerce a2) :: Active (Last a))
+a1 ->> a2 = getLast <$> ((Last <$> a1) ->- (Last <$> a2))
 
 -- > seqRDia = illustrateActive' (1/4) [(2,OC)] seqREx
 
@@ -934,7 +992,7 @@ a1 ->> a2 = coerce ((coerce a1 ->- coerce a2) :: Active (Last a))
 --   >>> samples 1 (cut 4 (interval 0 2 >>- always 3))
 --   [0 % 1,1 % 1,2 % 1,3 % 1,3 % 1]
 (>>-) :: forall a. Active a -> Active a -> Active a
-a1 >>- a2 = coerce ((coerce a1 ->- coerce a2) :: Active (First a))
+a1 >>- a2 = getFirst <$> ((First <$> a1) ->- (First <$> a2))
 
 -- > seqLDia = illustrateActive' (1/4) [(2,CO)] seqLEx
 
@@ -944,7 +1002,7 @@ a1 >>- a2 = coerce ((coerce a1 ->- coerce a2) :: Active (First a))
 --   the right-hand 'Active' is taken at each splice point.  See also
 --   'movie'.
 movieNE :: forall a. NonEmpty (Active a) -> Active a
-movieNE scenes = coerce (stitchNE (coerce scenes :: NonEmpty (Active (Last a))))
+movieNE scenes = getLast <$> stitchNE ((fmap . fmap) Last scenes)
 
 
 -- | A variant of 'movieNE' defined on lists instead of 'NonEmpty' for
@@ -959,7 +1017,7 @@ movieNE scenes = coerce (stitchNE (coerce scenes :: NonEmpty (Active (Last a))))
 
 movie :: forall a. [Active a] -> Active a
 movie []     = error "Active.movie: Can't make empty movie!"
-movie (a:as) = coerce (stitchNE (coerce (a :| as) :: NonEmpty (Active (Last a))))
+movie (a:as) = getLast <$> stitchNE ((fmap . fmap) Last (a :| as))
 
 -- > {-# LANGUAGE TupleSections #-}
 -- > movieDia = illustrateActive' (1/4) (map (,OC) [1..4]) movieEx
@@ -1513,7 +1571,7 @@ backwards
 backwardsMay :: Active a -> Maybe (Active a)
 backwardsMay (Rev a) = Just a
 backwardsMay a
-  | isFinite a = Rev a
+  | isFinite a = Just (Rev a)
   | otherwise  = Nothing
 
 -- (Active (Duration d) f) = Just $ Active (Duration d) (f . (d-))
@@ -1552,7 +1610,7 @@ matchDuration a b = fromMaybe (error "Active.matchDuration called on arguments o
 matchDurationMay :: Active a -> Active b -> Maybe (Active b)
 matchDurationMay x y = case (getDuration x, getDuration y) of
   (Forever, Forever)         -> Just y
-  (Duration d1, Duration d2) -> Just $ stretch (d1/d2) b
+  (Duration d1, Duration d2) -> Just $ stretch (d1/d2) y
   _                          -> Nothing
 
 
@@ -1630,7 +1688,7 @@ snapshot t a = always (runActive a t)
 --   >>> samples 1 (cut 3 (interval 0 1))
 --   [0 % 1,1 % 1]
 cut :: Rational -> Active a -> Active a
-cut c (Active d f) = Active (Duration c `min` d) f
+cut c a = Cut (Duration c `min` getDuration a) a
 
 -- > cutDia = illustrateActiveFun' 0.1 [] [] (cut 1.7) cos'
 
@@ -1657,9 +1715,9 @@ cutTo a1
 --   > omitEx = omit 1.3 (interval 0 3)
 
 omit :: Rational -> Active a -> Active a
-omit o (Active d f)
-  | Duration o > d = error "Active.omit: time to omit longer than the duration of the given active"
-  | otherwise = Active (d `subDuration` (Duration o)) (f . (+o))
+omit o a
+  | Duration o > getDuration a = error "Active.omit: time to omit longer than the duration of the given active"
+  | otherwise = Omit (getDuration a `subDuration` (Duration o)) o a
 
 -- > omitDia = illustrateActiveFun (omit 1.3) (interval 0 3)
 
@@ -1688,11 +1746,12 @@ omit o (Active d f)
 --   > sliceEx2 = slice 2.8 1.3 (interval 0 4)
 
 slice :: Rational -> Rational -> Active a -> Active a
-slice s e a@(Active d _)
+slice s e a
   -- Could just defer the error to 'omit', but that might confuse
   -- users who would wonder why they got an error message about 'omit'
   -- even though they never used that function.
-  | Duration (min s e) > d = error "Active.slice: starting time greater than the duration of the given active"
+  | Duration (min s e) > getDuration a
+    = error "Active.slice: starting time greater than the duration of the given active"
   | e >= s    = cut (e - s) . omit s $ a
   | otherwise = backwards . slice e s $ a
 
