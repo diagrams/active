@@ -137,6 +137,8 @@ module Active
     -- ** Slicing and dicing
   , cut, cutTo, omit, slice
 
+  , Ray(..), rayPoints, omitRay, cutRay, primRay
+  
   ) where
 
 import           Data.Coerce
@@ -738,31 +740,54 @@ endMay a = case getDuration a of
   Forever    -> Nothing
   Duration d -> Just $ runActive a d
 
-mod' :: Rational -> Rational -> Rational
-mod' n d = n - fromIntegral (floor (n/d)) * d
-
--- | @Ray c0 k c n@ represents the (potentially infinite) sequence of
---   finite durations @[ kt+c | t <- [0 .. n-1] ]@ (@n = Forever@
---   means infinite), taken from an interval beginning at @c0@.
-data Ray = Ray Rational Rational Rational (Duration Int)
+-- | @Ray c d k p@ represents an arithmetic progression of points in
+--   time (i.e. regular samples), contained in an interval beginning
+--   at @c@ with duration @d@.  @p@ is the "phase shift", so that the
+--   first sample is at @c + p@.  In general, the samples are at @c +
+--   p + kt@ for natural numbers @t@.
+--
+--   More abstractly, a @Ray@ represents an affine transformation of
+--   some initial segment of \([0,\infty)\) plus a phase shift @p@.
+--
+--   Invariants: \(0 \leq |p| < |k|\); k and p have the same sign.
+data Ray = Ray Rational (Duration Rational) Rational Rational
   deriving Show
 
 rayPoints :: Ray -> [Rational]
-rayPoints (Ray _ k c Forever)      = map (\t -> k*t + c) $ [0 ..]
-rayPoints (Ray _ k c (Duration n)) = take n . map (\t -> k*t + c) $ [0 ..]
+rayPoints (Ray c Forever      k p) = map (\t -> p + k*t + c) $ [0 ..]
+rayPoints (Ray c (Duration d) k p) = takeWhile (\r -> abs (r - c) <= d)
+                                   . map (\t -> p + k*t + c)
+                                   $ [0 ..]
 
 primRay :: Dur -> Ray
-primRay d = Ray 1 0 (floor <$> d)
+primRay d = Ray 0 d 1 0
 
--- cutRay d does XXX
--- want to find n such that  k*n + c 
+cutRay :: Dur -> Ray -> Ray
+cutRay x (Ray c d k p)  = Ray c (x `min` d) k p
 
--- cutRay :: Dur -> Ray -> Ray
--- cutRay x (Ray k c d)  = Ray k c (x `min` d)
+rmod :: Rational -> Rational -> Rational
+rmod r m = r - m * fromIntegral (floor (r/m))
 
--- -- Assumption: x <= duration of the ray
--- omitRay :: Rational -> Ray -> Ray
--- omitRay x (Ray k c d) = Ray k (mod' (c - x) k) (d `subDuration` Duration x)
+-- Drop an initial segment of length x from a ray.
+-- Assumption: x <= duration of the ray.
+omitRay :: Rational -> Ray -> Ray
+omitRay x (Ray c d k p)
+  = Ray (c + offset)
+          -- The new starting point is x distance from c.
+
+        (d `subDuration` Duration x)
+          -- The new duration is just the old duration - x.
+
+        k
+          -- The scaling factor is unaffected.
+
+        ((p - offset) `rmod` k)
+          -- The new phase shift is the old phase shift minus the
+          -- offset, mod k.
+  where
+    offset = signum k * x
+      -- The actual offset is in a direction determined by the sign of
+      -- k.
 
 -- | Generate a list of "frames" or "samples" taken at regular
 --   intervals from an 'Active' value.  The first argument is the
@@ -787,9 +812,25 @@ primRay d = Ray 1 0 (floor <$> d)
 --   <<diagrams/src_Active_samplesDia.svg#diagram=samplesDia&width=200>>
 
 samples :: Rational -> Active a -> [a]
-samples = undefined  -- XXX!!
+samples 0 _ = error "Active.samples: Frame rate can't equal zero"
+samples f a = go (Ray 0 (getDuration a) (1/f) 0) a
+  where
+    -- Have to give go an explicit type signature to enable polymorphic
+    -- recursion, e.g. in Fmap case
+    go :: Ray -> Active a -> [a]
+    go ray   (Prim _ g)     = map g (rayPoints ray)
+    go ray a@(Discrete v)   = map (runActive a) (rayPoints ray)
+    go ray   (Fmap _ g a)   = map g (go ray a)
+    go ray   (Stitch _ a b) = undefined
+  -- Stitch   :: Semigroup a => Dur -> Active a -> Active a -> Active a
+  -- Pure     :: a -> Active a
+  -- Ap       :: Dur -> Active (a -> b) -> Active a -> Active b
+  -- Par      :: Semigroup a => Dur -> Active a -> Active a -> Active a
+  -- Rev      :: Active a -> Active a
+  -- Stretch  :: Dur -> Rational -> Active a -> Active a
+  -- Cut      :: Dur -> Active a -> Active a
+  -- Omit     :: Dur -> Rational -> Active a -> Active a
 
--- samples 0  _ = error "Active.samples: Frame rate can't equal zero"
 -- samples fr (Active (Duration d) f) = map f . takeWhile (<= d) . map (/fr) $ [0 ..]
 
 --   -- We'd like to just say (map f [0, 1/n .. d]) above but that
