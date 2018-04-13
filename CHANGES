@@ -11,6 +11,8 @@ Hackage revisions:
 - r3:
     - allow `lens-4.16`
     - allow `QuickCheck-2.11`
+- r4:
+    - allow `base-4.11` (GHC 8.4)
 
 ## [0.2.0.12](https://github.com/diagrams/active/tree/v0.2.0.12) (2016-10-14)
 
