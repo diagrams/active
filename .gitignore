@@ -32,3 +32,6 @@ semantics/FARM/diagrams/*
 .diagrams-cache
 .stack-work
 .shake
+
+example/Animation
+example/out/*
