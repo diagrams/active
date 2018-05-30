@@ -31,3 +31,4 @@ semantics/diagrams/*
 semantics/FARM/diagrams/*
 .diagrams-cache
 .stack-work
+.shake
