@@ -151,6 +151,7 @@ import           Data.Semigroup
 import qualified Data.Vector         as V
 import           Linear.Vector
 
+
 import           Active.Duration
 
 
@@ -789,6 +790,9 @@ omitRay x (Ray c d k p)
       -- The actual offset is in a direction determined by the sign of
       -- k.
 
+splitRay :: Rational -> Ray -> (Ray, Ray)
+splitRay x r = (cutRay (Duration x) r, omitRay x r)
+
 -- | Generate a list of "frames" or "samples" taken at regular
 --   intervals from an 'Active' value.  The first argument is the
 --   "frame rate", or number of samples per unit time.  That is,
@@ -813,15 +817,33 @@ omitRay x (Ray c d k p)
 
 samples :: Rational -> Active a -> [a]
 samples 0 _ = error "Active.samples: Frame rate can't equal zero"
-samples f a = go (Ray 0 (getDuration a) (1/f) 0) a
+samples f a = go (Ray 0 (getDuration a) (1/f) 0) a []
   where
     -- Have to give go an explicit type signature to enable polymorphic
-    -- recursion, e.g. in Fmap case
-    go :: Ray -> Active a -> [a]
-    go ray   (Prim _ g)     = map g (rayPoints ray)
-    go ray a@(Discrete v)   = map (runActive a) (rayPoints ray)
-    go ray   (Fmap _ g a)   = map g (go ray a)
-    go ray   (Stitch _ a b) = undefined
+    -- recursion, e.g. in Fmap case.
+
+    -- Invariant: for  go ray a,  duration ray == duration a
+    go :: Ray -> Active a -> ([a] -> [a])
+    go ray   (Prim _ g)     = (map g (rayPoints ray) ++)
+    go ray a@(Discrete v)   = (map (runActive a) (rayPoints ray) ++)
+    go ray   (Fmap _ g a)   = (map g (go ray a) ++)
+    go ray   (Stitch _ a b) = case duration a of
+      Forever    -> go ray a
+      Duration x ->
+        let (ray1, ray2) = splitRay (duration a) ray
+        in  go ray1 a . go ray2 b
+
+        -- XXX above is wrong, doesn't deal with overlap!
+
+        -- idea: use Data.Sequence?  Then don't have to worry about
+        -- O(n^2) due to nesting append.  Can also initially generate
+        -- pairs of values and times, make append operator that looks
+        -- @ end & start times to determine whether the values should
+        -- be merged.
+
+        -- No, Sequence is not lazy enough.  Also has log-time concat,
+        -- but we should be able to get O(1).
+
   -- Stitch   :: Semigroup a => Dur -> Active a -> Active a -> Active a
   -- Pure     :: a -> Active a
   -- Ap       :: Dur -> Active (a -> b) -> Active a -> Active b
