@@ -213,13 +213,13 @@ Modelling, and Design}{September 29, 2018}{St.\ Louis, MO, USA}
 %% Note: \begin{abstract}...\end{abstract} environment must come
 %% before \maketitle command
 \begin{abstract}
-  We describe \activelib, a new Haskell library and domain-specific
+  We introduce \activelib, a new Haskell library and domain-specific
   language for describing \emph{time-varying values}.  Although it was
   originally designed with the goal of making animations with the
-  \diagrams vector graphics framework \tocite, we intend for it to
-  be more broadly applicable to any sort of \todo{what? ``temporal
-    media''? time-varying domain?}, such as music or
-  sound generation, \todo{other examples}
+  \diagrams vector graphics framework \tocite, it is more broadly
+  applicable to any sort of \todo{what? ``temporal media''?
+    time-varying domain?}, such as music or sound generation,
+  \todo{other examples}
 
   We describe the library, give examples of its use, and explain and
   justify the design decisions that went into its development.
@@ -260,9 +260,16 @@ Modelling, and Design}{September 29, 2018}{St.\ Louis, MO, USA}
 
 \maketitle
 
+\todo{Figure out a system for including inline active+diagrams code
+  which automatically compiles to (a) a static diagram showing
+  something like beginning, middle, \& end, or maybe just beginning
+  and end, or maybe just a representative frame (maybe configurable)
+  (b) a GIF that gets uploaded somewhere, with (c) a QR code linking
+  to it!}
+
 \section{Introduction}
 
-Introduce with some examples\dots
+\todo{Introduce with some cool examples!}
 
 \todo{List contributions, with forward references to the rest of the
   paper.}
@@ -277,8 +284,10 @@ a| represents a \emph{time-varying value} of type |a|, with a given
 \term{duration}.  Specifically, we can think of each |Active a| value
 as having a nonnegative rational duration $d$, and a total function
 $f : [0,d] \to a$ which assigns a value of type |a| to every duration
-from $0$ to $d$, inclusive.  The duration can also be infinite, in
-which case $f$ assigs a value to every $d \geq 0$.
+from $0$ to $d$, inclusive.  (|Active| is not actually implemented
+this way; we will discuss the real implementation in section
+\todo{which?}.)  The duration can also be infinite, in which case $f$
+assigs a value to every $d \geq 0$.
 
 \needsdia
 
@@ -304,7 +313,8 @@ these design decisions is explained/justified.}
 \item The duration of an |Active| value is a \emph{rational} number.
   It is not possible to have an irrational duration or to use any type
   other than Haskell's standard |Rational| type.
-\item \todo{Talk about choice to include infinity.}
+\item |Active| values can extend infinitely into the future, but not
+  the past.
 \item It is not possible to tell whether an |Active| value is finite
   or infinite by looking at its type.  This means there are some
   combinators (such as |backwards|) which are necessarily partial,
@@ -318,8 +328,8 @@ fmap :: (a -> b) -> Active a -> Active b
 \end{spec}
 (also known as |<$>|) % $
 %
-to apply a function to an |Active| value at every point in time.  The
-\activelib library also defines
+to apply a function to an |Active| value at every point in time, by
+postcomposition.  The \activelib library also defines
 \begin{spec}
 (<#>) :: Active a -> (a -> b) -> Active b
 \end{spec}
@@ -348,12 +358,42 @@ backwards      ::                           Active a -> Active a
   \label{fig:duration-functions}
 \end{figure}
 
-\todo{Talk about these functions.  Discuss possibility of
-  |mapDuration| function (contravariant functor in duration).  Allows
-  doing some cool stuff---note we don't have to worry about causality
-  since this isn't necessarily intended for real-time synthesis---but
-  it does make efficient implementation more difficult.}
+For example, the |cut| function corresponds to the |take| function on
+lists, and truncates an |Active| value if necessary so that it has at
+most the given duration.  |omit| is similar function, parallel to
+|drop| on lists, and |slice| is a combination of |cut| and |omit|.
+|stretch| and its variants |stretchTo| and |matchDuration| allow
+``zooming in or out'' in time, stretching or compressing an |Active|
+value so it becomes longer or shorter.  |backwards| switches the
+beginning and end of an |Active| value---though as already mentioned
+it can only be used on values with a finite duration.
 
+We could also imagine a function
+\begin{spec}
+  mapDuration :: (Rational -> Rational) -> Active a -> Active a
+\end{spec}
+which works by precomposition with the given transformation on time.
+That is, if |act :: Active a|, then |mapDuration f| would take on the
+value |act (f t)| at time |t|.  \todo{cite anyone who mentions this
+  function?  Does Conal mention it?}  However, we deliberately choose
+not to include this function in the library, for two reasons.  First,
+there is no guarantee that the given time transformation |f| will
+result in values in the domain of |act|; one could imagine encoding
+such an invariant via dependent types, but the contortions required to
+do this in Haskell would likely render the library practically
+unusable.  More importantly and subtly, however, the rest of the
+library is carefully designed to allow only affine transformations on
+time, and we take advantage of this to design an efficient
+implementation.  If we allowed arbitrary nonlinear transformations on
+time via |mapDuration|, we would be stuck representing |Active a| by
+an actual function |Rational -> a|.
+
+Note that worries about causality are \emph{not} a reason for
+excluding |mapDuration|.  There is no built-in mechanism by which
+previous values can determine or influence future values, and so there
+is no problem with functions such as |backwards| which reverse past
+and future. In some sense, \activelib can be thought of as
+``functional reactive programming without the reactivity''.
 
 %% Acknowledgments
 \begin{acks}                            %% acks environment is optional
