@@ -1,12 +1,20 @@
 name:                active
-version:             0.2.0.13
-synopsis:            Abstractions for animation
-description:         "Active" abstraction for animated things with finite start and end times.
+version:             0.3
+synopsis:            An EDSL for time-varying values.
+description:         active is a small EDSL for building continuous,
+                     time-varying values
+                     of arbitrary type. It is particularly useful for
+                     building media such as animations, audio clips,
+                     and the like, but it is often useful to have
+                     other values that vary over time (vectors,
+                     colors, filters, volume levels...) and be able to
+                     create and use them in the service of
+                     constructing time-varying media.
 license:             BSD3
 license-file:        LICENSE
 author:              Brent Yorgey
 maintainer:          byorgey@gmail.com
-copyright:           (c) 2011-2015 Brent Yorgey
+copyright:           (c) 2011-2017 Brent Yorgey
 category:            Data
 build-type:          Simple
 cabal-version:       1.18
@@ -19,26 +27,29 @@ source-repository head
   location: https://github.com/diagrams/active.git
 
 library
-  exposed-modules:     Data.Active
-  build-depends:       base >= 4.0 && < 4.12,
-                       vector >= 0.10,
+  exposed-modules:     Active,
+                       Active.Duration
+  other-extensions:    FlexibleContexts,
+                       FlexibleInstances,
+                       GADTSyntax,
+                       KindSignatures
+  build-depends:       base >= 4.6 && < 4.12,
+                       bifunctors >= 5.4 && < 5.6,
                        semigroups >= 0.1 && < 0.19,
-                       semigroupoids >= 1.2 && < 5.3,
-                       lens >= 4.0 && < 4.17,
+                       vector >= 0.10 && < 0.13,
                        linear >= 1.14 && < 1.21
   hs-source-dirs:      src
   default-language:    Haskell2010
 
-test-suite active-tests
-    type:              exitcode-stdio-1.0
-    main-is:           active-tests.hs
-    build-depends:     base >= 4.0 && < 4.12,
-                       vector >= 0.10,
+test-suite active-doctests
+  type:                exitcode-stdio-1.0
+  main-is:             active-doctest.hs
+  build-depends:       base,
+                       directory,
+                       doctest,
                        semigroups >= 0.1 && < 0.19,
-                       semigroupoids >= 1.2 && < 5.3,
-                       lens >= 4.0 && < 4.17,
-                       linear >= 1.14 && < 1.21,
-                       QuickCheck >= 2.9 && < 2.12
-    other-modules:     Data.Active
-    hs-source-dirs:    src, test
-    default-language:  Haskell2010
+                       vector >= 0.10 && < 0.13,
+                       linear >= 1.14 && < 1.21
+  hs-source-dirs:      test
+  default-language:    Haskell2010
+
