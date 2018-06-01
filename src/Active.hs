@@ -283,9 +283,9 @@ instant = lasting 0
 --   @
 -- c :: Active Char
 -- c = movie
---   [ 'a' # lasting 2
---   , 'b' # lasting 3
---   , 'c' # lasting 1
+--   [ \'a\' # lasting 2
+--   , \'b\' # lasting 3
+--   , \'c\' # lasting 1
 --   ]
 -- @
 --
