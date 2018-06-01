@@ -14,7 +14,6 @@ extra-deps:
   commit: 523413618bb628b91b53c001a49dd458db32cd5b
 - git: git@github.com:diagrams/diagrams-rasterific.git
   commit: d300529c6ddf419b8ebb0b97445a27be4698ae04
-- ../../cautious-file-1.0.2
 
 # Override default flag values for local packages and extra-deps
 flags: {}
