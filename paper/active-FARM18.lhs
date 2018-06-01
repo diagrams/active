@@ -403,8 +403,40 @@ is no problem with functions such as |backwards| which reverse past
 and future. In some sense, \activelib can be thought of as
 ``functional reactive programming without the reactivity''.
 
+\subsection{Running and sampling}
+\label{sec:sampling}
+
+\todo{|runActive|; |duration|, |start|, |end|; |samples|}.
+
 \section{Sequential composition}
 \label{sec:sequential}
+
+\emph{Composition} must be at the heart of any DSL for constructing
+complex values such as animations.  The simplest way to compose
+|Active| values is \term{sequentially}, that is, running one
+value followed by another. The duration of the resulting |Active| is
+the sum of the input durations.
+
+This seems simple enough in principle, but it raises a tricky issue:
+what happens at the precise moment of overlap?  Recall that finite
+|Active| values are defined on a \emph{closed} interval $[0,d]$, that
+is, the domain includes both endpoints.  One way around the issue
+would be to instead specify that |Active| values are only defined on
+the half-open interval $[0,d)$, excluding the right endpoint.
+However, while this solves the problem for join points, it will always
+leave the final point of any |Active| undefined, which seems
+unsatisfactory. It also has the effect of baking in a bias for the
+right value at join points; while this may seem more ``natural'' than
+the alternative (namely, making |Active| values defined on $(0,d]$ and
+thus preferring the left value at join points), it is still somewhat
+arbitrary, and we would like to avoid baking arbitrary choices into
+our API.
+
+Another reasonable reaction to this problem is: who cares?  Since the
+point of overlap is instantaneous, the probability of sampling exactly
+at that point is essentially zero, and besides, even if we do sample
+at exactly that point, it doesn't matter whether a single sample is
+taken from 
 
 \section{Parallel composition}
 \label{sec:parallel}
