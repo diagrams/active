@@ -38,12 +38,12 @@ import           Linear.Vector
 --   duration.
 data Duration :: * -> * where
 
-  Duration :: n -> Duration n
-  -- ^ A finite duration of a given nonnegative length.  The length
+  -- | A finite duration of a given nonnegative length.  The length
   --   can be zero.
+  Duration :: n -> Duration n
 
+  -- | An infinite duration.
   Forever  ::      Duration n
-  -- ^ An infinite duration.
 
   deriving (Show, Eq, Ord, Functor)
 
