@@ -51,9 +51,11 @@ Modelling, and Design}{September 29, 2018}{St.\ Louis, MO, USA}
 
 %include polycode.fmt
 
-%format <$> = "\langle \$ \rangle"
-%format <#> = "\langle \# \rangle"
+%format <$> = "\mathbin{\langle \$ \rangle}"
+%format <#> = "\mathbin{\langle \# \rangle}"
 %format Rational = "\mathbb{Q}"
+
+%format ->- = "\mathbin{-\!\!\!>\!\!\!-}"
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% LaTeX formatting
@@ -418,39 +420,85 @@ value followed by another. The duration of the resulting |Active| is
 the sum of the input durations.
 
 This seems simple enough in principle, but it raises a tricky issue:
-what happens at the precise moment of overlap?  Recall that finite
+what happens at the precise moment of transition?  Recall that finite
 |Active| values are defined on a \emph{closed} interval $[0,d]$, that
-is, the domain includes both endpoints.  One way around the issue
-would be to instead specify that |Active| values are only defined on
-the half-open interval $[0,d)$, excluding the right endpoint.
-However, while this solves the problem for join points, it will always
-leave the final point of any |Active| undefined, which seems
-unsatisfactory. It also has the effect of baking in a bias for the
-right value at join points; while this may seem more ``natural'' than
-the alternative (namely, making |Active| values defined on $(0,d]$ and
-thus preferring the left value at join points), it is still somewhat
-arbitrary, and we would like to avoid baking arbitrary choices into
-our API.
+is, the domain includes both endpoints.  So two |Active| values
+composed in sequence have an instant of overlap, where both are
+defined.  One way around the issue would be to instead specify that
+|Active| values are only defined on the half-open interval $[0,d)$,
+excluding the right endpoint.  However, while this solves the problem
+for join points, it will always leave the final point of any |Active|
+undefined, which seems unsatisfactory. It also has the effect of
+baking in a bias for the right value at join points; while this may
+seem more ``natural'' than the alternative (namely, making |Active|
+values defined on $(0,d]$ and thus preferring the left value at join
+points), it is still somewhat arbitrary, and we would like to avoid
+baking arbitrary choices into our API.
 
 Another reasonable reaction to this problem is: who cares?  Since the
 point of overlap is instantaneous, the probability of sampling exactly
 at that point is essentially zero, and besides, even if we do sample
-at exactly that point, it doesn't matter whether a single sample is
-taken from 
+at exactly that point, does it really matter whether a single sample
+comes from the left or right |Active|?  Indeed, \todo{mention that
+  previous systems (Hudak, Elliot?, Matlage?) all punt on this issue.}
+
+Perhaps these issues don't matter for some domains with high sampling
+rates, such as audio.  However, they can matter a lot for other
+domains.  First of all, the argument that we have zero probability of
+sampling exactly at a transition point is spurious, since it is
+reasonable---and common---to sample at a rate which evenly divides the
+durations used in constructing an |Active|.  For example, we might
+sequence values lasting one second, and then sample at a rate of 30
+per second.  Second, in some domains we may indeed care to control the
+precise sample at the transition between two |Active| values---and not
+just by picking one value or the other, but perhaps by combining the
+value from the end of the first |Active| with the value at the start
+of the second.  For example, when building a musical score, we might
+want the final chord of a repeating motif to sound on the downbeat,
+just as another voice enters with the beginning of a new melody.  Or
+when building an animation with one shape disappearing exactly as a
+new shape appears, it might look less jarring to have one frame where
+both shapes are visible simultaneously.
+
+Put simply, sequential transition points are not just incidental
+details to be swept under a rug, but key moments in time that we want
+to be able to control explicitly.  The solution is simple: we give the
+programmer control over what happens at transition points by requiring
+a |Semigroup| instance on the underlying type.
+\begin{spec}
+(->-) :: Semigroup a => Active a -> Active a -> Active a
+\end{spec}
+\todo{Recall definition of |Semigroup|.  Talk about |First| and
+  |Last|, convenience operators.}
 
 \section{Parallel composition}
 \label{sec:parallel}
 
+\section{Other modes of composition}
+\label{sec:other-composition}
+
+\todo{e.g. Composition via anchors? Composition via explicit start and
+  end times?  Show how these can be encoded in terms of more
+  fundamental composition operations.}
+
 \section{An extended example}
 \label{sec:example}
+
+\todo{Come up with a cool extended example!}
 
 \section{Linear sampling}
 \label{sec:linear-sampling}
 
+\todo{Show problems with left-nested sequencing.  If we can get it to
+  work in time---and it's actually faster!---show how to use deep
+  embedding to speed up sampling.}
+
 \section{Related work}
 \label{sec:related-work}
 
-
+\todo{Related work to discuss: Hudak (Polymorphic Temporal Media),
+  Elliot (Tangible Functional Programming?), Matlage \& Gill
+  (Beginning, Middle, and End), Janin (T-calculus, LiveTiles); others?}
 
 %% Acknowledgments
 \begin{acks}                            %% acks environment is optional
