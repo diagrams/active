@@ -321,6 +321,11 @@ these design decisions is explained/justified.}
   because they only make sense when applied to finite values.
 \end{itemize}
 
+\subsection{Constructing |Active| values}
+\label{sec:constructing}
+
+\todo{|activeF|, |activeI|, |discrete|; |instant|, |lasting|, |always|; |ui|, |dur|}
+
 What can we do with the bare |Active| type?  First, |Active| is a
 |Functor|, which means we can use
 \begin{spec}
@@ -338,6 +343,9 @@ as a flipped variant of |<$>| % $
 for convenience (we will see examples of its use later).  There is
 also a collection of methods for manipulating the duration, shown in
 \pref{fig:duration-functions}.
+
+\subsection{Manipulating duration}
+\label{sec:duration}
 
 \begin{figure}
   \centering
@@ -394,6 +402,23 @@ previous values can determine or influence future values, and so there
 is no problem with functions such as |backwards| which reverse past
 and future. In some sense, \activelib can be thought of as
 ``functional reactive programming without the reactivity''.
+
+\section{Sequential composition}
+\label{sec:sequential}
+
+\section{Parallel composition}
+\label{sec:parallel}
+
+\section{An extended example}
+\label{sec:example}
+
+\section{Linear sampling}
+\label{sec:linear-sampling}
+
+\section{Related work}
+\label{sec:related-work}
+
+
 
 %% Acknowledgments
 \begin{acks}                            %% acks environment is optional
