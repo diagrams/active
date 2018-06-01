@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP            #-}
 {-# LANGUAGE DeriveFunctor  #-}
 {-# LANGUAGE GADTs          #-}
 {-# LANGUAGE KindSignatures #-}
@@ -28,6 +29,10 @@ module Active.Duration
   ) where
 
 import           Linear.Vector
+
+#if !MIN_VERSION_base(4,8,0)
+import           Control.Applicative
+#endif
 
 ------------------------------------------------------------
 -- Durations
