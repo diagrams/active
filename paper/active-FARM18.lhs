@@ -469,10 +469,97 @@ a |Semigroup| instance on the underlying type.
 (->-) :: Semigroup a => Active a -> Active a -> Active a
 \end{spec}
 \todo{Recall definition of |Semigroup|.  Talk about |First| and
-  |Last|, convenience operators.}
+  |Last|, convenience operators. Show |->-| is associative, and has
+  |instant mempty| as identity whenever underlying type is a |Monoid|.}
 
 \section{Parallel composition}
 \label{sec:parallel}
+
+In addition to combining values sequentially (\ie ``horizontally''),
+we also want to be able to combine values in parallel (\ie
+``vertically''), so that things happen at the same time.
+\begin{spec}
+par :: Semigroup a => Active a -> Active a -> Active a
+\end{spec}
+Combining two |Active| values with the same duration is
+straightforward: we use the |Semigroup| instance on the underlying
+type |a| to combine the values at each point in time. \needsdia
+
+However, the given type of |par| does not restrict the inputs to have
+same duration. We could possibly imagine adding a type parameter to
+|Active| representing the duration, but embedding computation on
+rational numbers at the type level would greatly increase the
+complexity of the API and implementation of the library.  And in any
+case, disallowing parallel composition between values with unequal
+duration would be rather limiting.  So what should happen when we
+compose values with different durations in parallel?
+
+There are essentially two reasonable options: we can take the duration
+of the result to be either the minimum of the input durations (\ie
+taking the intersection of the input domains) or the maximum (taking
+the union of the domains).
+\begin{itemize}
+\item To make the output duration the minimum of the inputs, we
+  truncate the longer |Active| to the duration of the shorter, and
+  then combine the resulting values in parallel. \needsdia
+\item To make the output duration the maximum of the inputs, we do a
+  case analysis at each point in time: if both inputs are defined, we
+  combine their values with the |Semigroup| operation; if only one is
+  defined, we just copy its value to the output. \needsdia
+\end{itemize}
+
+\todo{Some discussion on what has been chosen by other libraries.}
+
+At first, there appear to be several good reasons to choose the
+max/union implementation as more primitive than min/intersect:
+\begin{itemize}
+\item The identity element, if it exists, is the same as for
+  sequential composition (namely, |instant mempty|).
+\item The max/union implementation \emph{keeps} as much information as
+  possible, instead of throwing information away.
+\item If we take the max/union implementation as primitive, it is easy
+  to implement min/intersect in terms of it: just call |cut| first
+  as appropriate.
+\item Conversely, if we take the min/intersect implementation as
+  primitive, implementing max/union in terms of it is more
+  problematic: we would need to first ``pad'' the shorter value to the
+  duration of the longer one, using |mempty|---but this requires a
+  |Monoid| instance on |a|, where before we only needed |Semigroup|.
+  This may not seem like a big deal, but there are many examples of
+  types we may want to animate which are instances of |Semigroup| but
+  not |Monoid| (\todo{such as \dots rectangles/bounding boxes, opaque
+    colors, natural numbers under min\dots others?})
+\end{itemize}
+
+So far, it would seem that the max/union semantics is the clear
+winner.  However, it turns out the min/intersect semantics is an
+instance of a much more general pattern, which cannot be implemented
+in terms of max/union!  Any Haskell programmer, seeing the |Functor|
+instance for |Active|, will naturally wonder whether |Active| can also
+be made an instance of the |Applicative| class \tocite, which is
+essentially defined as follows:
+\begin{spec}
+class Functor f => Applicative f where
+  pure   :: a -> f a
+  (<*>)  :: f (a -> b) -> f a -> f b
+\end{spec}
+\todo{short high-level discussion/intuition for |Applicative| class}
+
+Indeed, |Active| can be made an instance of |Applicative|,
+\todo{writing here}
+\begin{spec}
+pure  :: a -> Active a
+(<*>) :: Active (a -> b) -> Active a -> Active b
+\end{spec}
+In particular, the application operator |(<*>)| takes a time-varying
+function of type |a -> b| and a time-varying argument of type |a|, and
+applies the function to the corresponding argument at each instant in
+time, resulting in a time-varying output of type |b|.  If the input
+|Active| values have different durations, we \emph{must} choose the
+min/intersect semantics: there is simply no way to come up with a
+value of type |b| at some instant in time unless we have \emph{both} a
+corresponding function and input.  |pure| takes a single value of type
+|a| and constructs the infinite |Active| \todo{writing here}
 
 \section{Other modes of composition}
 \label{sec:other-composition}
