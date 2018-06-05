@@ -52,7 +52,9 @@ Modelling, and Design}{September 29, 2018}{St.\ Louis, MO, USA}
 %include polycode.fmt
 
 %format <$> = "\mathbin{\langle \$ \rangle}"
+%format <*> = "\mathbin{\langle * \rangle}"
 %format <#> = "\mathbin{\langle \# \rangle}"
+%format <>  = "\diamond"
 %format Rational = "\mathbb{Q}"
 
 %format ->- = "\mathbin{-\!\!\!>\!\!\!-}"
@@ -521,43 +523,44 @@ the union of the domains).
 \begin{itemize}
 \item To make the output duration the minimum of the inputs, we
   truncate the longer |Active| to the duration of the shorter, and
-  then combine the resulting values in parallel. \needsdia
+  then combine the resulting values in parallel. \needsdia We will refer to this
+  operation as |parI| (the I stands for \emph{intersect}, since this
+  operation represents taking the intersection of the domains).
 \item To make the output duration the maximum of the inputs, we do a
   case analysis at each point in time: if both inputs are defined, we
   combine their values with the |Semigroup| operation; if only one is
-  defined, we just copy its value to the output. \needsdia
+  defined, we just copy its value to the output. \needsdia  We will
+  refer to this operation as |parU| (U for \emph{union}).
 \end{itemize}
 
 \todo{Some discussion on what has been chosen by other libraries.}
 
 At first, there appear to be several good reasons to choose the
-max/union implementation as more primitive than min/intersect:
+|parU| as more primitive than |parI|:
 \begin{itemize}
-\item The identity element, if it exists, is the same as for
-  sequential composition (namely, |instant mempty|).
-\item The max/union implementation \emph{keeps} as much information as
-  possible, instead of throwing information away.
-\item If we take the max/union implementation as primitive, it is easy
-  to implement min/intersect in terms of it: just call |cut| first
-  as appropriate.
-\item Conversely, if we take the min/intersect implementation as
-  primitive, implementing max/union in terms of it is more
-  problematic: we would need to first ``pad'' the shorter value to the
-  duration of the longer one, using |mempty|---but this requires a
-  |Monoid| instance on |a|, where before we only needed |Semigroup|.
-  This may not seem like a big deal, but there are many examples of
-  types we may want to animate which are instances of |Semigroup| but
-  not |Monoid| (\todo{such as \dots rectangles/bounding boxes, opaque
-    colors, natural numbers under min\dots others?})
+\item The identity element for |parU|, if it exists, is the same as
+  for sequential composition (namely, |instant mempty|).
+\item |parU| \emph{keeps} as much information as possible, instead of
+  throwing information away.
+\item If we take |parU| as primitive, it is easy to implement |parI|
+  in terms of it: just call |cut| first as appropriate.
+\item Conversely, if we take |parI| as primitive, implementing |parU|
+  in terms of it is more problematic: we would need to first ``pad''
+  the shorter value to the duration of the longer one, using
+  |mempty|---but this requires a |Monoid| instance on |a|, where
+  before we only needed |Semigroup|.  This may not seem like a big
+  deal, but there are many examples of types we may want to animate
+  which are instances of |Semigroup| but not |Monoid| (\todo{such as
+    \dots rectangles/bounding boxes, opaque colors, natural numbers
+    under min\dots others?})
 \end{itemize}
 
-So far, it would seem that the max/union semantics is the clear
-winner.  However, it turns out the min/intersect semantics is an
-instance of a much more general pattern, which cannot be implemented
-in terms of max/union!  Any Haskell programmer, seeing the |Functor|
-instance for |Active|, will naturally wonder whether |Active| can also
-be made an instance of the |Applicative| class \tocite, which is
-essentially defined as follows:
+So far, it would seem that |parU| is the clear winner.  However, it
+turns out that |parI| is an instance of a more general pattern, which
+cannot be implemented in terms of |parU|!  Any Haskell programmer,
+seeing the |Functor| instance for |Active|, will naturally wonder
+whether |Active| can also be made an instance of the |Applicative|
+class \tocite, which is essentially defined as follows:
 \begin{spec}
 class Functor f => Applicative f where
   pure   :: a -> f a
@@ -565,21 +568,78 @@ class Functor f => Applicative f where
 \end{spec}
 \todo{short high-level discussion/intuition for |Applicative| class}
 
-Indeed, |Active| can be made an instance of |Applicative|,
-\todo{writing here}
+Indeed, |Active| can be made an instance of |Applicative|.  Specializing
+the |Applicative| methods to |Active| yields the following types:
 \begin{spec}
-pure  :: a -> Active a
-(<*>) :: Active (a -> b) -> Active a -> Active b
+pure   :: a -> Active a
+(<*>)  :: Active (a -> b) -> Active a -> Active b
 \end{spec}
-In particular, the application operator |(<*>)| takes a time-varying
+In particular, the application operator |<*>| takes a time-varying
 function of type |a -> b| and a time-varying argument of type |a|, and
 applies the function to the corresponding argument at each instant in
-time, resulting in a time-varying output of type |b|.  If the input
-|Active| values have different durations, we \emph{must} choose the
-min/intersect semantics: there is simply no way to come up with a
-value of type |b| at some instant in time unless we have \emph{both} a
-corresponding function and input.  |pure| takes a single value of type
-|a| and constructs the infinite |Active| \todo{writing here}
+time, resulting in a time-varying output of type |b|.  \needsdia If
+the input |Active| values have different durations, we \emph{must}
+choose the min/intersect semantics: there is simply no way to come up
+with a value of type |b| at some instant in time unless we have
+\emph{both} a corresponding function and input.  |pure| takes a single
+value of type |a| and constructs the infinite |Active| which
+constantly has that value.  This implementation of |pure| is required
+by the |Applicative| laws, and incidentally is the main technical
+motivation for allowing infinite |Active| values---although they are
+also independently useful.
+
+Once we have an |Applicative| instance for |Active|, |parI| falls out
+as just a special case:
+\begin{spec}
+parI :: Active a -> Active a -> Active a
+parI = liftA2 (<>)
+\end{spec}
+Although we can implement |parI| in terms of |parU|, there is no way
+to implement |<*>| in terms of |parU|; the type of |parU| simply
+isn't generic enough.
+
+The |Applicative| instance for |Active| is extremely useful in
+practice, allowing the programmer to combine multiple time-varying
+values of different types in arbitrary ways. For example, suppose we
+have a time-varying floating point value |x :: Active Double| as well
+as a time-varying diagram |d :: Active Diagram|.  Given a function
+|translateX :: Double -> Diagram -> Diagram| which translates a
+diagram along the $x$-axis, we can combine these very simply by
+writing
+\begin{spec}
+translateX <$> x <*> d
+\end{spec} %$
+yielding an animation of a changing diagram simultaneously moving
+along the $x$-axis. \todo{Actually turn this into a real, concrete
+  example.}
+
+We can also make |Active a| an instance of type classes like |Num|,
+|Fractional|, and |Floating| (as long as the underlying type |a| is)
+via the |Applicative| instance.  For example, the |Num| instance for
+|Active a| reads in part as follows:
+\begin{spec}
+instance Num a => Num (Active a) where
+  fromInteger  = pure . fromInteger
+  (+)          = liftA2 (+)
+  (*)          = liftA2 (*)
+\end{spec}
+This means that we can do arithmetic on time-varying numeric values
+without the extra syntactic overhead of operators like |<$>| %$
+%
+and |<*>|.  For example, instead of the cumbersome
+\begin{spec}
+cos <$> ((*) <$> pure pi <*> ((/) <$> dur' <*> pure 2))
+\end{spec} %$
+we can simply write
+\begin{spec}
+cos (pi * dur' / 2)
+\end{spec}
+
+So we have both unioning parallel composition |parU| as well as an
+|Applicative| instance (of which intersecting parallel composition
+|parI| is a special case), with neither more general than the other.
+Rather than picking one or the other, the library simply provides
+both.
 
 \section{Other modes of composition}
 \label{sec:other-composition}
