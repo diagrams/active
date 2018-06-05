@@ -1,11 +1,11 @@
 % -*- mode: LaTeX; compile-command: "./build.sh" -*-
 
 %% For double-blind review submission, w/o CCS and ACM Reference (max submission space)
-\documentclass[sigplan,10pt,review,anonymous]{acmart}\settopmatter{printfolios=true,printccs=false,printacmref=false}
+%\documentclass[sigplan,10pt,anonymous,review]{acmart}\settopmatter{printfolios=true,printccs=false,printacmref=false}
 %% For double-blind review submission, w/ CCS and ACM Reference
 %\documentclass[sigplan,10pt,review,anonymous]{acmart}\settopmatter{printfolios=true}
 %% For single-blind review submission, w/o CCS and ACM Reference (max submission space)
-%\documentclass[sigplan,10pt,review]{acmart}\settopmatter{printfolios=true,printccs=false,printacmref=false}
+\documentclass[sigplan,10pt,review]{acmart}\settopmatter{printfolios=true,printccs=false,printacmref=false}
 %% For single-blind review submission, w/ CCS and ACM Reference
 %\documentclass[sigplan,10pt,review]{acmart}\settopmatter{printfolios=true}
 %% For final camera-ready submission, w/ required CCS and ACM Reference
@@ -150,7 +150,7 @@ Modelling, and Design}{September 29, 2018}{St.\ Louis, MO, USA}
 \begin{document}
 
 %% Title information
-\title{Active}                          %% [Short Title] is optional;
+\title{Title}                           %% [Short Title] is optional;
                                         %% when present, will be used in
                                         %% header instead of Full Title.
 % \subtitle{Subtitle}                     %% \subtitle is optional
@@ -173,7 +173,7 @@ Modelling, and Design}{September 29, 2018}{St.\ Louis, MO, USA}
 \author{Brent A. Yorgey}
 \affiliation{
   % \position{Position1}
-  \department{Dept.\ of Mathematics and Computer Science} %% \department is recommended
+  % \department{Dept.\ of Mathematics and Computer Science} %% \department is recommended
   \institution{Hendrix College}            %% \institution is required
 %  \streetaddress{Street1 Address1}
   \city{Conway}
@@ -181,6 +181,26 @@ Modelling, and Design}{September 29, 2018}{St.\ Louis, MO, USA}
   \country{USA}                    %% \country is recommended
 }
 \email{yorgey@@hendrix.edu}          %% \email is recommended
+
+\author{Andy Gill}
+\affiliation{
+  % \position{Position1}
+  \institution{KU? Google?}
+  \city{City}
+  \state{ST}
+  \country{USA}
+}
+\email{andygill@@ku.edu}
+
+\author{Nicolas Wu}
+\affiliation{
+  % \position{Position1}
+  % \department{Dept.\ of Computer Science}
+  \institution{University of Bristol}
+  \city{Bristol}
+  \country{UK}
+}
+\email{nicolas.wu@@bristol.ac.uk}
 
 % %% Author with two affiliations and emails.
 % \author{First2 Last2}
