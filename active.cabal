@@ -28,6 +28,7 @@ source-repository head
 
 library
   exposed-modules:     Active,
+                       Active.Class,
                        Active.Duration
   other-extensions:    FlexibleContexts,
                        FlexibleInstances,

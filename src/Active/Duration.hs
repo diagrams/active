@@ -66,12 +66,14 @@ instance Applicative Duration where
 --
 --   This instance also gives us the convenience of 'fromInteger', so
 --   numeric literals can be used as finite durations.
-instance Num n => Num (Duration n) where
+instance (Num n, Ord n) => Num (Duration n) where
   fromInteger               = toDuration . fromInteger
 
   Forever     + _           = Forever
   _           + Forever     = Forever
   Duration d1 + Duration d2 = Duration (d1 + d2)
+
+  (-) = subDuration
 
   abs Forever               = Forever
   abs (Duration n)          = Duration (abs n)
