@@ -86,10 +86,15 @@ class Applicative act => Activated act where
   -- Snip an active into its past and its future.
   snip      :: act a -> Pair (act a)
 
-  -- Shift time by the given amount
+  -- Shift time by the given amount.  A positive value means part of
+  -- the value that was the future now becomes the past (i.e. "fast
+  -- forward").  A negative value is "rewinding", i.e. some of the
+  -- past becomes the future.
   shift     :: Rational -> act a -> (Rational, act a)
+
+  -- Stretch time by the given amount
   stretch   :: Rational -> act a -> act a
-  backwards :: act a -> act a
+  rev       :: act a -> act a
   stitch    :: Semigroup a => act a -> act a -> act a
   par       :: Semigroup a => act a -> act a -> act a
 
@@ -105,7 +110,9 @@ class Applicative act => Activated act where
    uncurryP andThen . snip = id
    duration = join . fmap duration . snip
 
-   if shift x a = (x', a')  then  shift (-x') a' = (-x', a)
+   shift x a = (x', a')  ==>  shift (-x') a' = (-x', a)
+
+   (c >= 0)  ==>  stretch c = map (c*) . duration
 
 -}
 
@@ -163,14 +170,23 @@ discreteNE (a :| as) = active 1 f
 shift' :: Activated act => Rational -> act a -> act a
 shift' x a = snd (shift x a)
 
--- Limit the future duration by shifting backwards, forgetting any
+-- Limit the future duration by shifting, forgetting any
 -- remaining future, then shifting forward again
 cut :: Activated act => Rational -> act a -> act a
 cut r a = shift' (-r') (past a')
   where
-    (r', a') = shift (-r) a
+    (r', a') = shift r a
 
 -- Still not sure what to do with 'omit' and 'slice'
+
+-- 'backwards' combinator which switches start and end.  Note this is
+-- not quite the same thing as 'rev': it is rev and a shift.  This
+-- version simply acts as 'rev' on an infinite argument.  Could also
+-- have a partial version which throws an error.
+backwards :: Activated act => act a -> act a
+backwards a = case futureDuration a of
+  Forever    -> rev a
+  Duration d -> rev a
 
 ------------------------------------------------------------
 -- Simplest possible instance: an interval is just a pair of a future
@@ -217,7 +233,7 @@ instance Activated Interval where
   snip (I (dL :><: dR)) = I (dL :><: 0) :><: I (0 :><: dR)
   stretch c = onInterval (fmap (c*^))
 
-  backwards = onInterval revP
+  rev = onInterval revP
 
   stitch (I (dL1 :><: dR1)) (I (dL2 :><: dR2))
     = I $ max dL1 (dL2 - dR1) :><: dR1 + dR2
@@ -225,13 +241,15 @@ instance Activated Interval where
   par = onInterval2 (liftA2 max)
 
   shift x (I (dL :><: dR))
-    | x >= 0    = (right, I $ dL - rightD :><: dR + rightD)
-    | otherwise = (-left, I $ dL + leftD  :><: dR - leftD )
+    -- positive shift = foward, i.e. shift the future into the past
+    | x >= 0    = (fwd,  I $ dL + fwdD :><: dR - fwdD)
+    -- negative shift = backwards, i.e. shift the past into the future
+    | otherwise = (-bwd, I $ dL - bwdD :><: dR + bwdD )
     where
-      -- max amount we could possibly shift right is dL
-      rightD@(Duration right) = min (Duration x) dL
-      -- max amount we could possibly shift left  is dR
-      leftD@(Duration left)   = min (Duration (-x)) dR
+      -- max amount we could possibly rewind is dL
+      bwdD@(Duration bwd) = min (Duration x) dL
+      -- max amount we could possibly ffwd is dR
+      fwdD@(Duration fwd) = min (Duration (-x)) dR
 
 ------------------------------------------------------------
 -- Simple instance giving main reference semantics
@@ -252,7 +270,7 @@ instance Activated Active where
   duration   (Active _ i) = duration i
   snip       (Active f i) = Active f <$> snip i
   stretch  c (Active f i) = Active (f . (/c))   (stretch c i)
-  backwards  (Active f i) = Active (f . negate) (backwards i)
+  rev        (Active f i) = Active (f . negate) (rev i)
 
   stitch   a@(Active f1 i1@(I (_ :><: Forever))) _ = a
   stitch     (Active f1 i1@(I (_ :><: Duration hi1))) (Active f2 i2) = Active f (stitch i1 i2)
@@ -270,7 +288,7 @@ instance Activated Active where
         | t `inInterval` i1 = f1 t
         | otherwise         = f2 t
 
-  shift    x (Active f i) = (x', Active (f . subtract x') i')
+  shift    x (Active f i) = (x', Active (f . (+x')) i')
     where
       (x', i') = shift x i
 
