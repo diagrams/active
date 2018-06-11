@@ -7,7 +7,7 @@ module Active.Class where
 
 import           Control.Applicative
 import           Control.Monad
-import           Data.List.NonEmpty
+import           Data.List.NonEmpty  (NonEmpty (..))
 import           Data.Ratio
 import           Data.Semigroup
 import qualified Data.Vector         as V
@@ -94,6 +94,8 @@ class Applicative act => Activated act where
 
   -- Stretch time by the given amount
   stretch   :: Rational -> act a -> act a
+
+  -- Switch past and future.
   rev       :: act a -> act a
   stitch    :: Semigroup a => act a -> act a -> act a
   par       :: Semigroup a => act a -> act a -> act a
@@ -113,6 +115,10 @@ class Applicative act => Activated act where
    shift x a = (x', a')  ==>  shift (-x') a' = (-x', a)
 
    (c >= 0)  ==>  stretch c = map (c*) . duration
+
+   rev . rev = id
+
+   ...other laws...
 
 -}
 
@@ -246,10 +252,10 @@ instance Activated Interval where
     -- negative shift = backwards, i.e. shift the past into the future
     | otherwise = (-bwd, I $ dL - bwdD :><: dR + bwdD )
     where
-      -- max amount we could possibly rewind is dL
-      bwdD@(Duration bwd) = min (Duration x) dL
       -- max amount we could possibly ffwd is dR
-      fwdD@(Duration fwd) = min (Duration (-x)) dR
+      fwdD@(Duration fwd) = min (Duration x) dR
+      -- max amount we could possibly rewind is dL
+      bwdD@(Duration bwd) = min (Duration (-x)) dL
 
 ------------------------------------------------------------
 -- Simple instance giving main reference semantics
@@ -297,8 +303,11 @@ runActive (Active f i) t
   | t `inInterval` i = f t
   | otherwise = error "runActive: Active value evaluated outside its domain"
 
--- Sample only from the future.
 
--- samples :: Rational -> Active a -> [a]
--- samples 0  _ = error "Active.samples: Frame rate can't equal zero"
--- samples fr (Active (Duration d) f) = map f . takeWhile (<= d) . map (/fr) $ [0 ..]
+-- Sample only from the future.
+samples :: Rational -> Active a -> [a]
+samples fr _ | fr <= 0   = error "Frame rate can't be <= 0"
+samples fr (Active f (I (_ :><: fut)))
+  = case fut of
+      Forever    -> map f . map (/fr) $ [0 ..]
+      Duration d -> map f . takeWhile (<= d) . map (/fr) $ [0 ..]
