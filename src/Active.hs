@@ -2,8 +2,8 @@
 {-# LANGUAGE FlexibleInstances   #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE KindSignatures      #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RoleAnnotations     #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 -----------------------------------------------------------------------------
 -- |
@@ -138,12 +138,13 @@ module Active
   , cut, cutTo, omit, slice
 
   , Ray(..), rayPoints, omitRay, cutRay, primRay
-  
+
   ) where
 
 import           Data.Coerce
 
 import           Control.Applicative
+import           Control.Arrow       ((&&&))
 import           Data.Bifunctor      (second)
 import           Data.List.NonEmpty  (NonEmpty (..))
 import           Data.Maybe          (fromJust, fromMaybe)
@@ -815,17 +816,32 @@ splitRay x r = (cutRay (Duration x) r, omitRay x r)
 --
 --   <<diagrams/src_Active_samplesDia.svg#diagram=samplesDia&width=200>>
 
+newtype Builder a = B { unB :: [a] -> [a] }
+
+builder :: [a] -> Builder a
+builder = B . (++)
+
+runBuilder :: Builder a -> [a]
+runBuilder = ($[]) . unB
+
+instance Semigroup (Builder a) where
+  B b1 <> B b2 = B (b1 . b2)
+
+instance Monoid (Builder a) where
+  mempty  = B id
+  mappend = (<>)
+
 samples :: Rational -> Active a -> [a]
 samples 0 _ = error "Active.samples: Frame rate can't equal zero"
-samples f a = go (Ray 0 (getDuration a) (1/f) 0) a []
+samples f a = splice . runBuilder $ go (Ray 0 (getDuration a) (1/f) 0) a
   where
     -- Have to give go an explicit type signature to enable polymorphic
     -- recursion, e.g. in Fmap case.
 
     -- Invariant: for  go ray a,  duration ray == duration a
-    go :: Ray -> Active a -> ([a] -> [a])
-    go ray   (Prim _ g)     = (map g (rayPoints ray) ++)
-    go ray a@(Discrete v)   = (map (runActive a) (rayPoints ray) ++)
+    go :: Ray -> Active a -> Builder (Rational, a)
+    go ray   (Prim _ g)     = builder $ map (id &&& g) (rayPoints ray)
+    go ray a@(Discrete v)   = builder $ map (id &&& runActive a) (rayPoints ray)
     go ray   (Fmap _ g a)   = (map g (go ray a) ++)
     go ray   (Stitch _ a b) = case duration a of
       Forever    -> go ray a
@@ -1855,12 +1871,12 @@ foldB1 (a :| as) = maybe a (a <>) (foldBM as)
     foldBM = getOption . foldB (<>) (Option Nothing) . map (Option . Just)
 
     foldB :: (a -> a -> a) -> a -> [a] -> a
-    foldB _   z []   = z
-    foldB _   _ [x]  = x
-    foldB (&) z xs   = foldB (&) z (pair (&) xs)
+    foldB _   z []  = z
+    foldB _   _ [x] = x
+    foldB (&) z xs  = foldB (&) z (pair (&) xs)
 
-    pair _   []         = []
-    pair _   [x]        = [x]
+    pair _   []       = []
+    pair _   [x]      = [x]
     pair (&) (x:y:zs) = (x & y) : pair (&) zs
 
 ----------------------------------------------------------------------
