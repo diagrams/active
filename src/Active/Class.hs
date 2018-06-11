@@ -90,6 +90,12 @@ class Applicative act => Activated act where
   -- Get the future & past duration of an active value.
   duration  :: act a -> Pair Dur
 
+  -- BAY: I just realized I don't understand how a deep embedding is
+  -- supposed to work at all, since several of the combinators
+  -- (duration, snip, shift) don't just return an 'act a', so they
+  -- can't simply be turned into constructors in a data type.  What am
+  -- I missing?
+
   -- Snip an active into its past and its future.
   snip      :: act a -> Pair (act a)
 
