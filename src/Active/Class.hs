@@ -80,6 +80,13 @@ class Applicative act => Activated act where
   -- which always takes on the value t at time t.
   time      :: act Rational
 
+  -- BAY: I just realized this is tricky.  Do we want to provide
+  -- 'duration' as a primitive available to the user of the API?  I
+  -- think we do.  But in order for it to be efficient when using the
+  -- deep embedding, it seems to me we are back to needing to cache
+  -- the duration at each node in the tree in order to be able to
+  -- fetch the duration in O(1).
+
   -- Get the future & past duration of an active value.
   duration  :: act a -> Pair Dur
 
