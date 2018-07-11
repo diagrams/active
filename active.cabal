@@ -44,15 +44,16 @@ library
   hs-source-dirs:      src
   default-language:    Haskell2010
 
-test-suite active-doctests
-  type:                exitcode-stdio-1.0
-  main-is:             active-doctest.hs
-  build-depends:       base,
-                       directory,
-                       doctest,
+test-suite active-tests
+    type:              exitcode-stdio-1.0
+    main-is:           active-tests.hs
+    build-depends:     base >= 4.7 && < 5.0,
+                       vector >= 0.10,
                        semigroups >= 0.1 && < 0.20,
-                       vector >= 0.10 && < 0.13,
-                       linear >= 1.14 && < 1.22
-  hs-source-dirs:      test
-  default-language:    Haskell2010
-
+                       semigroupoids >= 1.2 && < 5.4,
+                       lens >= 4.0 && < 4.17,
+                       linear >= 1.14 && < 1.22,
+                       QuickCheck >= 2.9 && < 2.12
+    other-modules:     Data.Active
+    hs-source-dirs:    src, test
+    default-language:  Haskell2010
