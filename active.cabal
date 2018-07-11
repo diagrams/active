@@ -23,7 +23,7 @@ library
   build-depends:       base >= 4.0 && < 4.12,
                        vector >= 0.10,
                        semigroups >= 0.1 && < 0.19,
-                       semigroupoids >= 1.2 && < 5.3,
+                       semigroupoids >= 1.2 && < 5.4,
                        lens >= 4.0 && < 4.17,
                        linear >= 1.14 && < 1.21
   hs-source-dirs:      src
