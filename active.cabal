@@ -51,7 +51,7 @@ test-suite active-tests
                        vector >= 0.10,
                        semigroups >= 0.1 && < 0.20,
                        semigroupoids >= 1.2 && < 5.4,
-                       lens >= 4.0 && < 4.17,
+                       lens >= 4.0 && < 4.18,
                        linear >= 1.14 && < 1.22,
                        QuickCheck >= 2.9 && < 2.12
     other-modules:     Data.Active
