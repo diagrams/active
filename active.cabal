@@ -33,9 +33,9 @@ library
                        FlexibleInstances,
                        GADTSyntax,
                        KindSignatures
-  build-depends:       base >= 4.6 && < 4.13,
+  build-depends:       base >= 4.6 && < 4.14,
                        bifunctors >= 5.4 && < 5.6,
-                       semigroups >= 0.1 && < 0.19,
+                       semigroups >= 0.1 && < 0.20,
                        vector >= 0.10 && < 0.13,
                        linear >= 1.14 && < 1.21
   hs-source-dirs:      src
@@ -47,7 +47,7 @@ test-suite active-doctests
   build-depends:       base,
                        directory,
                        doctest,
-                       semigroups >= 0.1 && < 0.19,
+                       semigroups >= 0.1 && < 0.20,
                        vector >= 0.10 && < 0.13,
                        linear >= 1.14 && < 1.21
   hs-source-dirs:      test
