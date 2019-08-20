@@ -794,6 +794,18 @@ omitRay x (Ray c d k p)
 splitRay :: Rational -> Ray -> (Ray, Ray)
 splitRay x r = (cutRay (Duration x) r, omitRay x r)
 
+-- Check whether the given rational is contained in the ray
+checkRay :: Rational -> Ray -> Bool
+checkRay x (Ray c d k p) =
+    -- check sign of k.
+    --   - if k > 0  then  c <= x <= c + d
+    --   - otherwise       c + d <= x <= c
+    -- also need x == c + p + kt for some integer t.
+    --   hence compute (x - c - p) / k  and check whether it is integer.
+  ((k > 0 && c <= x && x <= c + d) || (k < 0 && c - d <= x <= c))
+  &&
+  (numerator ((x - c - p) / k) == 1)
+
 -- | Generate a list of "frames" or "samples" taken at regular
 --   intervals from an 'Active' value.  The first argument is the
 --   "frame rate", or number of samples per unit time.  That is,
@@ -816,13 +828,35 @@ splitRay x r = (cutRay (Duration x) r, omitRay x r)
 --
 --   <<diagrams/src_Active_samplesDia.svg#diagram=samplesDia&width=200>>
 
-newtype Builder a = B { unB :: [a] -> [a] }
+-- XXX describe me
+data Sticky a = S { isSticky :: Bool, getList :: [a] }
 
-builder :: [a] -> Builder a
-builder = B . (++)
+instance Semigroup a => Semigroup (Sticky a) where
+  S _ [] <> ys = ys
+  xs <> S _ [] = xs
+  S False xs <> S s ys = S s (xs ++ ys)
+  S True  xs <> S s ys = S s (xs ++<> ys)
+    where
+      []     ++<> ys     = ys
+      [x]    ++<> (y:ys) = (x <> y) : ys
+      (x:xs) ++<> ys     = x : (xs ++<> ys)
+
+instance Semigroup a => Monoid (Sticky a) where
+  mempty  = S False []
+  mappend = (<>)
+
+newtype Builder a = B { unB :: Sticky a -> Sticky a }
+
+list :: Semigroup a => [a] -> Builder a
+list = B . (<>) . S False
+
+sticky :: Semigroup a => [a] -> Builder a
+sticky = B . (<>) . S True
+
+builder :: Bool -> [a] -> Builder a
 
 runBuilder :: Builder a -> [a]
-runBuilder = ($[]) . unB
+runBuilder = getList . ($ emptySticky) . unB
 
 instance Semigroup (Builder a) where
   B b1 <> B b2 = B (b1 . b2)
@@ -833,32 +867,23 @@ instance Monoid (Builder a) where
 
 samples :: Rational -> Active a -> [a]
 samples 0 _ = error "Active.samples: Frame rate can't equal zero"
-samples f a = splice . runBuilder $ go (Ray 0 (getDuration a) (1/f) 0) a
+samples f a = runBuilder $ go False (Ray 0 (getDuration a) (1/f) 0) a
   where
     -- Have to give go an explicit type signature to enable polymorphic
     -- recursion, e.g. in Fmap case.
 
     -- Invariant: for  go ray a,  duration ray == duration a
-    go :: Ray -> Active a -> Builder (Rational, a)
-    go ray   (Prim _ g)     = builder $ map (id &&& g) (rayPoints ray)
-    go ray a@(Discrete v)   = builder $ map (id &&& runActive a) (rayPoints ray)
-    go ray   (Fmap _ g a)   = (map g (go ray a) ++)
-    go ray   (Stitch _ a b) = case duration a of
+    go :: Bool -> Ray -> Active a -> Builder a
+    go s ray   (Prim _ g)     = builder $ map g (rayPoints ray)
+    go s ray a@(Discrete v)   = builder $ map (id &&& runActive a) (rayPoints ray)
+    go s ray   (Fmap _ g a)   = (map g (go ray a) ++)
+    go s ray   (Stitch _ a b) = case duration a of
       Forever    -> go ray a
       Duration x ->
         let (ray1, ray2) = splitRay (duration a) ray
-        in  go ray1 a . go ray2 b
+        in  case checkRay (duration a) ray1 of
+              True -> go ray1 a <> go ray2 b
 
-        -- XXX above is wrong, doesn't deal with overlap!
-
-        -- idea: use Data.Sequence?  Then don't have to worry about
-        -- O(n^2) due to nesting append.  Can also initially generate
-        -- pairs of values and times, make append operator that looks
-        -- @ end & start times to determine whether the values should
-        -- be merged.
-
-        -- No, Sequence is not lazy enough.  Also has log-time concat,
-        -- but we should be able to get O(1).
 
   -- Stitch   :: Semigroup a => Dur -> Active a -> Active a -> Active a
   -- Pure     :: a -> Active a

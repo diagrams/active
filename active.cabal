@@ -33,7 +33,7 @@ library
                        FlexibleInstances,
                        GADTSyntax,
                        KindSignatures
-  build-depends:       base >= 4.6 && < 4.11,
+  build-depends:       base >= 4.6 && < 4.13,
                        semigroups >= 0.1 && < 0.19,
                        vector >= 0.10 && < 0.13,
                        linear >= 1.14 && < 1.21
