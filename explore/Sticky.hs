@@ -4,7 +4,7 @@
 {-# LANGUAGE KindSignatures #-}
 
 import           Data.Char
-import           Data.Monoid
+import           Data.Monoid (Sum (..))
 
 -- | Lists can be sticky or dry (non-sticky).  This type is isomorphic
 --   to Bool, except that in the case of sticky lists it carries along
@@ -66,7 +66,7 @@ SL Sticky xs <!> SL s ys = SL s (xs ++<> ys)  -- sticky append for sticky list +
 --   the function should be thought of as taking the remainder of a
 --   list and appending it to some initial prefix, and the very end of
 --   the ultimately produced list will never be sticky.
-newtype Glue a = G { unG :: StickyList False a -> StickyList False a }
+newtype Glue a = G { runG :: StickyList False a -> StickyList False a }
 
 -- | Create a Glue value directly from a list, given the desired stickiness.
 mkGlue :: Stickiness s a -> [a] -> Glue a
@@ -74,7 +74,7 @@ mkGlue s = G . (<!>) . SL s
 
 -- | Extract a list from a Glue value.
 runGlue :: Glue a -> [a]
-runGlue = getList . ($ emptySticky) . unG
+runGlue = getList . ($ emptySticky) . runG
 
 -- | To map a function over a Glue value, we again need to know the
 --   desired stickiness of the result (along with a Semigroup instance
@@ -92,7 +92,10 @@ runGlue = getList . ($ emptySticky) . unG
 --   mapStickyList to ignore the stickiness of the input list,
 --   i.e. not require it to be the same as the output stickiness.
 mapGlue :: Stickiness s b -> (a -> b) -> Glue a -> Glue b
-mapGlue s f = G . (<!>) . mapStickyList s f . ($ emptySticky) . unG
+mapGlue s f = G . (<!>) . mapStickyList s f . ($ emptySticky) . runG
+
+apGlue :: Stickiness s b -> Glue (a -> b) -> Glue a -> Glue b
+apGlue s f x = mkGlue s $ zipWith ($) (runGlue f) (runGlue x)
 
 -- | Glue values form a semigroup under function composition.
 instance Semigroup (Glue a) where
@@ -124,6 +127,8 @@ data Expr a where
   -- well have a single constructor with an additional (Stickiness s
   -- a) field.
 
+  Ap   :: Expr (a -> b) -> Expr a -> Expr b
+
 interp :: Expr a -> [a]
 interp = runGlue . go Dry
   where
@@ -132,6 +137,7 @@ interp = runGlue . go Dry
     go s (Fmap f e)   = mapGlue s f (go Dry e)
     go s (App e1 e2)  = go Dry    e1 <> go s e2
     go s (Glue e1 e2) = go Sticky e1 <> go s e2
+    go s (Ap f x)     = apGlue s (go Dry f) (go Dry x)
 
 example :: [Int]
 example = map getSum . interp $ e

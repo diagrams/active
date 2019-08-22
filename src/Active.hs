@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds           #-}
 {-# LANGUAGE DeriveFunctor       #-}
 {-# LANGUAGE FlexibleInstances   #-}
 {-# LANGUAGE GADTs               #-}
@@ -148,10 +149,10 @@ import           Control.Arrow       ((&&&))
 import           Data.Bifunctor      (second)
 import           Data.List.NonEmpty  (NonEmpty (..))
 import           Data.Maybe          (fromJust, fromMaybe)
+import           Data.Ratio
 import           Data.Semigroup
 import qualified Data.Vector         as V
 import           Linear.Vector
-
 
 import           Active.Duration
 
@@ -214,7 +215,6 @@ data Active :: * -> * where
   Discrete :: V.Vector a -> Active a
   Fmap     :: Dur -> (a -> b) -> Active a -> Active b
   Stitch   :: Semigroup a => Dur -> Active a -> Active a -> Active a
-  Pure     :: a -> Active a
   Ap       :: Dur -> Active (a -> b) -> Active a -> Active b
   Par      :: Semigroup a => Dur -> Active a -> Active a -> Active a
   Rev      :: Active a -> Active a
@@ -253,7 +253,6 @@ getDuration (Prim d _)      = d
 getDuration (Discrete _)    = 1
 getDuration (Fmap d _ _)    = d
 getDuration (Stitch d _ _)  = d
-getDuration (Pure _)        = Forever
 getDuration (Ap d _ _)      = d
 getDuration (Par d _ _)     = d
 getDuration (Rev a)         = getDuration a
@@ -639,7 +638,6 @@ runActive a t
         | t <  d1   -> go a1 t
         | t == d1   -> go a1 t <> go a2 0
         | otherwise -> go a2 (t - d1)
-    go (Pure a) _   = a
     go (Ap _ af ax)  t = go af t (go ax t)
     go (Par _ a1 a2) t =
       let t' = Duration t in
@@ -794,17 +792,139 @@ omitRay x (Ray c d k p)
 splitRay :: Rational -> Ray -> (Ray, Ray)
 splitRay x r = (cutRay (Duration x) r, omitRay x r)
 
+-- Assume d is Finite.
+reverseRay :: Ray -> Ray
+reverseRay (Ray c (Duration d) k p) = Ray (c + d * signum k) (Duration d) (-k) p'
+  where
+    p' = abs (d - p) `rmod` abs k
+
+stretchRay :: Rational -> Ray -> Ray
+stretchRay r (Ray c d k p) = Ray c ((/r) <$> d) (k/r) (p/r)
+
 -- Check whether the given rational is contained in the ray
-checkRay :: Rational -> Ray -> Bool
-checkRay x (Ray c d k p) =
+onRay :: Rational -> Ray -> Bool
+onRay x (Ray c d k p) =
     -- check sign of k.
     --   - if k > 0  then  c <= x <= c + d
-    --   - otherwise       c + d <= x <= c
+    --   - otherwise       c - d <= x <= c
     -- also need x == c + p + kt for some integer t.
     --   hence compute (x - c - p) / k  and check whether it is integer.
-  ((k > 0 && c <= x && x <= c + d) || (k < 0 && c - d <= x <= c))
-  &&
-  (numerator ((x - c - p) / k) == 1)
+  upperBound && lowerBound && (numerator ((x - c - p) / k) == 1)
+  where
+    upperBound = case d of
+      Duration d'
+        | k > 0 -> x <= c + d'
+        | k < 0 -> c - d' <= x
+      Forever     -> True
+    lowerBound
+      | k > 0 = c <= x
+      | k < 0 = x <= c
+
+-- | Lists can be sticky or dry (non-sticky).  This type is isomorphic
+--   to Bool, except that in the case of sticky lists it carries along
+--   an appropriate Semigroup instance to carry out the necessary
+--   sticking; that is, pattern-matching on the Sticky constructor
+--   will bring a Semigroup instance into scope.  It is also indexed
+--   by Bool to be able to link it appropriately to actual lists.
+data Stickiness :: Bool -> * -> * where
+  Sticky :: Semigroup a => Stickiness True a
+  Dry    :: Stickiness False a
+
+-- | A (possibly) sticky list carries Stickiness evidence and a list of
+--   values.
+data StickyList :: Bool -> * -> * where
+  SL :: Stickiness s a -> [a] -> StickyList s a
+
+-- | Extract the list content of a StickyList.
+getList :: StickyList s a -> [a]
+getList (SL _ as) = as
+
+-- | The empty StickyList (identity element for <!>).
+emptySticky :: StickyList False a
+emptySticky = SL Dry []
+
+-- | We can map over a sticky list, but we need to know whether the
+--   result should be sticky (and provide a suitable Semigroup
+--   instance for b if it should be).  Note for technical reasons (see
+--   the comment at 'mapGlue') it's convenient to simply discard the
+--   stickiness of the input list, even though one might expect it to
+--   have the same stickiness as the output.
+mapStickyList :: Stickiness s b -> (a -> b) -> StickyList t a -> StickyList s b
+mapStickyList Dry    f (SL _ as) = SL Dry    (map f as)
+mapStickyList Sticky f (SL _ bs) = SL Sticky (map f bs)
+
+-- | Note we can't actually make 'StickyList' a 'Monoid' instance
+--   because we want to combine sticky and non-sticky lists, which
+--   have different types.  Fortunately we don't actually need a
+--   'Monoid' instance, we can just use this operator.
+--
+--   Notice how in the SL Sticky xs case, pattern-matching on Sticky
+--   brings a Semigroup a instance into scope, which is needed to call
+--   (++<>).
+(<!>) :: StickyList s a -> StickyList t a -> StickyList t a
+SL _      [] <!> ys      = ys
+SL Dry    xs <!> SL s ys = SL s (xs ++ ys)    -- normal append for dry list + list
+SL Sticky xs <!> SL s ys = SL s (xs ++<> ys)  -- sticky append for sticky list + list
+
+-- | Sticky append.  Like normal append, but combines the last element
+--   of the first list with the first element of the second.
+(++<>) :: Semigroup a => [a] -> [a] -> [a]
+[]     ++<> ys     = ys
+[x]    ++<> (y:ys) = (x <> y) : ys
+(x:xs) ++<> ys     = x : (xs ++<> ys)
+
+-- | The Cayley representation for StickyList, i.e. the usual trick
+--   for optimizing nested appends by turning them into function
+--   composition which naturally reassociates all the append
+--   operations to the right. Note it takes Dry things, not Sticky:
+--   the function should be thought of as taking the remainder of a
+--   list and appending it to some initial prefix, and the very end of
+--   the ultimately produced list will never be sticky.
+newtype Glue a = G { unG :: StickyList False a -> StickyList False a }
+
+-- | Create a Glue value directly from a list, given the desired stickiness.
+mkGlue :: Stickiness s a -> [a] -> Glue a
+mkGlue s = G . (<!>) . SL s
+
+-- | Extract a list from a Glue value.
+runGlue :: Glue a -> [a]
+runGlue = getList . ($ emptySticky) . unG
+
+-- | To map a function over a Glue value, we again need to know the
+--   desired stickiness of the result (along with a Semigroup instance
+--   as appropriate).  Notice that Glue itself is not a Functor,
+--   because the type parameter occurs both positively and negatively.
+--   To implement 'mapGlue', we convert to a normal Sticky list by
+--   applying to the empty list, then calling 'mapStickyList', then
+--   converting back to a 'Glue' value.  This incurs the linear cost
+--   of actually constructing the entire list --- but a call to map
+--   would incur a cost proportional to this anyway.
+--
+--   Notice that the function embedded in the Glue a value will always
+--   result in a non-sticky list, regardless of what the ultimate
+--   stickiness of the result is supposed to be.  This is why we need
+--   mapStickyList to ignore the stickiness of the input list,
+--   i.e. not require it to be the same as the output stickiness.
+mapGlue :: Stickiness s b -> (a -> b) -> Glue a -> Glue b
+mapGlue s f = G . (<!>) . mapStickyList s f . ($ emptySticky) . unG
+
+apGlue :: Stickiness s b -> Glue (a -> b) -> Glue a -> Glue b
+apGlue s f x = mkGlue s $ zipWith ($) (runGlue f) (runGlue x)
+
+parGlue :: Semigroup a => Stickiness s a -> Glue a -> Glue a -> Glue a
+parGlue s a b = mkGlue s $ zipext (<>) (runGlue a) (runGlue b)
+  where
+    zipext _ [] bs         = bs
+    zipext _ as []         = as
+    zipext f (a:as) (b:bs) = f a b : zipext f as bs
+
+-- | Glue values form a semigroup under function composition.
+instance Semigroup (Glue a) where
+  G s1 <> G s2 = G (s1 . s2)
+
+instance Monoid (Glue a) where
+  mempty = G id
+  mappend = (<>)
 
 -- | Generate a list of "frames" or "samples" taken at regular
 --   intervals from an 'Active' value.  The first argument is the
@@ -827,83 +947,36 @@ checkRay x (Ray c d k p) =
 --   on the endpoint:
 --
 --   <<diagrams/src_Active_samplesDia.svg#diagram=samplesDia&width=200>>
-
--- XXX describe me
-data Sticky a = S { isSticky :: Bool, getList :: [a] }
-
-instance Semigroup a => Semigroup (Sticky a) where
-  S _ [] <> ys = ys
-  xs <> S _ [] = xs
-  S False xs <> S s ys = S s (xs ++ ys)
-  S True  xs <> S s ys = S s (xs ++<> ys)
-    where
-      []     ++<> ys     = ys
-      [x]    ++<> (y:ys) = (x <> y) : ys
-      (x:xs) ++<> ys     = x : (xs ++<> ys)
-
-instance Semigroup a => Monoid (Sticky a) where
-  mempty  = S False []
-  mappend = (<>)
-
-newtype Builder a = B { unB :: Sticky a -> Sticky a }
-
-list :: Semigroup a => [a] -> Builder a
-list = B . (<>) . S False
-
-sticky :: Semigroup a => [a] -> Builder a
-sticky = B . (<>) . S True
-
-builder :: Bool -> [a] -> Builder a
-
-runBuilder :: Builder a -> [a]
-runBuilder = getList . ($ emptySticky) . unB
-
-instance Semigroup (Builder a) where
-  B b1 <> B b2 = B (b1 . b2)
-
-instance Monoid (Builder a) where
-  mempty  = B id
-  mappend = (<>)
-
 samples :: Rational -> Active a -> [a]
 samples 0 _ = error "Active.samples: Frame rate can't equal zero"
-samples f a = runBuilder $ go False (Ray 0 (getDuration a) (1/f) 0) a
+samples f a = runGlue $ go Dry (Ray 0 (getDuration a) (1/f) 0) a
   where
     -- Have to give go an explicit type signature to enable polymorphic
     -- recursion, e.g. in Fmap case.
 
-    -- Invariant: for  go ray a,  duration ray == duration a
-    go :: Bool -> Ray -> Active a -> Builder a
-    go s ray   (Prim _ g)     = builder $ map g (rayPoints ray)
-    go s ray a@(Discrete v)   = builder $ map (id &&& runActive a) (rayPoints ray)
-    go s ray   (Fmap _ g a)   = (map g (go ray a) ++)
-    go s ray   (Stitch _ a b) = case duration a of
-      Forever    -> go ray a
+    -- Invariant: for  go s ray a,  duration ray == duration a
+    go :: Stickiness s a -> Ray -> Active a -> Glue a
+    go s ray   (Prim _ g)     = mkGlue s $ map g (rayPoints ray)
+    go s ray a@(Discrete v)   = mkGlue s $ map (runActive a) (rayPoints ray)
+    go s ray   (Fmap _ g a)   = mapGlue s g (go Dry ray a)
+    go s ray   (Stitch _ a b) = case getDuration a of
+      Forever    -> go s ray a
       Duration x ->
-        let (ray1, ray2) = splitRay (duration a) ray
-        in  case checkRay (duration a) ray1 of
-              True -> go ray1 a <> go ray2 b
-
-
-  -- Stitch   :: Semigroup a => Dur -> Active a -> Active a -> Active a
-  -- Pure     :: a -> Active a
-  -- Ap       :: Dur -> Active (a -> b) -> Active a -> Active b
-  -- Par      :: Semigroup a => Dur -> Active a -> Active a -> Active a
-  -- Rev      :: Active a -> Active a
-  -- Stretch  :: Dur -> Rational -> Active a -> Active a
-  -- Cut      :: Dur -> Active a -> Active a
-  -- Omit     :: Dur -> Rational -> Active a -> Active a
-
--- samples fr (Active (Duration d) f) = map f . takeWhile (<= d) . map (/fr) $ [0 ..]
-
---   -- We'd like to just say (map f [0, 1/n .. d]) above but that
---   -- doesn't work, because of the weird semantics of Enum: the last
---   -- element of the list might actually be a bit bigger than d.  For
---   -- example, if we replace the above definition with (map f [0, 1/n
---   -- .. d]), then samples 1 (lasting 2.9 ()) = [(),(),(),()], whereas
---   -- it should have a length of 3.
-
--- samples fr (Active Forever      f) = map (f . (/fr)) $ [0 ..]
+        let (ray1, ray2) = splitRay x ray
+        in  case onRay x ray1 of
+              True  -> go Sticky ray1 a <> go s ray2 b
+              False -> go Dry    ray1 a <> go s ray2 b
+    go s ray   (Ap _ f x)     = apGlue s (go Dry ray' f) (go Dry ray' x)
+      where
+        ray' = cutRay (min (getDuration f) (getDuration x)) ray
+    go s ray   (Par _ a b)    = parGlue s (go Dry rayA a) (go Dry rayB b)
+      where
+        rayA = cutRay (getDuration a) ray
+        rayB = cutRay (getDuration b) ray
+    go s ray   (Rev a)        = go s (reverseRay ray) a
+    go s ray   (Stretch _ k a) = go s (stretchRay k ray) a
+    go s ray   (Cut d a)      = go s (cutRay d ray) a
+    go s ray   (Omit _ o a)   = go s (omitRay o ray) a
 
 -- > samplesDia = illustrateActive' (1/2) [(1,CC),(2,CC)] (lasting 3 2)
 
@@ -1565,7 +1638,7 @@ always = pure
 --   * @f '<*>' x@ applies @f@ to @x@ pointwise, taking the minimum
 --     duration of @f@ and @x@.
 instance Applicative Active where
-  pure    = Pure
+  pure    = Prim Forever . const
   f <*> x = Ap (getDuration f `min` getDuration x) f x
 
 
