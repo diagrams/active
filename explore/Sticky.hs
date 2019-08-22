@@ -85,6 +85,12 @@ runGlue = getList . ($ emptySticky) . unG
 --   converting back to a 'Glue' value.  This incurs the linear cost
 --   of actually constructing the entire list --- but a call to map
 --   would incur a cost proportional to this anyway.
+--
+--   Notice that the function embedded in the Glue a value will always
+--   result in a non-sticky list, regardless of what the ultimate
+--   stickiness of the result is supposed to be.  This is why we need
+--   mapStickyList to ignore the stickiness of the input list,
+--   i.e. not require it to be the same as the output stickiness.
 mapGlue :: Stickiness s b -> (a -> b) -> Glue a -> Glue b
 mapGlue s f = G . (<!>) . mapStickyList s f . ($ emptySticky) . unG
 
