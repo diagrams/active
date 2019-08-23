@@ -44,11 +44,11 @@ randomQ seed = memo f
       | a < b     = left  . subtree $ getGen a (b - a)
       | otherwise = right . subtree $ getGen (a - b) b
 
-instance HasTrie a => HasTrie (Ratio a) where
-  newtype (:->:) (Ratio a) b = R ((a,a) :->: b)
-  trie f = R (trie _)
-  untrie (R t) = untrie t . _
-  enumerate t = _
+-- instance HasTrie a => HasTrie (Ratio a) where
+--   newtype (:->:) (Ratio a) b = R ((a,a) :->: b)
+--   trie f = R (trie _)
+--   untrie (R t) = untrie t . _
+--   enumerate t = _
 
 ------------------------------------------------------------
 -- Notes on randomness API
