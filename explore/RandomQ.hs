@@ -4,6 +4,9 @@ import           Data.Word
 import           System.Random.TF.Gen
 import           System.Random.TF.Init
 
+-- Would it be faster/easier to just run each rational through some
+-- hash function?
+
 rand :: RandomGen g => g -> Word32
 rand = fst . next
 
