@@ -31,6 +31,7 @@ semantics/diagrams/*
 semantics/FARM/diagrams/*
 .diagrams-cache
 .stack-work
+stack.yaml.lock
 .shake
 
 example/Animation
