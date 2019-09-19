@@ -27,7 +27,6 @@ source-repository head
   location: https://github.com/diagrams/active.git
 
 library
-<<<<<<< HEAD
   exposed-modules:     Data.Active
   build-depends:       base >= 4.7 && < 5.0,
                        bifunctors >= 5.4 && < 5.6,
