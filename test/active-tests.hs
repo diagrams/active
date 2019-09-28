@@ -25,8 +25,6 @@ main = do
   results <- mapM (\(s,t) -> printf "%-40s" s >> t) tests
   unless (all isSuccess results) exitFailure
   where
-    isSuccess (Success{}) = True
-    isSuccess _           = False
     qc x = quickCheckWithResult (stdArgs { maxSuccess = 200 }) x
     tests = [ ("era/start",                   qc prop_era_start          )
             , ("era/end",                     qc prop_era_end            )
