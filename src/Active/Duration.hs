@@ -16,7 +16,7 @@
 module Active.Duration
   ( -- * Duration
 
-    Duration(..)
+    Duration(..), Dur
 
     -- * Conversion
 
@@ -52,6 +52,10 @@ data Duration :: * -> * where
 
   deriving (Show, Eq, Ord, Functor)
 
+-- | @Duration Rational@ is common enough that it's worth giving it a
+--   short type synonym for convenience.
+type Dur = Duration Rational
+
 instance Applicative Duration where
   pure = Duration
   Forever <*> _ = Forever
@@ -73,8 +77,8 @@ instance Num n => Num (Duration n) where
   _           + Forever     = Forever
   Duration d1 + Duration d2 = Duration (d1 + d2)
 
-  abs Forever               = Forever
-  abs (Duration n)          = Duration (abs n)
+  abs Forever      = Forever
+  abs (Duration n) = Duration (abs n)
 
   (*)                       = error "Multiplying durations makes no sense. Use (*^) to scale by a constant."
   negate                    = error "Negating durations makes no sense."
@@ -98,7 +102,7 @@ fromDuration (Duration n) = Just n
 --   duration is infinite, the result is also infinite.  If the second
 --   duration is longer than the first, the result is zero.
 subDuration :: (Num n, Ord n) => Duration n -> Duration n -> Duration n
-subDuration Forever      _                      = Forever
+subDuration Forever      _            = Forever
 subDuration (Duration a) (Duration b) | b <= a  = Duration (a - b)
-subDuration _ _                                 = Duration 0
+subDuration _ _                       = Duration 0
 
