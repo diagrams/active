@@ -29,3 +29,6 @@ ActiveDiagrams
 semantics/diagrams/*
 semantics/FARM/diagrams/*
 .diagrams-cache
+
+stack.yaml.lock
+.stack-work
