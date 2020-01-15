@@ -11,9 +11,9 @@ packages:
 # Packages to be pulled from upstream that are not in the resolver (e.g., acme-missiles-0.3)
 extra-deps:
 - git: git@github.com:diagrams/diagrams-lib.git
-  commit: 523413618bb628b91b53c001a49dd458db32cd5b
+  commit: d3afa2f41bfb416be5713c033e3cd5a6eecd724a
 - git: git@github.com:diagrams/diagrams-rasterific.git
-  commit: d300529c6ddf419b8ebb0b97445a27be4698ae04
+  commit: 51ebbff6873ecf021d7fac7a878cd05d45691520
 
 # Override default flag values for local packages and extra-deps
 flags: {}
