@@ -27,7 +27,7 @@ anim = atop
 
 anim2 :: Animation B V2 Double
 anim2 = atop
-  <$> (rotateBy <$> cut 3 sin' <*> pure (triangle 3))
+  <$> (rotateBy <$> (cut 3 sin' / 8) <*> pure (triangle 3))
   <*> pure (square 10 # fc white)
 
 main = animMain (anim ->> anim2)
