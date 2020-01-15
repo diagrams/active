@@ -16,7 +16,7 @@
 module Active.Duration
   ( -- * Duration
 
-    Duration(..)
+    Duration(..), isForever
 
     -- * Conversion
 
@@ -82,6 +82,10 @@ instance Num n => Num (Duration n) where
 
 instance Additive Duration where
   zero = Duration 0
+
+isForever :: Duration n -> Bool
+isForever Forever = True
+isForever _       = False
 
 -- | A wrapper function to convert a numeric value into a finite duration.
 toDuration :: n -> Duration n
