@@ -9,7 +9,7 @@
 
 %% diagrams-latex.sty
 %% Copyright (c) 2011-2012, Ryan Yates
-%% 
+%%
 %% Large portions copied from dot2texi.sty
 %%
 %% Copyright (c) 2007-2008, Kjell Magne Fauske
@@ -60,6 +60,8 @@
 \RequirePackage{xkeyval}[2005/02/22]
 \RequirePackage{ifthen}
 
+\RequirePackage{graphics}
+
 \newif\ifdtt@ShellEscape
 %\newif\ifmiktex \miktexfalse
 \newif\ifdtt@ForceShellEscape \dtt@ForceShellEscapefalse
@@ -72,9 +74,9 @@
 \DeclareOptionX{miktex}{} % dummy (for backwards compatability)
 
 % Options for setting output size
-\DeclareOptionX{width}[]{\def\dtt@width{-w #1}}
+\DeclareOptionX{width}[]{\Gin@defaultbp\foo{#1}\def\dtt@width{-w \foo}}
 \def\dtt@width{} % default output width
-\DeclareOptionX{height}[]{\def\dtt@height{-h #1}}
+\DeclareOptionX{height}[]{\Gin@defaultbp\foo{#1}\def\dtt@height{-h \foo}}
 \def\dtt@height{} % default output height
 
 % Option for setting an output directory
@@ -91,6 +93,13 @@
 \newif\ifdtt@input \dtt@inputfalse
 \DeclareOptionX{input}{\dtt@inputtrue}
 \DeclareOptionX{noinput}{\dtt@inputfalse}
+
+\DeclareOptionX{cmdprefix}[]{\def\dtt@cmdprefix{#1 }}
+\def\dtt@cmdprefix{} % default command prefix
+
+\newif\ifdtt@beamer \dtt@beamerfalse
+\DeclareOptionX{beamer}{\dtt@beamertrue}
+\DeclareOptionX{nobeamer}{\dtt@beamerfalse}
 
 \ExecuteOptionsX{shell}
 
@@ -159,10 +168,12 @@
 
 % Options
 \define@key{dtt}{width}[]{%
-    \def\dtt@width{-w #1}
+    \Gin@defaultbp\foo{#1}
+    \def\dtt@width{-w \foo}
 }
 \define@key{dtt}{height}[]{%
-    \def\dtt@height{-h #1}
+    \Gin@defaultbp\foo{#1}
+    \def\dtt@height{-h \foo}
 }
 
 \define@key{dtt}{outputdir}[]{%
@@ -227,14 +238,18 @@
       \immediate\write18{mkdir -p \dtt@outputdir}
     \fi
     \xdef\diagramslatexCutFile{\dtt@figname.hs}
-    \diagramslatexverbatimwrite{\diagramslatexCutFile}}
-    {\enddiagramslatexverbatimwrite%
+    \diagramslatexverbatimwrite{\diagramslatexCutFile}
+    }
+    {\ifdtt@beamer\ifdefined\beamer@slideinframe
+    \immediate\write\verbatim@out{overlay = \number\beamer@slideinframe\space :: Int}
+    \fi\fi
+    \enddiagramslatexverbatimwrite%
     \diagramslatexgraphicsinclude}
 
 \long\gdef\diagramslatexgraphicsprocess{%
     \ifdtt@ShellEscape
         \IfFileExists{\dtt@figname.hs}{%
-            \immediate\write18{diagrams-builder-\dtt@backend\space -o \dtt@figname.\dtt@extension\space
+            \immediate\write18{\dtt@cmdprefix diagrams-builder-\dtt@backend\space -o \dtt@figname.\dtt@extension\space
                 \dtt@width\space
                 \dtt@height\space
                 \dtt@figname.hs\space }%
