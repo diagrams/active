@@ -41,3 +41,5 @@ stack.yaml.lock
 
 example/Animation
 example/out/*
+
+*.gif
