@@ -78,7 +78,7 @@ onRay x (Ray c d k p) =
     --   - otherwise       c - d <= x <= c
     -- also need x == c + p + kt for some integer t.
     --   hence compute (x - c - p) / k  and check whether it is integer.
-  upperBound && lowerBound && (numerator ((x - c - p) / k) == 1)
+  upperBound && lowerBound && (denominator ((x - c - p) / k) == 1)
   where
     upperBound = case d of
       Duration d'
