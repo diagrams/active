@@ -54,8 +54,12 @@ omitRay x (Ray c d k p)
       -- The actual offset is in a direction determined by the sign of
       -- k.
 
+-- XXX
+offsetRay :: Rational -> Ray -> Ray
+offsetRay x (Ray c d k p) = Ray (c + x) d k p
+
 splitRay :: Rational -> Ray -> (Ray, Ray)
-splitRay x r = (cutRay (Duration x) r, omitRay x r)
+splitRay x r = (cutRay (Duration x) r, offsetRay (-x) (omitRay x r))
 
 -- Assume d is Finite.
 reverseRay :: Ray -> Ray
