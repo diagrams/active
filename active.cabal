@@ -29,6 +29,7 @@ source-repository head
 library
   exposed-modules:     Active,
                        Active.Duration
+  other-modules:       Active.Ray
   other-extensions:    FlexibleContexts,
                        FlexibleInstances,
                        GADTSyntax,
