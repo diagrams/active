@@ -1,0 +1,49 @@
+# Rough draft
+
+Motivation:
+
+What is the problem space?
+What is the algebraic structure through examples.
+
+This is not real-time interactive rendering. These animations take time to
+render, and it's not the focus.
+
+We don't want to do mapping on time.
+
+horizontal composition, sequencing, and overlap on endpoints with an arbitrary
+semigroup.
+two kinds of parallel composition. neither is more fundamental.
+
+
+One is the applicative instance, which motivates why we want to do infinite
+things.
+
+Pure creates infinite things. Clock example is a good practical motivation.
+
+This is good but we have terrible quadratic performance.
+Now we switch to using a deep embedding.
+How to do linear time sampling using affine rays.
+The glue monoid.
+
+QR code idea ought to go in.
+
+
+## NOT in the paper:
+* Monoidal annotations. Pause points, page numbers, named anchor points.
+The story isn't quite finished here, becuase there needs to be something
+affine. A semiring and an action? There's a story there, but that's another
+paper.
+
+* Randomness
+
+
+# Related work
+
+* Work by Pieter and Tom
+* Reanimate library. Only for animations, not polymorphic. Has an incredible
+  number of integrations with blender and many other animations frameworks.
+  https://reanimate.readthedocs.io/en/latest/glue_tut/
+
+
+
+
