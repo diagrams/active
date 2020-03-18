@@ -2,10 +2,9 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE TypeFamilies              #-}
 
-import           Diagrams.Backend.Rasterific.CmdLine
-import           Diagrams.Prelude
-
--- ffmpeg -i frame%03d.png -vcodec mpeg4 out.mov
+import Diagrams.Backend.Rasterific.CmdLine
+import Diagrams.Prelude
+import Diagrams.Coordinates
 
 colors :: Active (Colour Double)
 colors = discrete [yellow, blue, red, green, purple] # stretch 3
