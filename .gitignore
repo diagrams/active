@@ -39,6 +39,8 @@ semantics/FARM/diagrams/*
 stack.yaml.lock
 .shake
 
+paper/haskell2020/diagrams/*
+
 example/Animation
 example/out/*
 
