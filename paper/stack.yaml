@@ -1,16 +1,25 @@
-resolver: lts-9.21
+resolver: lts-14.20
 packages: []
 
 extra-deps:
-- diagrams-pgf-1.4
-- texrunner-0.0.1.1
-- palette-0.1.0.5
-- diagrams-core-1.4.0.1
-- diagrams-lib-1.4.2
-- diagrams-contrib-1.4.1
-- shake-0.16
-- diagrams-builder-0.8.0.2
-- lhs2tex-1.20
+- ..
+- git: git@github.com:diagrams/diagrams-lib.git
+  commit: d3afa2f41bfb416be5713c033e3cd5a6eecd724a
+- git: git@github.com:diagrams/diagrams-rasterific.git
+  commit: 51ebbff6873ecf021d7fac7a878cd05d45691520
+
+- diagrams-builder-0.8.0.5
+- diagrams-pgf-1.4.1.1
+- texrunner-0.0.1.2
+- haskell-src-exts-1.22.0
+- haskell-src-exts-simple-1.22.0.0
+
+# - diagrams-pgf-1.4
+# - palette-0.1.0.5
+# - diagrams-core-1.4.0.1
+# - diagrams-contrib-1.4.1
+# - shake-0.16
+# - lhs2tex-1.20
 # - SVGFonts-1.6.0.3
 
 flags:

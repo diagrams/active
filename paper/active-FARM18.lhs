@@ -301,6 +301,10 @@ Modelling, and Design}{September 29, 2018}{St.\ Louis, MO, USA}
 \todo{Upload new version of \activelib to Hackage.}
 \todo{Mention \activelib is on Hackage, with link.}
 
+\begin{diagram}[width=100]
+  dia = circle 1 # fc green
+\end{diagram}
+
 \section{The |Active| type}
 
 The core of the library is the |Active| type.  A value of type |Active
