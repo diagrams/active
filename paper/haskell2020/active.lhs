@@ -291,6 +291,9 @@ Modelling, and Design}{September 29, 2018}{St.\ Louis, MO, USA}
   (b) a GIF that gets uploaded somewhere, with (c) a QR code linking
   to it!}
 
+\clearpage
+\appendix
+
 \section{Introduction}
 
 \todo{Introduce with some cool examples!}
