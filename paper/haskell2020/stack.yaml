@@ -2,7 +2,7 @@ resolver: lts-14.20
 packages: []
 
 extra-deps:
-- ..
+- ../..
 - git: git@github.com:diagrams/diagrams-lib.git
   commit: d3afa2f41bfb416be5713c033e3cd5a6eecd724a
 - git: git@github.com:diagrams/diagrams-rasterific.git
