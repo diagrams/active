@@ -9,7 +9,7 @@ bibtex   = "bibtex"
 main :: IO ()
 main = shake shakeOptions $ do
 
-    want ["active-FARM18.pdf"]
+    want ["active.pdf"]
 
     "*.tex" %> \output -> do
         let input = replaceExtension output "lhs"
