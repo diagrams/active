@@ -1180,7 +1180,7 @@ x -<>- y = x ->> ((end x <>) <$> y)  -- XXX make into a primitive??
 newtype Accumulating a = Accumulating { getAccumulating :: Active a }
 
 instance Semigroup a => Semigroup (Accumulating a) where
-  Accumulating a1 <> Accumulating a2 = Accumulating (a1 ->- a2)
+  Accumulating a1 <> Accumulating a2 = Accumulating (a1 -<>- a2)
 
 instance (Monoid a, Semigroup a) => Monoid (Accumulating a) where
   mempty  = Accumulating (instant mempty)
