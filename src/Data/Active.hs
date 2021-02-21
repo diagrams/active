@@ -178,11 +178,6 @@ toTime = Time
 fromTime :: Time n -> n
 fromTime = unTime
 
-instance Affine Time where
-  type Diff Time = Duration
-  (Time t1) .-. (Time t2) = Duration (t1 - t2)
-  (Time t) .+^ (Duration d) = Time (t + d)
-
 -- instance Deadline Time a where
 --   -- choose tm deadline (if before / at deadline) (if after deadline)
 --   choose t1 t2 a b = if t1 <= t2 then a else b
@@ -217,6 +212,13 @@ instance Num n => Semigroup (Duration n) where
 instance Num n => Monoid (Duration n) where
   mappend = (<>)
   mempty  = 0
+
+instance Affine Time where
+  -- It is important that this deffinition comes *after*
+  -- the 'Additive' instance of 'Duration' to build with GHC-9.0
+  type Diff Time = Duration
+  (Time t1) .-. (Time t2) = Duration (t1 - t2)
+  (Time t) .+^ (Duration d) = Time (t + d)
 
 -- | An @Era@ is a concrete span of time, that is, a pair of times
 --   representing the start and end of the era. @Era@s form a
