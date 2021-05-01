@@ -96,7 +96,7 @@ module Active
 
     -- * Running/sampling actives
 
-  , runActive, runActiveMay, runActiveOpt
+  , runActive, runActiveMay
   , duration, durationF, isFinite
   , start, end, endMay, samples
 
@@ -668,13 +668,6 @@ runActiveMay a t
   | otherwise = case compare (Duration t) (getDuration a) of
       GT -> Nothing
       _  -> Just (runActive a t)
-
--- | Like 'runActiveMay', but return an 'Option' instead of 'Maybe'.
---   Sometimes this is more convenient since the 'Monoid' instance for
---   'Option' only requires a 'Semigroup' constraint on its type
---   argument.
-runActiveOpt :: Active a -> (Rational -> Option a)
-runActiveOpt a = Option . runActiveMay a
 
 -- | Test whether an @Active@ is finite.
 isFinite :: Active a -> Bool
@@ -1293,7 +1286,7 @@ x `parU` y = Par (getDuration x `max` getDuration y) x y
 
 -- a1@(Active d1 _) `parU` a2@(Active d2 _)
 --   = Active (d1 `max` d2)
---            (\t -> fromJust . getOption $ runActiveOpt a1 t <> runActiveOpt a2 t)
+--            (\t -> fromJust $ runActiveMay a1 t <> runActiveMay a2 t)
                   -- fromJust is safe since the (Nothing, Nothing) case
                   -- can't happen: at least one of a1 or a2 will be defined everywhere
                   -- on the interval between 0 and the maximum of their durations.
@@ -1387,9 +1380,9 @@ stack (a:as) = stackNE (a :| as)
 --   If you want to use 'stackAt' on actives with an underlying type
 --   that is a 'Semigroup' but not a 'Monoid', you have a few options:
 --
---   * You can explicitly wrap your underlying values in 'Option',
---     which will turn a 'Semigroup' into a 'Monoid' and use @Option
---     Nothing@ as the default, identity value.
+--   * You can explicitly wrap your underlying values in 'Maybe', which will
+--   turn a 'Semigroup' into a 'Monoid' and use @Nothing@ as the default,
+--   identity value.
 --
 --   * You can use the provided 'stackAtDef' function instead, which
 --     uses a given default value in place of 'mempty'.
@@ -1429,7 +1422,7 @@ stackAt ps = stack . map (uncurry delay) $ ps
 
 stackAtDef :: Semigroup a => a -> [(Rational, Active a)] -> Active a
 stackAtDef a as
-  = option a id <$> stackAt ((map . second) (fmap (Option . Just)) as)
+  = maybe a id <$> stackAt ((map . second) (fmap Just) as)
 
 -- > stackAtDefDia = drawChain
 -- >   [ illustrateActives args
@@ -1882,7 +1875,7 @@ foldB1 :: Semigroup a => NonEmpty a -> a
 foldB1 (a :| as) = maybe a (a <>) (foldBM as)
   where
     foldBM :: Semigroup a => [a] -> Maybe a
-    foldBM = getOption . foldB (<>) (Option Nothing) . map (Option . Just)
+    foldBM = foldB (<>) Nothing . map Just
 
     foldB :: (a -> a -> a) -> a -> [a] -> a
     foldB _   z []  = z
