@@ -1,5 +1,5 @@
 name:                active
-version:             0.4
+version:             0.3
 synopsis:            An EDSL for time-varying values.
 description:         active is a small EDSL for building continuous,
                      time-varying values
