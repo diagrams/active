@@ -1,17 +1,16 @@
-import           Control.Exception (bracket)
-import           System.Directory
-import           Test.DocTest
+module Main where
+
+import Build_doctests (flags, pkgs, module_sources)
+import Data.Foldable (traverse_)
+import System.Environment (unsetEnv)
+import Test.DocTest (doctest)
 
 main :: IO ()
-main = withCurrentDir "src" $ doctest ["Active.hs"]
-
--- Copy 'withCurrentDirectory' implementation here from the directory
--- package, so it will still work with pre-1.2.3.0 versions of the
--- package
-withCurrentDir :: FilePath  -- ^ Directory to execute in
-               -> IO a      -- ^ Action to be executed
-               -> IO a
-withCurrentDir dir action =
-  bracket getCurrentDirectory setCurrentDirectory $ \ _ -> do
-    setCurrentDirectory dir
-    action
+main = do
+    traverse_ putStrLn args
+    -- This variable is set automatically by Stack, and read by GHC when
+    -- executed by doctest; we don't want that.
+    unsetEnv "GHC_ENVIRONMENT"
+    doctest args
+  where
+    args = flags ++ pkgs ++ module_sources

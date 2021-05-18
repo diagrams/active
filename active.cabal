@@ -16,7 +16,7 @@ author:              Brent Yorgey
 maintainer:          byorgey@gmail.com
 copyright:           (c) 2011-2017 Brent Yorgey
 category:            Data
-build-type:          Simple
+build-type:          Custom
 cabal-version:       1.18
 extra-source-files:  CHANGES, README.markdown, diagrams/*.svg
 extra-doc-files:     diagrams/*.svg
@@ -26,6 +26,12 @@ source-repository head
   type:     git
   location: https://github.com/diagrams/active.git
 
+custom-setup
+ setup-depends:
+   base >= 4.7 && < 4.16,
+   Cabal,
+   cabal-doctest >= 1 && <1.1
+
 library
   exposed-modules:     Active,
                        Active.Duration
@@ -34,7 +40,7 @@ library
                        FlexibleInstances,
                        GADTSyntax,
                        KindSignatures
-  build-depends:       base >= 4.7 && < 5.0,
+  build-depends:       base >= 4.11 && < 5.0,
                        bifunctors >= 5.4 && < 5.6,
                        semigroups >= 0.1 && < 0.20,
                        vector >= 0.10 && < 0.13,
@@ -42,15 +48,11 @@ library
   hs-source-dirs:      src
   default-language:    Haskell2010
 
-test-suite active-doctests
+test-suite doctests
   type:                exitcode-stdio-1.0
   main-is:             active-doctest.hs
   build-depends:       base,
-                       directory,
-                       doctest,
-                       semigroups >= 0.1 && < 0.20,
-                       vector >= 0.10 && < 0.13,
-                       linear >= 1.14 && < 1.22
+                       doctest
   hs-source-dirs:      test
   default-language:    Haskell2010
 
