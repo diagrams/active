@@ -189,15 +189,13 @@ fromTime = unTime
 newtype Duration n = Duration n
   deriving (Eq, Ord, Show, Read, Enum, Num, Fractional, Real, RealFrac, Functor)
 
-makeWrapped ''Duration
-
 -- | A convenient wrapper function to convert a numeric value into a duration.
 toDuration :: n -> Duration n
 toDuration = Duration
 
 -- | A convenient unwrapper function to turn a duration into a numeric value.
 fromDuration :: Duration n -> n
-fromDuration = op Duration
+fromDuration (Duration n) = n
 
 instance Applicative Duration where
   pure = Duration
@@ -219,6 +217,8 @@ instance Affine Time where
   type Diff Time = Duration
   (Time t1) .-. (Time t2) = Duration (t1 - t2)
   (Time t) .+^ (Duration d) = Time (t + d)
+
+makeWrapped ''Duration
 
 -- | An @Era@ is a concrete span of time, that is, a pair of times
 --   representing the start and end of the era. @Era@s form a
