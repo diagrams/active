@@ -35,7 +35,7 @@
 --
 -- The original motivating use for this library is to support making
 -- animations with the diagrams framework
--- (<http://projects.haskell.org/diagrams>), but the hope is that it
+-- (<https://diagrams.github.io>), but the hope is that it
 -- may find more general utility.
 --
 -- There are two basic ways to create an @Active@ value.  The first is
