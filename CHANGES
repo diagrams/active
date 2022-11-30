@@ -3,6 +3,10 @@
 - Updates for GHC 9.4
 - Allow `base-4.17`, `lens-5.2`
 
+Hackage revisions:
+
+- r1 (30 Nov 2022): allow `linear-1.22`
+
 ## [0.2.0.15](https://github.com/diagrams/active/tree/v0.2.0.15) (2021-05-24)
 
 - Updates for GHC 9.0
