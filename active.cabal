@@ -18,8 +18,7 @@ copyright:           (c) 2011-2017 Brent Yorgey
 category:            Data
 build-type:          Custom
 cabal-version:       1.18
-extra-source-files:  CHANGES, README.markdown, diagrams/*.svg
-extra-doc-files:     diagrams/*.svg
+extra-doc-files:     CHANGES, README.markdown, diagrams/*.svg
 bug-reports:         https://github.com/diagrams/active/issues
 
 tested-with:
@@ -39,7 +38,7 @@ source-repository head
 custom-setup
  setup-depends:
    base >= 4.7 && < 5,
-   Cabal,
+   Cabal < 4,
    cabal-doctest >= 1 && <1.1
 
 library
@@ -62,6 +61,6 @@ test-suite doctests
   type:                exitcode-stdio-1.0
   main-is:             active-doctest.hs
   build-depends:       base,
-                       doctest
+                       doctest < 1
   hs-source-dirs:      test
   default-language:    Haskell2010
