@@ -18,17 +18,18 @@ copyright:           (c) 2011-2017 Brent Yorgey
 category:            Data
 build-type:          Custom
 cabal-version:       1.18
-extra-source-files:  CHANGES, README.markdown, diagrams/*.svg
-extra-doc-files:     diagrams/*.svg
+extra-doc-files:     CHANGES, README.markdown, diagrams/*.svg
 bug-reports:         https://github.com/diagrams/active/issues
 
 tested-with:
-   GHC == 8.4.4
-   GHC == 8.6.5
-   GHC == 8.8.4
+   GHC == 9.6.1
+   GHC == 9.4.4
+   GHC == 9.2.7
+   GHC == 9.0.2
    GHC == 8.10.7
-   GHC == 9.0.1
-   GHC == 9.2.1
+   GHC == 8.8.4
+   GHC == 8.6.5
+   GHC == 8.4.4
 
 source-repository head
   type:     git
@@ -36,8 +37,8 @@ source-repository head
 
 custom-setup
  setup-depends:
-   base >= 4.7 && < 4.17,
-   Cabal,
+   base >= 4.7 && < 5,
+   Cabal < 4,
    cabal-doctest >= 1 && <1.1
 
 library
@@ -48,11 +49,11 @@ library
                        FlexibleInstances,
                        GADTSyntax,
                        KindSignatures
-  build-depends:       base       >= 4.11 && < 5.0,
-                       bifunctors >= 5.4  && < 5.6,
+  build-depends:       base       >= 4.11 && < 5,
+                       bifunctors >= 5.4  && < 5.7,
                        semigroups >= 0.1  && < 0.21,
-                       vector     >= 0.10 && < 0.13,
-                       linear     >= 1.14 && < 1.22
+                       vector     >= 0.10 && < 0.14,
+                       linear     >= 1.14 && < 1.23
   hs-source-dirs:      src
   default-language:    Haskell2010
 
@@ -60,6 +61,6 @@ test-suite doctests
   type:                exitcode-stdio-1.0
   main-is:             active-doctest.hs
   build-depends:       base,
-                       doctest
+                       doctest < 1
   hs-source-dirs:      test
   default-language:    Haskell2010
