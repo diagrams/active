@@ -133,8 +133,9 @@ prop_during_start d1 d2 =
  where a1 = fromDynamic d1
        a2 = fromDynamic d2
 
-prop_during_end :: Dynamic Bool -> Dynamic Bool -> Bool
+prop_during_end :: Dynamic Bool -> Dynamic Bool -> Property
 prop_during_end d1 d2 =
+  ((duration <$> activeEra a2) > Just 0) && ((duration <$> activeEra a1) > Just 0) ==>
   (end <$> activeEra (a1 `during` a2)) == (end <$> activeEra a2)
  where a1 = fromDynamic d1
        a2 = fromDynamic d2
