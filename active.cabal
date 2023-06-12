@@ -35,7 +35,7 @@ source-repository head
 library
   exposed-modules:     Data.Active
   build-depends:       base >= 4.0 && < 4.19,
-                       vector >= 0.10,
+                       vector >= 0.10 && < 0.14,
                        semigroups >= 0.1 && < 0.21,
                        semigroupoids >= 1.2 && < 6.1,
                        lens >= 4.0 && < 5.3,
