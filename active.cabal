@@ -24,9 +24,10 @@ tested-with:
    || ==8.8.4
    || ==8.10.7
    || ==9.0.2
-   || ==9.2.7
-   || ==9.4.4
-   || ==9.6.1
+   || ==9.2.8
+   || ==9.4.8
+   || ==9.6.3
+   || ==9.8.1
 
 source-repository head
   type:     git
@@ -34,7 +35,7 @@ source-repository head
 
 library
   exposed-modules:     Data.Active
-  build-depends:       base >= 4.0 && < 4.19,
+  build-depends:       base >= 4.0 && < 4.20,
                        vector >= 0.10 && < 0.14,
                        semigroups >= 0.1 && < 0.21,
                        semigroupoids >= 1.2 && < 6.1,
