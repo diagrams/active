@@ -5,7 +5,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
-{-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE TypeOperators              #-}
 {-# LANGUAGE TypeSynonymInstances       #-}
@@ -169,7 +168,10 @@ import           Linear.Affine
 newtype Time n = Time { unTime :: n }
   deriving (Eq, Ord, Show, Read, Enum, Num, Fractional, Real, RealFrac, Functor)
 
-makeWrapped ''Time
+instance Wrapped (Time a) where
+    type Unwrapped (Time a) = a
+    _Wrapped' = iso unTime Time
+instance Rewrapped (Time a) (Time b)
 
 -- | A convenient wrapper function to convert a numeric value into a time.
 toTime :: n -> Time n
@@ -219,7 +221,10 @@ instance Affine Time where
   (Time t1) .-. (Time t2) = Duration (t1 - t2)
   (Time t) .+^ (Duration d) = Time (t + d)
 
-makeWrapped ''Duration
+instance Wrapped (Duration a) where
+    type Unwrapped (Duration a) = a
+    _Wrapped' = iso fromDuration toDuration
+instance Rewrapped (Duration a) (Duration b)
 
 -- | An @Era@ is a concrete span of time, that is, a pair of times
 --   representing the start and end of the era. @Era@s form a
@@ -330,7 +335,10 @@ shiftDynamic sh =
 newtype Active a = Active (MaybeApply Dynamic a)
   deriving (Functor, Apply, Applicative)
 
-makeWrapped ''Active
+instance Wrapped (Active a) where
+    type Unwrapped (Active a) = MaybeApply Dynamic a
+    _Wrapped' = iso (\(Active a) -> a) Active
+instance Rewrapped (Active a) (Active b)
 
 active :: Iso' (Active a) (Either (Dynamic a) a)
 active = _Wrapped . iso runMaybeApply MaybeApply
