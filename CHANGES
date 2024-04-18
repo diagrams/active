@@ -3,6 +3,10 @@
 - Allow `base-4.19`, test on GHC 9.8
 - Remove Template Haskell in order to ease cross-compilation (thanks to @georgefst)
 
+Hackage revisions:
+
+- r1 (18 April 2024): allow `linear-1.23`
+
 ## [0.2.0.18](https://github.com/diagrams/active/tree/v0.2.0.18) (2023-06-10)
 
 - Fix failing test case ([#43](https://github.com/diagrams/active/issues/43))
