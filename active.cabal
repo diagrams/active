@@ -52,6 +52,6 @@ test-suite active-tests
                        linear,
                        semigroups,
                          -- semigroups needed for GHC 7.x only
-                       QuickCheck >= 2.9 && < 2.15
+                       QuickCheck >= 2.9 && < 2.16
     hs-source-dirs:    test
     default-language:  Haskell2010
