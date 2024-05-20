@@ -15,9 +15,7 @@ build-type:          Simple
 extra-doc-files:     CHANGES, README.markdown, diagrams/*.svg
 
 tested-with:
-  GHC ==7.8.4
-   || ==7.10.3
-   || ==8.0.2
+  GHC ==8.0.2
    || ==8.2.2
    || ==8.4.4
    || ==8.6.5
@@ -26,8 +24,9 @@ tested-with:
    || ==9.0.2
    || ==9.2.8
    || ==9.4.8
-   || ==9.6.3
-   || ==9.8.1
+   || ==9.6.5
+   || ==9.8.2
+   || ==9.10.1
 
 source-repository head
   type:     git
@@ -35,11 +34,11 @@ source-repository head
 
 library
   exposed-modules:     Data.Active
-  build-depends:       base >= 4.0 && < 4.20,
+  build-depends:       base >= 4.0 && < 4.21,
                        vector >= 0.10 && < 0.14,
                        semigroups >= 0.1 && < 0.21,
                        semigroupoids >= 1.2 && < 6.1,
-                       lens >= 4.0 && < 5.3,
+                       lens >= 4.0 && < 5.4,
                        linear >= 1.14 && < 1.24
   hs-source-dirs:      src
   default-language:    Haskell2010
