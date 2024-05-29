@@ -7,6 +7,7 @@ Hackage revisions:
 
 - r1 (18 April 2024): allow `linear-1.23`
 - r2 (24 April 2024): allow `QuickCheck-2.15`
+- r3 (29 May 2024): allow `base-4.20`, `lens-5.3`, test on GHC 9.10
 
 ## [0.2.0.18](https://github.com/diagrams/active/tree/v0.2.0.18) (2023-06-10)
 
