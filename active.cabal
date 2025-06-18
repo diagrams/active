@@ -50,6 +50,6 @@ test-suite active-tests
     build-depends:     active,
                        base,
                        linear,
-                       QuickCheck >= 2.9 && < 2.16
+                       QuickCheck >= 2.9 && < 2.17
     hs-source-dirs:    test
     default-language:  Haskell2010
