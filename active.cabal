@@ -35,9 +35,8 @@ source-repository head
 
 library
   exposed-modules:     Data.Active
-  build-depends:       base >= 4.0 && < 4.22,
+  build-depends:       base >= 4.0 && < 4.23,
                        vector >= 0.10 && < 0.14,
-                       semigroups >= 0.1 && < 0.21,
                        semigroupoids >= 1.2 && < 6.1,
                        lens >= 4.0 && < 5.4,
                        linear >= 1.14 && < 1.24
@@ -50,6 +49,6 @@ test-suite active-tests
     build-depends:     active,
                        base,
                        linear,
-                       QuickCheck >= 2.9 && < 2.17
+                       QuickCheck >= 2.9 && < 2.19
     hs-source-dirs:    test
     default-language:  Haskell2010
