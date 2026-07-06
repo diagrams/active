@@ -587,12 +587,13 @@ runActiveMay (Active d f) t
       GT -> Nothing
       _  -> Just (f t)
 
--- | Like 'runActiveMay', but return an 'Option' instead of 'Maybe'.
---   Sometimes this is more convenient since the 'Monoid' instance for
---   'Option' only requires a 'Semigroup' constraint on its type
---   argument.
-runActiveOpt :: Active a -> (Rational -> Option a)
-runActiveOpt a = Option . runActiveMay a
+-- | Like 'runActiveMay', but return a value whose 'Monoid' instance
+--   only requires a 'Semigroup' constraint on its type argument.
+--   (This used to return 'Data.Semigroup.Option', which has since been
+--   removed in favor of 'Maybe', whose 'Monoid' instance now has the
+--   same relaxed 'Semigroup' constraint.)
+runActiveOpt :: Active a -> (Rational -> Maybe a)
+runActiveOpt = runActiveMay
 
 -- | Test whether an @Active@ is finite.
 isFinite :: Active a -> Bool
@@ -1084,7 +1085,7 @@ infixr 6 `parU`
 parU :: Semigroup a => Active a -> Active a -> Active a
 a1@(Active d1 _) `parU` a2@(Active d2 _)
   = Active (d1 `max` d2)
-           (\t -> fromJust . getOption $ runActiveOpt a1 t <> runActiveOpt a2 t)
+           (\t -> fromJust $ runActiveOpt a1 t <> runActiveOpt a2 t)
                   -- fromJust is safe since the (Nothing, Nothing) case
                   -- can't happen: at least one of a1 or a2 will be defined everywhere
                   -- on the interval between 0 and the maximum of their durations.
@@ -1178,9 +1179,9 @@ stack (a:as) = stackNE (a :| as)
 --   If you want to use 'stackAt' on actives with an underlying type
 --   that is a 'Semigroup' but not a 'Monoid', you have a few options:
 --
---   * You can explicitly wrap your underlying values in 'Option',
---     which will turn a 'Semigroup' into a 'Monoid' and use @Option
---     Nothing@ as the default, identity value.
+--   * You can explicitly wrap your underlying values in 'Maybe',
+--     which will turn a 'Semigroup' into a 'Monoid' and use @Nothing@
+--     as the default, identity value.
 --
 --   * You can use the provided 'stackAtDef' function instead, which
 --     uses a given default value in place of 'mempty'.
@@ -1220,7 +1221,7 @@ stackAt ps = stack . map (uncurry delay) $ ps
 
 stackAtDef :: Semigroup a => a -> [(Rational, Active a)] -> Active a
 stackAtDef a as
-  = option a id <$> stackAt ((map . second) (fmap (Option . Just)) as)
+  = fromMaybe a <$> stackAt ((map . second) (fmap Just) as)
 
 -- > stackAtDefDia = drawChain
 -- >   [ illustrateActives args
@@ -1664,7 +1665,7 @@ foldB1 :: Semigroup a => NonEmpty a -> a
 foldB1 (a :| as) = maybe a (a <>) (foldBM as)
   where
     foldBM :: Semigroup a => [a] -> Maybe a
-    foldBM = getOption . foldB (<>) (Option Nothing) . map (Option . Just)
+    foldBM = foldB (<>) Nothing . map Just
 
     foldB :: (a -> a -> a) -> a -> [a] -> a
     foldB _   z []   = z
